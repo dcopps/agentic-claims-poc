@@ -10,17 +10,18 @@ Each entry follows the format below. Entries are appended in build order — new
 
 Every entry contains:
 
-- **Date** — ISO date, e.g. `2026-05-07`
+- **Date** — ISO date, e.g. `2026-05-08`
 - **Phase / Prompt** — the phase number and a link to the prompt file in `docs/prompts/` (where applicable)
-- **Plan (approved)** — link to the saved plan file in `docs/prompts/` (the plan is saved verbatim before approval; the approval timestamp and message are appended in the same file)
-- **Plan iterations** — count of rejected revisions, if any, with links to each rejected plan file (preserved as numbered siblings, each carrying a `## Rejection` footer)
-- **Prompt summary** — one or two sentences describing what was asked
-- **What changed** — files created, modified, or deleted, with a one-line note on each
-- **Tests** — count and pass rate (e.g. `42 passing, 0 failing`); any new test categories introduced
-- **Issues discovered** — anything unexpected, including pre-existing issues surfaced by this work; notes on follow-up needed
-- **Next** — the phase that comes next
+- **Plan (approved)** — link to the saved plan file in `docs/prompts/`. The plan is saved verbatim before approval; the approval timestamp and message are appended at the bottom of the same file.
+- **Plan iterations** — count of rejected revisions, if any, with links to each rejected plan file (preserved as numbered siblings, each carrying a `## Rejection` footer).
+- **Report** — link to the report file in `docs/prompts/`. Authored by Claude Code after execution, capturing files changed, test counts, deviations from the plan, guard clauses added, and outstanding items.
+- **Prompt summary** — one or two sentences describing what was asked.
+- **What changed** — files created, modified, or deleted, with a one-line note on each.
+- **Tests** — count and pass rate (e.g. `42 passing, 0 failing`); any new test categories introduced.
+- **Issues discovered** — anything unexpected, including pre-existing issues surfaced by this work; notes on follow-up needed.
+- **Next** — the phase that comes next.
 
-The artefact set per phase (prompt + approved plan + rejected plan iterations + build-log entry) gives a complete audit trail. Together they record intent, design (with full revision history), and outcome.
+The four-artefact set per phase (prompt + approved plan + report + build-log entry) gives a complete audit trail. Together they record intent, design (with full revision history including any rejected plan iterations), and outcome.
 
 ---
 
@@ -28,17 +29,17 @@ The artefact set per phase (prompt + approved plan + rejected plan iterations + 
 
 ### 2026-05-07 — Pre-build setup (manual)
 
-**Phase:** Pre-Phase-0. Establishing the documentation foundation, the prompts archive, and the build-log convention before any code is written. This work was performed by the architect directly via filesystem tooling, not via a Claude Code prompt — there is no corresponding prompt or plan file in `docs/prompts/`.
+**Phase:** Pre-Phase-0. Establishing the documentation foundation, the prompts archive, and the build-log convention before any code is written. This work was performed by the architect directly via filesystem tooling, not via a Claude Code prompt — there is no corresponding prompt, plan, or report file in `docs/prompts/`.
 
 **Prompt summary:** Not applicable — manual setup work to align the kickoff package with the global standards at `~/.claude/CLAUDE.md`, and to author Prompt 01 so Claude Code can begin Phase 0 cleanly.
 
 **What changed:**
 
 - `CLAUDE.md` — restructured to match the global standards pattern. References `~/.claude/CLAUDE.md` at the top. Adds Project Overview, Tech Stack (uv-based), Project Structure (target post-Phase-0), Build Approach, Current Status, Standing Instructions (plan-first, build-log update, defensive programming, function size, settings hierarchy, externalised prompts, system/user separation, commit protocol, security, interface stability, dependency discipline, anonymisation), Architectural Decisions (Locked), Repository Name, what's public vs not.
-- `BUILD-PLAN.md` — rewritten to incorporate global standards. Plan-first workflow noted at the top. Package manager locked to uv. Each phase includes settings architecture work where relevant, externalised prompts pattern, APILogger pattern. Each phase's "Definition of done" now includes appending a build-log entry and saving the prompt to `docs/prompts/`. Prompt file numbering corrected so Phase 0 maps to `01-`, Phase 1 to `02-`, and so on.
-- `docs/build-log.md` — created (this file). Entry format includes both the approved plan and any rejected plan iterations.
+- `BUILD-PLAN.md` — rewritten to incorporate global standards. Plan-first workflow noted at the top. Package manager locked to uv. Each phase includes settings architecture work where relevant, externalised prompts pattern, APILogger pattern. Each phase's "Definition of done" includes appending a build-log entry and saving the prompt to `docs/prompts/`. Prompt file numbering aligned so Phase 0 maps to `01-`, Phase 1 to `02-`, and so on.
+- `docs/build-log.md` — created (this file).
 - `docs/prompts/` — directory created.
-- `docs/prompts/README.md` — created. Documents the archive convention, the plan-save-then-approve workflow, the rejected-plan archiving rule, and the artefact set captured per phase.
+- `docs/prompts/README.md` — created. Documents the four-artefact pattern (prompt + plan + report + build-log entry), the plan-save-then-approve workflow, the rejected-plan archiving rule, and the report-after-execution rule.
 - `docs/prompts/01-phase-0-repository-scaffold.md` — authored. The first prompt for Claude Code; instructs it to produce and save a plan, await an explicit approval or rejection, archive any rejected versions with timestamped footers, and only proceed to execution once the canonical plan carries an `## Approval` footer.
 - `README.md` — added a "Reproducible build" section linking to `docs/prompts/` and `docs/build-log.md`.
 
@@ -46,7 +47,7 @@ The artefact set per phase (prompt + approved plan + rejected plan iterations + 
 
 **Issues discovered:** None.
 
-**Next:** Claude Code begins Phase 0 by reading and executing `docs/prompts/01-phase-0-repository-scaffold.md`. The next entry in this log will be appended by Claude Code when Phase 0 is complete and will reference both the canonical approved plan file and any rejected plan iterations preserved alongside it.
+**Next:** Claude Code begins Phase 0 by reading and executing `docs/prompts/01-phase-0-repository-scaffold.md`.
 
 ---
 
@@ -57,6 +58,8 @@ The artefact set per phase (prompt + approved plan + rejected plan iterations + 
 **Plan (approved):** [`docs/prompts/01-phase-0-repository-scaffold-plan.md`](prompts/01-phase-0-repository-scaffold-plan.md) (approved 2026-05-08T11:50:06Z)
 
 **Plan iterations:** 0 rejected. The architect approved the canonical plan with answers to three flagged choices and three amendments to the "What I need from you" section; those decisions were folded into the plan body before the approval footer was appended, so no rejection cycle was needed.
+
+**Report:** [`docs/prompts/01-phase-0-repository-scaffold-report.md`](prompts/01-phase-0-repository-scaffold-report.md)
 
 **Prompt summary:** Stand up the runnable skeleton — uv-managed FastAPI backend with `/health`, React + Vite + TS + Tailwind frontend, initial Pydantic `Settings` model with YAML overlay, native local Postgres + pgvector via a setup script (no Docker), GitHub Actions CI for both stacks, Render Blueprint for deployment, standard tooling configs. Initialise git, make the Phase 0 commit, push to a freshly-created GitHub repo via `gh`.
 
@@ -90,8 +93,10 @@ The artefact set per phase (prompt + approved plan + rejected plan iterations + 
 - `README.md` — added a Local development section (Postgres 17 install, dev DB script, backend run, frontend run, test/lint/typecheck commands).
 - `CLAUDE.md` — Current Status block updated to "Phase 0 complete; Phase 1 next".
 - `docs/prompts/01-phase-0-repository-scaffold-plan.md` — saved before approval; approval footer appended after the architect approved with the three answers and three amendments. Body updated to record the answers, the amendments, and the postgresql@16 → postgresql@17 switch (see Issues below).
+- `docs/prompts/01-phase-0-repository-scaffold-report.md` — added retrospectively after the architect introduced the report-file convention. Captures the same Phase 0 outcomes Claude Code reported in chat, in the canonical four-artefact location.
 
 **Tests:** 9 passing, 0 failing.
+
 - Backend (pytest): 7 — `test_health` (1), `test_settings` (6: defaults + 5 YAML-loader guards).
 - Frontend (vitest): 2 — heading renders; backend status reads "ok" on 200.
 - All ruff, mypy, eslint, tsc checks clean.
