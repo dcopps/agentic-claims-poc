@@ -19,7 +19,7 @@ Every prompt used to build this prototype is archived here in numerical order, p
 |---|---|---|---|
 | **Prompt** — `NN-phase-N-name.md` | Before execution | Architect | What was asked. |
 | **Plan** — `NN-phase-N-name-plan.md` | Before execution, after planning | Claude Code, approved by architect | What was agreed. Approval footer at the bottom of the file with verbatim approval message and ISO 8601 UTC timestamp. Decisions made during planning live here in "Approach and key design decisions". |
-| **Report** — `NN-phase-N-name-report.md` | After execution | Claude Code | What was actually built. `Completed at` ISO 8601 UTC timestamp, files created/modified, test counts, deviations from the plan with reasons, guard clauses added, optional enhancements recommended, outstanding items. |
+| **Report** — `NN-phase-N-name-report.md` | After execution | Claude Code | What was actually built. One-line `Recap`, `Completed at` ISO 8601 UTC timestamp, files created/modified, test counts, deviations from the plan with reasons, guard clauses added, optional enhancements recommended, outstanding items. |
 | **Build-log entry** — appended to `docs/build-log.md` | After execution | Claude Code | One-paragraph chronological summary linking to the other three artefacts. |
 
 There is no separate "decisions" file. Decisions naturally split across three locations:
@@ -56,7 +56,8 @@ The plan-first standard is implemented as follows:
 After Phase execution completes:
 
 1. Claude Code writes the report verbatim to `NN-phase-N-name-report.md`.
-2. The report opens with a `## Summary` block containing:
+2. The report opens with a `## Summary` block containing, in this order:
+   - **Recap** — one sentence stating what's done plus one sentence stating what comes next. The kind of single-paragraph elevator pitch a reader can scan in five seconds. (Example: *"Phase 0 of the agentic-claims-poc build is complete and pushed to dcopps/agentic-claims-poc with CI green. Next: provision the Render Web Service via the committed `render.yaml` blueprint and the Vercel project so deployments go live."*)
    - **Completed at** — ISO 8601 UTC timestamp at the moment of report-writing (e.g. `2026-05-09T14:32:18Z`). This is the precise time the phase concluded.
    - **Phase** — the phase number and title.
    - **Status** — Complete / Complete with deferrals / etc.
@@ -64,6 +65,8 @@ After Phase execution completes:
    - CI status if relevant.
 3. Body sections cover files created and modified by tier, test counts and pass rates, deviations from the plan with reasons, guard clauses added, optional enhancements recommended for future phases, and any outstanding items requiring architect involvement.
 4. The build-log entry references the report file alongside the plan and prompt.
+
+**Why the recap line.** It's the highest-leverage element in the file — anyone scanning the report (an interview reviewer, a future Claude session, a stakeholder updating themselves) gets the "what got done, what's next" in one line without reading further. Carries the same role for the report that the build-log entry's `Prompt summary` line carries for the chronological log.
 
 **Timestamp format.** Both the plan's `## Approval` footer and the report's `Completed at` field use ISO 8601 UTC (e.g. `2026-05-08T11:50:06Z`). This pairs cleanly with the build-log entry's ISO date heading and gives the audit trail consistent timestamps end-to-end.
 

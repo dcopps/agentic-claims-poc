@@ -2,6 +2,7 @@
 
 ## Summary
 
+- **Recap:** Phase 0 of the agentic-claims-poc build is complete and pushed to `dcopps/agentic-claims-poc` with CI green. Next: provision the Render Web Service (via the committed `render.yaml` blueprint) and the Vercel project so deployments go live.
 - **Completed at:** ~2026-05-08T12:30:00Z (approximate — the report file was added retrospectively after the four-artefact convention was introduced; the precise completion timestamp was not captured at the time. Future phase reports record `Completed at` as a precise ISO 8601 UTC timestamp at the moment of report-writing.)
 - **Phase:** 0 — Repository scaffold
 - **Status:** Complete (local + CI). Live deployments to Render and Vercel are in the architect's hands and not yet stood up.
