@@ -25,10 +25,10 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 | API edge | Render's built-in router | Azure API Management with Entra ID auth |
 | Workflow orchestration | In-process Python async | Azure Durable Functions |
 | Event backbone | Button-triggered events in the React UI | Azure Service Bus |
-| Claims of record | PostgreSQL on Render | Azure SQL Managed Instance |
-| Audit vault | PostgreSQL with hand-rolled SHA-256 hash chain | Azure SQL Managed Instance with Ledger Tables |
+| Claims of record | Neon (managed Postgres) — `eu-central-1` / Frankfurt; pgvector 0.8.0 enabled | Azure SQL Managed Instance |
+| Audit vault | Neon (managed Postgres) with hand-rolled SHA-256 hash chain | Azure SQL Managed Instance with Ledger Tables |
 | Audit immutability backstop | Not present in prototype | Azure Blob Storage with Immutable Policy (daily digest) |
-| Vector index | pgvector extension on the same PostgreSQL | Azure AI Search (vector + hybrid retrieval) |
+| Vector index | pgvector extension on the same Neon database | Azure AI Search (vector + hybrid retrieval) |
 | Embedding model | bge-small-en-v1.5 (local, sentence-transformers) | text-embedding-3-large via Azure AI Foundry private endpoint |
 | Frontier LLM (Orchestrator) | Claude Sonnet via public Anthropic API | Claude Sonnet via Azure AI Foundry private endpoint |
 | Small LLM (Doc-Parser, Guardrail) | Claude Haiku via public Anthropic API | Claude Haiku via Azure AI Foundry private endpoint |
@@ -69,7 +69,7 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 
 **Pydantic.** Data validation and schema definition. Every agent's input and output is a Pydantic model, making the contracts explicit and the test surface small.
 
-**Render hosting.** Single-click deploys from GitHub, free tier for the application service, paid tier for managed PostgreSQL. Adequate for a public-facing demo.
+**Render hosting.** Single-click deploys from GitHub, free tier for the application service. Adequate for a public-facing demo. The data tier is split out to Neon (see Data tier below) rather than using Render's bundled Postgres.
 
 ### Workflow and event simulation
 
@@ -79,7 +79,7 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 
 ### Data tier
 
-**PostgreSQL on Render.** Managed PostgreSQL, free tier sufficient for the demo. Hosts the claims of record, the audit table, and the vector index in a single database — simplest possible deployment.
+**Neon (managed Postgres).** Postgres 17 with pgvector 0.8.0 enabled, hosted in Neon's `eu-central-1` (Frankfurt) region on the free tier. Hosts the claims of record, the audit table, and the vector index in a single database — simplest possible deployment. Neon is split out from Render so the data tier is independently managed and so the prototype's Postgres version and `pgvector` extension version are pinned by us, not by Render's image.
 
 **pgvector extension.** Postgres extension that adds a `vector` column type and cosine distance operators. Used for the policy chunk vector index.
 

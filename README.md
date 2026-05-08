@@ -56,6 +56,47 @@ bash scripts/setup-dev-db.sh
 
 The script verifies your Postgres install (psql on PATH, server reachable, version >= 16, pgvector available), creates the `agentic_claims_dev` database, and enables the extension. Idempotent — safe to re-run.
 
+### Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set `DATABASE_URL`. Two patterns are supported:
+
+- **Local Postgres** (the default): `DATABASE_URL=postgresql://localhost/agentic_claims_dev`
+  after running `setup-dev-db.sh`.
+- **Neon dev branch**: paste the Neon connection string directly into `DATABASE_URL`
+  and skip `setup-dev-db.sh` entirely. Useful on resource-constrained machines or
+  when you want to share state with the deployed backend.
+
+`.env` is gitignored; never commit a populated copy. `ANTHROPIC_API_KEY` and
+`MISTRAL_API_KEY` are optional in Phase 1 — they are required in Phase 2 when
+the LLM Gateway lands.
+
+### Run database migrations
+
+```bash
+uv run alembic --config backend/alembic.ini upgrade head
+```
+
+Applies the schema (`claims`, `audit_log`, `policy_chunks`) against
+whichever database `DATABASE_URL` points to. Re-runnable; the migration
+runner tracks state in the `alembic_version` table.
+
+### Seed and index
+
+```bash
+uv run python -m backend.data.seed_claims --allow-truncate
+uv run python -m backend.data.index_policy
+```
+
+The first command inserts the nine synthetic demo claims (three scripted
+scenarios plus six background); the second chunks `backend/data/sample_policy.txt`
+and writes embeddings into `policy_chunks`. Re-running the indexer
+replaces prior rows for the same source path; the seeder requires
+`--allow-truncate` to overwrite a populated `claims` table.
+
 ### Run the backend
 
 ```bash

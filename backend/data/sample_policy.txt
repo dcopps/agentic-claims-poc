@@ -1,0 +1,259 @@
+# General Conditions
+
+This policy is issued in consideration of the premium charged and is
+subject to all terms, conditions, and exclusions set forth herein. The
+policy period begins at 12:01 a.m. on the inception date stated in the
+declarations and ends at 12:01 a.m. on the expiration date so stated,
+in each case at the address of the named insured.
+
+Premium is due and payable in full on or before the inception date
+unless an instalment plan is endorsed onto this policy. Late payment
+shall not, of itself, void coverage; however, the insurer reserves the
+right to cancel the policy for non-payment in accordance with the
+notice provisions of this section.
+
+The named insured may cancel this policy at any time by surrendering
+it to the insurer or by mailing written notice stating when the
+cancellation is to be effective. The insurer may cancel the policy by
+mailing written notice to the named insured at the last address known
+to the insurer, stating when not less than thirty days thereafter the
+cancellation shall be effective. Where cancellation is for non-payment
+of premium, ten days' notice is sufficient.
+
+Mid-term changes to this policy must be requested in writing and become
+effective only when endorsed by the insurer. Verbal representations,
+whether by the insured, an agent, or a broker, do not vary the terms
+of the policy.
+
+The named insured shall give prompt notice of any change in the use,
+occupancy, or ownership of the insured premises that materially
+increases the risk. Failure to give such notice may, at the insurer's
+discretion, void coverage for losses traceable to the unreported
+change.
+
+# Definitions
+
+The following defined terms apply throughout this policy.
+
+"Covered cause of loss" means a peril listed in the Named Perils
+Covered section, subject to the exclusions and limitations set forth
+elsewhere in the policy.
+
+"Period of restoration" means the period beginning seventy-two hours
+after the time of direct physical loss or damage caused by a covered
+cause of loss and ending on the earlier of the date the property is
+repaired, rebuilt, or replaced with reasonable speed and similar
+quality, or the date business is resumed at a new permanent location.
+
+"Actual cash value" means the cost to repair or replace the damaged
+property with material of like kind and quality, less an allowance for
+depreciation reflecting age, wear, and obsolescence at the time of
+loss.
+
+"Replacement cost" means the cost to repair or replace the damaged
+property with new material of like kind and quality, without
+deduction for depreciation, subject to the limit of insurance and the
+coinsurance condition stated elsewhere in the policy.
+
+"Named insured" means the entity or individual identified as such in
+the declarations. Coverage extended to additional insureds, mortgagees,
+or loss payees is governed by the relevant endorsement.
+
+"Deductible" means the amount the named insured must bear before the
+insurer's obligation to pay attaches, applied per occurrence unless
+otherwise specified.
+
+# Named Perils Covered
+
+Subject to the exclusions and conditions of this policy, the insurer
+will pay for direct physical loss of or damage to insured property
+caused by any of the following covered causes of loss.
+
+Fire. Hostile fire, including damage from heat, smoke, and the action
+of firefighting, but excluding loss from a fire intentionally set by
+the named insured or by a person acting at the named insured's
+direction.
+
+Lightning. Direct strike to insured property or to objects on the
+insured premises, including damage from the resulting power surge to
+electrical equipment present at the time of the strike.
+
+Windstorm and hail. Loss caused by the direct action of wind or hail
+on the insured property. Wind-driven rain, snow, sand, or dust is
+covered only where wind first damages the building such that an
+opening is created through which precipitation enters.
+
+Explosion. Sudden and violent release of pressure or chemical reaction.
+Excluded: explosion of steam boilers, steam pipes, steam turbines, or
+steam engines owned by, leased by, or operated under the control of
+the named insured (covered separately under a boiler and machinery
+endorsement when one is attached).
+
+Smoke. Sudden and accidental damage from smoke, other than smoke from
+agricultural smudging or industrial operations.
+
+Vandalism. Wilful and malicious damage to or destruction of the
+insured property by a person other than the named insured, an officer
+of the named insured, or a person acting at the named insured's
+direction.
+
+Sprinkler leakage. Leakage or discharge of any substance from an
+automatic sprinkler system, including collapse of a tank that is part
+of the system. Loss caused by freezing of the system is covered only
+where the named insured used reasonable care to maintain heat in the
+building.
+
+Water damage from plumbing systems. Accidental discharge or leakage
+from a plumbing, heating, or air-conditioning system, or from a
+domestic appliance, that results in direct physical damage to the
+insured property. Loss to the appliance or system itself is excluded;
+the resulting water damage to other property is covered.
+
+Civil commotion. Loss caused by riot, civil commotion, or strike,
+including pillage and looting that occurs in the course of and at the
+location of the disturbance, but excluding loss caused by war, warlike
+action, insurrection, rebellion, or revolution.
+
+# Exclusions
+
+The insurer will not pay for loss or damage caused directly or
+indirectly by any of the following, regardless of any other cause or
+event that contributes concurrently or in any sequence to the loss.
+
+Flood. Surface water, waves, tides, tidal waves, overflow of any body
+of water, or spray therefrom, whether or not driven by wind. Coverage
+for flood, where required, is provided only under a separate flood
+endorsement, which is NOT attached to this policy.
+
+Earthquake, volcanic eruption, landslide, mudslide, or other earth
+movement. Coverage for earth movement, where required, is provided
+only under a separate earth-movement endorsement, which is NOT
+attached to this policy.
+
+War, invasion, hostilities (whether war is declared or not), civil
+war, rebellion, insurrection, military or usurped power, and any
+weapon of war employing atomic fission, atomic fusion, or radioactive
+material.
+
+Terrorism, whether certified or non-certified, is excluded. Coverage
+for certified acts of terrorism, where required, is provided only
+under a Terrorism Risk Insurance Act endorsement, which is NOT
+attached to this policy.
+
+Wear and tear, gradual deterioration, rust, corrosion, latent defect,
+inherent vice, or any quality in property that causes it to damage or
+destroy itself.
+
+Dishonest, fraudulent, or criminal acts by the named insured, an
+officer of the named insured, or any person to whom the named insured
+has entrusted the property, whether acting alone or in collusion with
+others.
+
+Mechanical breakdown, including rupture or bursting caused by
+centrifugal force. Coverage for mechanical breakdown, where required,
+is provided only under a separate equipment-breakdown endorsement.
+
+Loss of market, loss of use, delay, or any other consequential loss,
+except as expressly provided under the Business Interruption section
+of this policy.
+
+# Sub-Limits
+
+The following sub-limits apply within, and not in addition to, the
+overall limit of insurance. Each sub-limit is the maximum the insurer
+will pay regardless of the number of items, locations, or occurrences.
+
+Debris removal. The insurer will pay the reasonable cost to remove
+debris of insured property caused by a covered cause of loss, up to
+twenty-five percent of the amount paid for direct damage. Debris
+removal is included within the limit of insurance and is not in
+addition to it, except where the limit is exhausted; in that case, an
+additional amount of up to ten thousand currency units is available
+for debris removal only.
+
+Ordinance or law. The insurer will pay the increased cost of repair,
+rebuilding, or demolition required by the enforcement of any
+ordinance or law regulating the construction, use, or repair of the
+insured property, up to ten percent of the amount paid for direct
+damage. The named insured must, in fact, repair or replace the
+damaged property within twenty-four months of the loss for the
+ordinance-or-law sub-limit to apply.
+
+Valuable papers and records. The insurer will pay up to twenty-five
+thousand currency units for direct physical loss of or damage to
+valuable papers, records, drawings, manuscripts, or other documents,
+including the cost of reconstructing the information they contain. Data
+held only in electronic form is excluded under this sub-limit.
+
+Pollutant cleanup. The insurer will pay up to ten thousand currency
+units for the cost to extract pollutants from land or water at the
+insured premises, where the discharge of the pollutants was caused by
+a covered cause of loss and is reported within one hundred and eighty
+days. The cost to test for or monitor pollutants in the absence of an
+actual discharge is excluded.
+
+# Business Interruption
+
+Subject to the conditions of this policy, the insurer will pay the
+actual loss of business income the named insured sustains, plus
+necessary extra expense incurred, during the period of restoration
+following direct physical loss of or damage to insured property
+caused by a covered cause of loss.
+
+A waiting period of seventy-two hours applies. The insurer is not
+liable for any loss of business income sustained during the first
+seventy-two hours of the period of restoration.
+
+A coinsurance condition of eighty percent applies to the business
+interruption limit. If, at the time of loss, the limit of insurance
+for business interruption is less than eighty percent of the
+twelve-month projected business income value, the named insured shall
+bear that proportion of the loss.
+
+Loss is valued at actual loss sustained, calculated as the business
+income that would have been earned during the period of restoration
+had no loss occurred, less expenses that do not necessarily continue
+during the period of restoration. The named insured shall produce
+records sufficient to substantiate the calculation.
+
+Coverage ends on the earliest of the date the property is repaired,
+rebuilt, or replaced with reasonable speed and similar quality, the
+date business is resumed at a new permanent location, or the
+expiration of the maximum period of indemnity stated in the
+declarations.
+
+# Duties After Loss
+
+In the event of loss or damage to insured property, the named
+insured shall, as a condition precedent to coverage:
+
+Give prompt notice to the insurer or its authorised representative,
+including a description of the property involved, the time and cause
+of loss, and the extent of damage so far as known.
+
+Take all reasonable steps to protect the property from further damage
+and to preserve evidence of the loss. Reasonable expenses incurred in
+this protection are included in the loss settlement.
+
+Prepare an inventory of damaged personal property, distinguishing
+between property damaged and property destroyed, with quantities,
+descriptions, actual cash values, and amounts of loss claimed. The
+inventory shall be supported by available receipts, invoices, and
+records.
+
+Permit the insurer to inspect the damaged property and to examine the
+named insured's books and records as often as reasonably required.
+Submit to examination under oath while not in the presence of any
+other insured, and sign the transcript of such examination if
+requested.
+
+Cooperate with the insurer in all matters pertaining to the
+adjustment of the loss, including the production of documents,
+attendance at proceedings, and assistance in the prosecution of
+subrogation rights.
+
+No suit or action against the insurer for the recovery of any claim
+under this policy shall be sustainable unless commenced within two
+years from the date the cause of action accrues. The cause of action
+is deemed to accrue on the date of the direct physical loss or damage,
+not on any later date of the insurer's coverage decision.

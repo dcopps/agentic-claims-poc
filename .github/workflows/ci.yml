@@ -7,8 +7,30 @@ on:
 
 jobs:
   backend:
-    name: Backend (ruff, mypy, pytest)
+    name: Backend (ruff, mypy, pytest, pip-audit)
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Image with pgvector pre-built — keeps CI under a minute and
+        # matches the prototype's deployed Neon environment closely
+        # enough that the chain tests exercise the same SQL surface.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentic_claims_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agentic_claims_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Apply migrations
+        run: uv run alembic --config backend/alembic.ini upgrade head
+
       - name: Lint
         run: uv run ruff check .
 
@@ -32,8 +57,14 @@ jobs:
       - name: Test
         run: uv run pytest
 
+      - name: pip-audit (high/critical only)
+        # Reports known CVEs against the resolved dependency tree.
+        # Continue on findings rather than fail the build — the gate is
+        # advisory in Phase 1; a future phase can promote it to blocking.
+        run: uv run pip-audit --strict || true
+
   frontend:
-    name: Frontend (eslint, tsc, vitest)
+    name: Frontend (eslint, tsc, vitest, npm audit)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,3 +90,8 @@ jobs:
 
       - name: Test
         run: npm test -- --run
+
+      - name: npm audit (high+ only)
+        # Advisory in Phase 1 — pinned to high+ so low / moderate
+        # findings don't gate the build.
+        run: npm audit --audit-level=high || true

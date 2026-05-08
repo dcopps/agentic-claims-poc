@@ -4,8 +4,12 @@
 # in `backend/settings.py`. Environment variables override both. Anything
 # left unset here falls back to the model default.
 #
-# Phase 0 surface only. Phase 1 introduces nested sub-models (database,
-# llm, embeddings, langfuse, escalation); each gets its own block here.
+# Phase 1 introduces five nested sub-models (database, llm, embedding,
+# langfuse, escalation). Their blocks are below. Secret fields (database
+# URL, API keys, Langfuse keys) are intentionally not set here — load them
+# from environment variables instead so they don't end up on disk.
+
+# --- Flat fields (Phase 0 surface) -----------------------------------------
 
 # Display name for the application — used in logs and the /health response.
 app_name: agentic-claims-poc
@@ -27,3 +31,74 @@ log_level: INFO
 # 5173 by default; deployed environments add the Vercel URL to this list.
 cors_allowed_origins:
   - http://localhost:5173
+
+# --- database --------------------------------------------------------------
+
+# Postgres connection. The full URL is loaded from the DATABASE_URL env
+# variable (named alias) — DO NOT put the value here. Pool sizing and
+# session-level statement timeout sit alongside it.
+database:
+  # url: loaded from DATABASE_URL — do not put values here
+  min_pool_size: 1
+  max_pool_size: 5
+  statement_timeout_ms: 30000
+  echo_sql: false
+
+# --- llm -------------------------------------------------------------------
+
+# LLM provider configuration. API keys load from ANTHROPIC_API_KEY and
+# MISTRAL_API_KEY (named aliases) — DO NOT put values here. Model
+# identifiers per agent role are pinned to the locked architectural
+# decisions (Sonnet for orchestrator; Haiku for doc-parser and guardrail;
+# Mistral Large for validator and adjuster).
+llm:
+  anthropic:
+    # api_key: loaded from ANTHROPIC_API_KEY — do not put values here
+    orchestrator_model: claude-sonnet-4-6
+    doc_parser_model: claude-haiku-4-5-20251001
+    guardrail_model: claude-haiku-4-5-20251001
+  mistral:
+    # api_key: loaded from MISTRAL_API_KEY — do not put values here
+    validator_model: mistral-large-latest
+    adjuster_model: mistral-large-latest
+
+# --- embedding -------------------------------------------------------------
+
+# Embedding model used for indexing the policy and encoding query
+# narratives at retrieval time. The model and its dimension are locked:
+# changing one without the other corrupts the index. The dimension
+# validator refuses any value other than 384 (the dimension produced by
+# bge-small-en-v1.5).
+embedding:
+  model_name: BAAI/bge-small-en-v1.5
+  dimension: 384
+  normalise_embeddings: true
+  batch_size: 32
+
+# --- langfuse --------------------------------------------------------------
+
+# LLM observability. Disabled in Phase 1 because no traces are emitted
+# yet. When enabled, both keys must be present — the model validator
+# refuses a half-populated credential pair.
+langfuse:
+  enabled: false
+  # public_key: loaded from env — do not put values here
+  # secret_key: loaded from env — do not put values here
+  host: https://cloud.langfuse.com
+
+# --- escalation ------------------------------------------------------------
+
+# Escalation rule parameters. Hard rules always escalate; threshold rules
+# trigger when monetary or confidence floors are breached. The actual
+# rule engine and its policy.yaml file land in Phase 4; Phase 1 just
+# declares the configuration block.
+escalation:
+  auto_approve_ceiling: "250000"
+  validator_confidence_floor: 0.65
+  adjuster_confidence_floor: 0.75
+  hard_rules:
+    - guardrail_failed
+    - claim_type_watchlist
+    - claimant_watchlist
+    - cross_jurisdictional
+  policy_path: backend/app/escalation/policy.yaml

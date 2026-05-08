@@ -36,14 +36,14 @@ This is a generic prototype for a regulated specialty insurer. The client name d
 **Data**
 - PostgreSQL 16+ with the `pgvector` extension
 - Single database hosts: claims of record, audit log (with hand-rolled SHA-256 chain hash), policy chunk vector index
-- **Local development** runs Postgres natively on macOS via Postgres.app or Homebrew (no Docker, no virtualisation overhead). A setup script enables the pgvector extension and creates the dev database.
-- **Production** runs Render's managed Postgres with pgvector enabled
+- **Local development** runs Postgres natively on macOS via Postgres.app or Homebrew (no Docker, no virtualisation overhead). A setup script enables the pgvector extension and creates the dev database. A developer can also point `DATABASE_URL` at a Neon dev branch and skip local Postgres entirely.
+- **Production-deployed prototype** runs Neon (managed Postgres) — `eu-central-1` / Frankfurt, Postgres 17 with pgvector 0.8.0 enabled
 - Production target replaces this with Azure SQL Managed Instance + Ledger Tables; documented in `docs/architecture-stack-reference.md` but not implemented in the prototype
 
 **Hosting & CI**
 - Backend: Render
 - Frontend: Vercel
-- Postgres: Render-managed
+- Postgres: Neon (managed Postgres) — `eu-central-1` / Frankfurt, Postgres 17, pgvector 0.8.0
 - CI: GitHub Actions (Azure DevOps Pipelines is the production target — config in `infra/azure-devops-pipeline.yml` for reference, GitHub Actions actually runs the prototype)
 
 ## Project Structure (target — fully populated by end of Phase 0)
@@ -128,9 +128,9 @@ Together these make the build reproducible end-to-end.
 ## Current Status
 
 - **Date:** 2026-05-08
-- **Phase:** Phase 0 complete; Phase 1 next.
-- **What works:** Hello-world deployed; CI runs on PRs.
-- **What's next:** Phase 1 — Data layer and settings infrastructure.
+- **Phase:** Phase 1 complete; Phase 2 next.
+- **What works:** Database schema (claims, audit_log, policy_chunks) applied to Neon, settings infrastructure with five sub-models, audit chain with defensive guards, indexed sample policy excerpt, synthetic claim seeds. All persistent state in place; no agents yet.
+- **What's next:** Phase 2 — LLM Gateway and Validator agent.
 
 ## Standing Instructions
 
@@ -169,10 +169,10 @@ Together these make the build reproducible end-to-end.
 ## Architectural Decisions (Locked)
 
 - **Models.** Claude Sonnet (Orchestrator), Claude Haiku (Doc-Parser, Guardrail), Mistral Large (Validator, Adjuster). Adjuster gets a LoRA adapter in production; not in the prototype.
-- **Database.** PostgreSQL with pgvector for the prototype. Single database hosts claims, audit log, vector index. Local dev uses native Postgres (Postgres.app or Homebrew); deployed dev/prod uses Render's managed Postgres. Production target: Azure SQL Managed Instance with Ledger Tables for audit.
+- **Database.** PostgreSQL with pgvector for the prototype. Single database hosts claims, audit log, vector index. Local dev uses native Postgres (Postgres.app or Homebrew) or, optionally, a Neon dev branch via `DATABASE_URL`; deployed dev/prod uses Neon (managed Postgres) in `eu-central-1` (Frankfurt). Production target: Azure SQL Managed Instance with Ledger Tables for audit.
 - **Embedding model.** `BAAI/bge-small-en-v1.5` via `sentence-transformers`, runs on CPU inside the FastAPI process. Same model used for indexing the policy and for encoding query narratives — embedding model is a one-way door, never silently swap.
 - **Streaming transport.** Server-Sent Events. The FastAPI endpoint pushes pipeline progress to the React frontend as agents complete.
-- **Hosting.** Render (backend, Postgres), Vercel (frontend). Free tiers sufficient for the demo.
+- **Hosting.** Render (backend), Neon (Postgres), Vercel (frontend). Free tiers sufficient for the demo.
 - **Decoupled architecture.** Claims are persisted to a claims-of-record table before any agent fires. The pipeline is triggered by a button click in the prototype (simulating the production Azure Service Bus event).
 - **Demo content.** Commercial Property line. Three scripted scenarios: auto-approve $85,000 commercial water damage; threshold escalation $850,000 fire loss; guardrail escalation $1.4M with hallucinated endorsement.
 - **Escalation policy.** OR semantics. Hard rules (always escalate): guardrail_failed, claim_type_watchlist, claimant_watchlist, cross_jurisdictional. Threshold rules: settlement > $250,000, validator confidence < 0.65, adjuster confidence < 0.75. Policy lives in `backend/app/escalation/policy.yaml`. Every decision logs which rules fired.
