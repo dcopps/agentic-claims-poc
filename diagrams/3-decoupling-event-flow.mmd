@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    participant C as Claimant
+    participant COR as Claims of Record (FNOL)
+    participant EB as Event Bus
+    participant O as Orchestrator (Agent Pipeline)
+    participant H as Human Handler
+    participant AV as Audit Vault
+
+    rect rgb(230, 250, 230)
+    Note over C, COR: PHASE 1 - Submission (synchronous, fast)
+    C->>COR: Submit claim (images + text)
+    COR->>COR: Generate Claim ID 12345
+    COR->>C: Confirmation - "Claim 12345 received"
+    end
+
+    rect rgb(255, 245, 230)
+    Note over COR, O: PHASE 2 - Event triggers AI pipeline. Production - Service Bus event from the Claims of Record system. Prototype - "Process Claim" button.
+    COR->>EB: Emit ClaimReceived event (Claim 12345)
+    EB->>O: Trigger pipeline
+    O->>O: Generate Correlation ID (Claim 12345, Run 001)
+    end
+
+    rect rgb(230, 240, 255)
+    Note over O, AV: PHASE 3 - Agent pipeline runs. See Headline diagram for full agent detail.
+    O->>O: Doc-Parser, Validator, Adjuster, Guardrail execute
+    O->>AV: Log every step under Correlation ID Run 001
+    end
+
+    rect rgb(255, 240, 240)
+    Note over O, H: PHASE 4 - Human review (when escalated). Production - Azure Durable Functions persists pipeline state. Prototype - "Approve" button.
+    O->>H: Queue task (Claim 12345, evidence, citations)
+    Note over H: Hours or days pass. Pipeline state survives because the workflow engine is durable.
+    H->>O: Approval signal + digital signature
+    end
+
+    rect rgb(245, 235, 255)
+    Note over O, C: PHASE 5 - Outcome written back to Claims of Record and Audit Vault
+    O->>COR: Settlement decision, status = settled
+    O->>AV: Finalize ledger entry (immutable hash)
+    COR->>C: Notification "Claim 12345 settled"
+    end
+
+    rect rgb(230, 250, 250)
+    Note over EB, AV: PHASE 6 - REPLAY against the same claim. Production - model promotion event or batch eval job. Prototype - "Re-process with v2 model" button.
+    EB->>O: Trigger replay (Claim 12345, model v2)
+    O->>O: Generate NEW Correlation ID (Claim 12345, Run 002)
+    O->>AV: Log under Run 002 (Run 001 preserved)
+    Note over AV: Both runs queryable side-by-side
+    end

@@ -1,0 +1,18 @@
+# Render Blueprint for the agentic-claims-poc backend.
+#
+# Phase 0 declares only the Web Service. The managed Postgres database is
+# provisioned separately (via the Render dashboard) in Phase 1, when there's
+# something to connect to. Same for any environment variables that depend on
+# Phase 1+ infrastructure.
+
+services:
+  - type: web
+    name: agentic-claims-poc-backend
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: uv sync
+    startCommand: uv run uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health

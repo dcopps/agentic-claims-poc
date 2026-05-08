@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    participant O as Orchestrator
+    participant V as Validator [Open-Weight: Mistral Large]
+    participant EM as Embedding Model [bge-small]
+    participant VDB as Vector Index [pgvector]
+    participant LLM as LLM Services [Foundry]
+    participant AV as Audit Vault
+
+    Note over EM, VDB: PRE-BUILD (one-off) - Policy document chunked into paragraphs. Each chunk embedded by EM into a 1024-number vector. Vectors stored in VDB alongside chunk text. Refreshed only when policy changes.
+
+    O->>V: Verify Coverage (claim narrative)
+
+    rect rgb(255, 250, 230)
+    Note right of V: STEP 1 - Generate query vector
+    V->>EM: Embed claim narrative
+    EM->>V: Query vector (1024 numbers)
+    end
+
+    rect rgb(230, 245, 255)
+    Note right of V: STEP 2 - Retrieve relevant chunks
+    V->>VDB: Cosine similarity search (top 3)
+    VDB->>V: 3 policy chunks + similarity scores
+    end
+
+    rect rgb(245, 235, 255)
+    Note right of V: STEP 3 - Reason over claim + chunks
+    V->>V: Build augmented prompt (claim + chunks)
+    V->>LLM: Call Mistral Large with augmented prompt
+    LLM->>V: JSON covered, reasoning, cited_chunks
+    end
+
+    rect rgb(230, 250, 230)
+    Note right of V: STEP 4 - Log and return
+    V->>AV: Log chunks retrieved, scores, prompt, response
+    V->>O: Returns Coverage Confirmed
+    end

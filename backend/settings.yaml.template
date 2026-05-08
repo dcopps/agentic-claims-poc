@@ -1,0 +1,29 @@
+# Settings overlay template.
+#
+# Copy to `backend/settings.yaml` and edit to override the defaults declared
+# in `backend/settings.py`. Environment variables override both. Anything
+# left unset here falls back to the model default.
+#
+# Phase 0 surface only. Phase 1 introduces nested sub-models (database,
+# llm, embeddings, langfuse, escalation); each gets its own block here.
+
+# Display name for the application — used in logs and the /health response.
+app_name: agentic-claims-poc
+
+# Deployment context — controls log verbosity, debug flags, etc. in later phases.
+# One of: dev, staging, prod.
+environment: dev
+
+# API listen interface. 127.0.0.1 for local dev; 0.0.0.0 in container deployments.
+api_host: 127.0.0.1
+
+# API listen port. Render passes the assigned port via $PORT at runtime.
+api_port: 8000
+
+# Logging level for application loggers. One of: DEBUG, INFO, WARNING, ERROR.
+log_level: INFO
+
+# Origins allowed by the CORS middleware. The frontend dev server runs at
+# 5173 by default; deployed environments add the Vercel URL to this list.
+cors_allowed_origins:
+  - http://localhost:5173

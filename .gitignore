@@ -1,0 +1,40 @@
+# Local working material — kept out of the public repo.
+BUILD-PLAN.md
+HANDOFF.md
+
+# Secrets and environment files.
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Python.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Node / frontend build output.
+node_modules/
+dist/
+build/
+
+# Local DB artefacts.
+*.sql.gz
+*.dump
+*.backup
+
+# Misc local output.
+output/
+
+# OS junk.
+.DS_Store
+Thumbs.db
+
+# Editor scratch.
+.vscode/
+.idea/
+*.swp

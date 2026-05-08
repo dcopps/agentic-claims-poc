@@ -1,0 +1,64 @@
+flowchart TB
+    Claimant[Claimant - Web or Mobile]
+    Engineer[Engineering Team]
+    Handler[Human Handler]
+
+    subgraph tenant [CORPORATE AZURE TENANT - NORTH EUROPE]
+        APIM[Azure API Management with Entra ID Auth]
+
+        subgraph apps [Application Tier]
+            React[React Frontend on Container Apps]
+            FastAPI[FastAPI Backend on Container Apps]
+            Durable[Azure Durable Functions Workflow Engine]
+            Gateway[LLM Gateway - Provider Abstraction]
+        end
+
+        subgraph data [Data Tier]
+            CoR[(Azure SQL MI - Claims of Record)]
+            Audit[(Azure SQL MI - Audit Vault Ledger Tables)]
+            Vectors[(Azure AI Search - Policy Vector Index)]
+            Immut[(Blob Storage - Immutable Audit Digest)]
+        end
+
+        Bus[Azure Service Bus Event Backbone]
+
+        subgraph aiAccess [AI Access - Private Endpoints Only]
+            ModelPE[Foundry Private Endpoint for Sonnet Haiku Mistral]
+            EmbedPE[Embedding Private Endpoint for text-embedding-3-large]
+        end
+
+        Workbench[Existing Claims Workbench]
+
+        subgraph platform [Platform and Operations]
+            Entra[Entra ID]
+            KV[Key Vault]
+            Monitor[Azure Monitor and App Insights]
+            Langfuse[Langfuse for LLM Observability]
+            DevOps[Azure DevOps Pipelines and Change Records]
+        end
+    end
+
+    subgraph msCloud [Microsoft Cloud - Outside Trust Boundary]
+        FoundryInf[Foundry Model Inference - Anthropic Mistral Embedding]
+    end
+
+    Claimant -->|HTTPS| APIM
+    APIM --> React
+    React --> FastAPI
+    FastAPI --> CoR
+    CoR -->|emit ClaimReceived event| Bus
+    Bus -->|trigger pipeline| Durable
+    Durable --> Gateway
+    Durable --> Vectors
+    Durable --> Audit
+    Durable --> CoR
+    Gateway --> ModelPE
+    Gateway --> EmbedPE
+    ModelPE -.PrivateLink.-> FoundryInf
+    EmbedPE -.PrivateLink.-> FoundryInf
+    Audit -.daily digest.-> Immut
+    Durable -.queue task.-> Workbench
+    Handler --> Workbench
+    Workbench -.approval signal.-> Durable
+    Engineer --> DevOps
+    DevOps -.deploys.-> APIM
