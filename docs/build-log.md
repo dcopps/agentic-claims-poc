@@ -249,3 +249,64 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Phase 3 — Remaining agents (Doc-Parser, Adjuster, Guardrail).
 
 ---
+
+### 2026-05-11 — Phase 3: Remaining agents (Doc-Parser, Adjuster, Guardrail)
+
+**Phase / Prompt:** Phase 3 — [`docs/prompts/04-phase-3-remaining-agents.md`](prompts/04-phase-3-remaining-agents.md)
+
+**Plan (approved):** [`docs/prompts/04-phase-3-remaining-agents-plan.md`](prompts/04-phase-3-remaining-agents-plan.md) (approved 2026-05-11T13:34:43Z)
+
+**Plan iterations:** 0 rejected.
+
+**Report:** [`docs/prompts/04-phase-3-remaining-agents-report.md`](prompts/04-phase-3-remaining-agents-report.md)
+
+**Prompt summary:** Build the three remaining agents on top of the Phase 2 plumbing — Doc-Parser (Claude Haiku, structured field extraction from FNOL narratives), Adjuster (Mistral Large, market-data lookup + within-range LLM pick + range-enforcement guard), Guardrail (Claude Haiku, deterministic regex floor for PII / hallucinated-citation / bias plus an LLM-side semantic check, fail-closed combine). Each agent is independent (no shared base class), each uses externalised prompts via `PromptLoader`, each writes a full audit-log entry. Plus the preamble fix-up (`pyproject.toml` version `0.2.0 → 0.3.0`).
+
+**What changed:**
+
+- `pyproject.toml` — version bumped `0.2.0 → 0.3.0`.
+- `backend/settings.py` — `LLMSettings` extended with six per-call defaults (`doc_parser_max_tokens`/`temperature`, `adjuster_max_tokens`/`temperature`, `guardrail_max_tokens`/`temperature`). New `AdjusterSettings` sub-model with `market_data_path`, threaded into `Settings`.
+- `backend/settings.yaml.template` — matching `llm.*` block extensions and a new `adjuster:` block.
+- `backend/data/market_data.yaml` — new static lookup table (six claim_types × three severities = 18 cells). Severity-bands and ranges sized so the locked demo amounts ($85k water_damage, $850k fire, $1.4M storm_complex) land comfortably inside their cells. Schema version field for future-proofing.
+- `backend/data/market_data.py` — new loader module. `MarketRange` Pydantic model, `MarketDataTable.lookup(claim_type, reported_amount) -> MarketRange` combining sanitise/validate/abort/execute with severity derivation. Module-level path-keyed cache; `clear_market_data_cache()` for tests.
+- `backend/app/agents/_shared.py` — new module exposing `extract_json_block`, `excerpt`, `clamp_unit`, `new_correlation_id`. Replaces the per-agent copies the Validator carried; the four agents now import the same helpers.
+- `backend/app/agents/validator.py` — refactored to import from `_shared.py`. No interface change; the local helpers were removed and replaced with aliased imports so call sites stay identical. The `_extract_json_block` wrapper delegates to the shared helper with the Validator's agent label.
+- `backend/app/agents/doc_parser_models.py` — `DocParserOutput` (loss_date, jurisdiction, claim_type, claimed_amount, claimant_identifier, narrative_summary) and `DocParserResult` (wraps output + claim_id, correlation_id, model, latency_ms). Field bounds enforce schema at the Pydantic boundary.
+- `backend/app/agents/doc_parser.py` — `DocParser` class with constructor injection. `evaluate(claim_id, correlation_id)` orchestrates: load narrative from DB → call Haiku via Gateway → parse strict JSON → audit. Fail-fast on malformed JSON / bad date / non-positive amount / oversized summary; the audit log captures the failure path.
+- `backend/app/prompts/system/doc_parser.md` and `backend/app/prompts/user/doc_parser_template.md` — externalised prompts. System prompt locks the persona, the JSON schema, the controlled-vocabulary list for `claim_type`, and the no-prose-no-fencing rule. User template has a single `{claim_narrative}` placeholder.
+- `backend/app/agents/adjuster_models.py` — `AdjusterOutput` (recommended_settlement, confidence, reasoning) and `AdjusterResult` (wraps output + market_range + run metadata). `AdjusterResult` carries a `model_validator(mode="after")` that re-asserts the within-range invariant, so direct construction (e.g. from an audit-log replay) cannot break the contract.
+- `backend/app/agents/adjuster.py` — `Adjuster` class. `evaluate(claim_id, correlation_id, parsed_claim, validator_verdict)` orchestrates: lookup `(claim_type, severity)` in `MarketDataTable` → call Mistral via Gateway with JSON-mode → parse and **re-validate** the value is in `[floor, ceiling]` (out-of-bounds raises `ValueError`, never silently clamps) → audit. The reasoning prompt is constrained not to cite policy.
+- `backend/app/prompts/system/adjuster.md` and `backend/app/prompts/user/adjuster_template.md` — externalised prompts. System prompt names the role, the within-range constraint in strong language ("MUST be between floor and ceiling inclusive"), the no-policy-citation rule, and the reasoning style.
+- `backend/app/agents/guardrail_models.py` — `GuardrailFlagKind` Literal (`pii | bias | hallucinated_citation`), `GuardrailFlagSource` Literal (`rule | llm`), `GuardrailFlag` (kind, detail, source), `GuardrailOutput` (passed, flags, summary), `GuardrailResult` wrapper. `GuardrailOutput` carries a `model_validator` enforcing fail-closed (`flags non-empty ⇒ passed=False` and `not flags ⇒ passed=True`).
+- `backend/app/agents/guardrail_rules.py` — `GuardrailRuleEngine` deterministic detector. PII patterns (SSN, email, US phone, credit-card-like — four explicit regexes). Citation-candidate regex with chunk-content allow-set check (substring containment). Protected-characteristic terms matched with word-boundary regex (catches the `age`-inside-`damage` foot-gun).
+- `backend/app/agents/guardrail.py` — `Guardrail` class. `evaluate(claim_id, correlation_id, adjuster_result, retrieved_chunks)` orchestrates: run rule engine → call Haiku via Gateway with the rule findings inlined into the prompt (so the LLM does not duplicate them) → parse LLM flags → combine and decide fail-closed → audit.
+- `backend/app/prompts/system/guardrail.md` and `backend/app/prompts/user/guardrail_template.md` — externalised prompts. System prompt enumerates the three check kinds, locks the JSON schema (no `passed` field — the agent computes it), instructs the LLM not to duplicate the rule-engine findings.
+- `backend/app/agents/__init__.py` — extended exports cover `DocParser`, `DocParserOutput`, `DocParserResult`, `Adjuster`, `AdjusterOutput`, `AdjusterResult`, `Guardrail`, `GuardrailRuleEngine`, `GuardrailOutput`, `GuardrailResult`, `GuardrailFlag`, `GuardrailFlagKind`, `GuardrailFlagSource`.
+- `backend/tests/test_market_data.py` — 14 tests: real YAML load, lookup for each demo amount, severity boundaries inclusive on upper, case-insensitive claim_type input, unknown claim_type, non-positive amount, empty claim_type, missing file, malformed YAML, unsupported schema version, missing severity, ceiling-below-floor, `MarketRange` negative bounds, `MarketRange.contains` inclusive on both ends.
+- `backend/tests/test_doc_parser.py` — 11 tests (10 unit + 1 gated): happy path, claim-not-found, empty narrative, non-JSON response with audit, schema-failing JSON (negative amount), bad ISO date, oversized summary, provider-raises with audit, audit narrative truncation, plus 1 gated real-call test.
+- `backend/tests/test_doc_parser_prompts.py` — 2 golden-shape tests.
+- `backend/tests/test_adjuster.py` — 10 tests (9 unit + 1 gated): happy path (in-range), out-of-range above ceiling, out-of-range below floor, `AdjusterResult` direct construction re-validation, unknown claim_type lookup, non-JSON response, schema-failing JSON, provider-raises with audit, fire/severe range threading, plus 1 gated real-call test.
+- `backend/tests/test_adjuster_prompts.py` — 2 golden-shape tests.
+- `backend/tests/test_guardrail.py` — 16 collected (parameterised PII test expands to four cases; 12 base test functions): clean reasoning passes, PII patterns (SSN/email/phone/credit_card_like — four parameterised cases), hallucinated citation fires, legitimate citation does not flag, protected-characteristic term flags, LLM flags merge with rule flags, non-JSON response raises, missing `flags` key, `flags` not a list, empty retrieved chunks (rule engine), fail-closed model validator, provider-raises with audit, plus 1 gated real-call test.
+- `backend/tests/test_guardrail_prompts.py` — 2 golden-shape tests.
+- `CLAUDE.md` — Current Status updated to "Phase 3 complete; Phase 4 next".
+- `docs/prompts/04-phase-3-remaining-agents-plan.md` — saved before approval; approval footer appended at 2026-05-11T13:34:43Z.
+- `docs/prompts/04-phase-3-remaining-agents-report.md` — written after execution.
+
+**Tests:** 178 passing, 5 skipped (the Phase-1 `RUN_EMBEDDING_TESTS=1` indexing test, plus four `RUN_LLM_E2E_TESTS=1` gated tests — Phase 2's Validator real-call plus the three new Phase 3 real-call tests for Doc-Parser, Adjuster, Guardrail), 0 failing.
+
+- Backend (pytest): 178 passing, 5 skipped. Phase 3 adds **56 passing new tests + 3 new conditional skips**: market_data (14), doc_parser unit (10), doc_parser prompts (2), adjuster unit (9), adjuster prompts (2), guardrail unit+rules (15 effective, with one parameterised PII test expanding to 4 cases), guardrail prompts (2).
+- Frontend (vitest): 2 passing — unchanged.
+- All `uv run ruff check .`, `uv run mypy backend` clean (69 source files).
+
+**Issues discovered:**
+
+- **Bias substring match fired on the substring "age" inside "damage".** The first cut of `GuardrailRuleEngine._bias_flags` used plain substring containment against `{"race", "ethnicity", ..., "age"}`. The first test run failed `test_clean_reasoning_passes` because the test's "damage scope supports the value" reasoning contains "age" as a substring of "damage". Fixed by switching the protected-characteristic list from a `frozenset[str]` to a tuple of `(name, compiled_word_boundary_regex)` pairs, matched via `pattern.search(text)`. Word boundaries also cover the equivalent "manager" / "stage" / "image" false-positives without listing them. Documented inline.
+- **mypy `unused-ignore` on the market-data loader.** The first cut of `_parse_claim_type_entry` had `# type: ignore[index]` comments after `bands[severity] = _SeverityBand(...)` and `ranges[severity] = {...}` lines. mypy didn't need them (the loop variable's narrowed Literal type satisfies the dict indexer). Removed both comments; static checks clean.
+- **Ruff `I001` import-block formatting on every new module.** Auto-fixed by `uv run ruff check --fix .`.
+- **Ruff `SIM110` on `_citation_is_in_allow_set`.** Replaced the `for / return True / return False` loop with `return any(name in entry for entry in allow_set)`.
+- **Anonymisation review.** `grep -i 'aspen\|axa\|chubb\|swiss re\|munich re' .` against the working tree returned no matches; new fixtures and prompts use generic claimant names.
+
+**Next:** Phase 4 — Pipeline orchestrator.
+
+---

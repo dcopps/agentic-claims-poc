@@ -128,9 +128,9 @@ Together these make the build reproducible end-to-end.
 ## Current Status
 
 - **Date:** 2026-05-11
-- **Phase:** Phase 2 complete; Phase 3 next.
-- **What works:** LLM Gateway with `AnthropicProvider` and `MistralProvider` (system/user separation enforced at the interface), structured `APILogger` writing one JSON record per call, `PromptLoader` reading externalised system/user prompts, Validator agent running end-to-end (embed → retrieve top-3 policy chunks via pgvector → augmented prompt → Mistral Large JSON mode → typed verdict with anti-hallucination citation cross-check → audit log row). 124 backend+frontend tests green; gated `RUN_LLM_E2E_TESTS=1` confirmed live Mistral integration.
-- **What's next:** Phase 3 — Remaining agents (Doc-Parser, Adjuster, Guardrail).
+- **Phase:** Phase 3 complete; Phase 4 next.
+- **What works:** All four agents (Doc-Parser, Validator, Adjuster, Guardrail) run end-to-end in isolation against the seeded claims, each producing typed structured output with a full audit-log entry per call. Doc-Parser (Haiku) extracts structured fields from FNOL narratives; Adjuster (Mistral) looks up `(claim_type, severity)` in the static market-data table and instructs the LLM to pick within `[floor, ceiling]` with a parse-time range-enforcement guard; Guardrail (Haiku) combines a deterministic regex floor (PII / hallucinated-citation / bias) with an LLM semantic check and fail-closed combine. No orchestrator wiring yet; that's Phase 4. 180 backend+frontend tests green; ruff and mypy clean across 69 source files.
+- **What's next:** Phase 4 — Pipeline orchestrator.
 
 ## Standing Instructions
 

@@ -46,6 +46,34 @@ _DEFAULT_VALIDATOR_MAX_TOKENS = 1024
 _DEFAULT_VALIDATOR_TEMPERATURE = 0.1
 _DEFAULT_REQUEST_TIMEOUT_S = 60.0
 
+# Per-call defaults for the Phase 3 agents.
+#
+# Doc-Parser: temperature=0.0 because field extraction must be
+# deterministic — the same narrative twice should produce the same
+# structured fields, full stop. max_tokens=512 fits a small JSON object
+# with six short string/number fields plus a 500-char summary.
+#
+# Adjuster: temperature=0.2 leaves enough headroom for the model to
+# choose a value within the range with a short justification, without
+# encouraging the kind of creative reasoning that produces hallucinated
+# citations. max_tokens=768 holds the JSON object plus a 2000-char
+# reasoning paragraph.
+#
+# Guardrail: temperature=0.0 — flagging is a discrimination task, not a
+# generative one. max_tokens=512 holds a small flags list plus a
+# 500-char summary.
+_DEFAULT_DOC_PARSER_MAX_TOKENS = 512
+_DEFAULT_DOC_PARSER_TEMPERATURE = 0.0
+_DEFAULT_ADJUSTER_MAX_TOKENS = 768
+_DEFAULT_ADJUSTER_TEMPERATURE = 0.2
+_DEFAULT_GUARDRAIL_MAX_TOKENS = 512
+_DEFAULT_GUARDRAIL_TEMPERATURE = 0.0
+
+# Default location of the Adjuster's market-data lookup table. Static
+# YAML keyed by (claim_type, severity); the loader at
+# `backend/data/market_data.py` owns the schema.
+_DEFAULT_MARKET_DATA_PATH = Path("backend/data/market_data.yaml")
+
 # Bounds for the APILogger's prompt/response excerpt budget. Below 100
 # the excerpt is useless; above 20_000 we're effectively logging full
 # bodies twice (the audit log already has the full content).
@@ -196,6 +224,18 @@ class LLMSettings(BaseModel):
     validator_temperature: float = Field(
         default=_DEFAULT_VALIDATOR_TEMPERATURE, ge=0.0, le=1.0
     )
+    doc_parser_max_tokens: int = Field(default=_DEFAULT_DOC_PARSER_MAX_TOKENS, ge=1, le=8192)
+    doc_parser_temperature: float = Field(
+        default=_DEFAULT_DOC_PARSER_TEMPERATURE, ge=0.0, le=1.0
+    )
+    adjuster_max_tokens: int = Field(default=_DEFAULT_ADJUSTER_MAX_TOKENS, ge=1, le=8192)
+    adjuster_temperature: float = Field(
+        default=_DEFAULT_ADJUSTER_TEMPERATURE, ge=0.0, le=1.0
+    )
+    guardrail_max_tokens: int = Field(default=_DEFAULT_GUARDRAIL_MAX_TOKENS, ge=1, le=8192)
+    guardrail_temperature: float = Field(
+        default=_DEFAULT_GUARDRAIL_TEMPERATURE, ge=0.0, le=1.0
+    )
     request_timeout_s: float = Field(
         default=_DEFAULT_REQUEST_TIMEOUT_S, ge=1.0, le=600.0
     )
@@ -305,6 +345,21 @@ class LangfuseSettings(BaseModel):
         return self
 
 
+class AdjusterSettings(BaseModel):
+    """
+    Adjuster-agent configuration.
+
+    The Adjuster reads a static `(claim_type, severity)` market-data
+    lookup table at runtime; the path is declared here so deployments
+    can point it at an alternate file without code changes. The schema
+    of the file itself is owned by `backend/data/market_data.py`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    market_data_path: Path = _DEFAULT_MARKET_DATA_PATH
+
+
 class EscalationSettings(BaseModel):
     """
     Escalation policy parameters.
@@ -367,6 +422,9 @@ class Settings(BaseSettings):
     # Phase 2 sub-models.
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+
+    # Phase 3 sub-models.
+    adjuster: AdjusterSettings = Field(default_factory=AdjusterSettings)
 
     @model_validator(mode="before")
     @classmethod

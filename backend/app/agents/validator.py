@@ -28,7 +28,6 @@ embedder, connection factory. Tests swap stubs; production wiring
 from __future__ import annotations
 
 import json
-import re
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -41,6 +40,18 @@ import numpy as np
 import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
+from backend.app.agents._shared import (
+    clamp_unit as _clamp_unit,
+)
+from backend.app.agents._shared import (
+    excerpt as _excerpt,
+)
+from backend.app.agents._shared import (
+    extract_json_block as _shared_extract_json_block,
+)
+from backend.app.agents._shared import (
+    new_correlation_id as _new_correlation_id,
+)
 from backend.app.agents.validator_models import (
     CitedChunk,
     RetrievedChunk,
@@ -68,11 +79,6 @@ _CHUNK_AUDIT_EXCERPT_CHARS = 600
 # Validator pipeline step name. Used as `AuditEvent.step`; locked so
 # downstream queries against the audit log have a stable identifier.
 _AUDIT_STEP_NAME = "coverage_check"
-
-# Regex that finds the outermost `{...}` block in a string. Used to
-# rescue a verdict from a model that wrapped its JSON in prose or
-# Markdown fences in spite of the system-prompt instruction not to.
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
 class Validator:
@@ -382,17 +388,8 @@ def _parse_verdict(
 
 
 def _extract_json_block(text: str) -> str:
-    """Return the outermost JSON object embedded in `text`."""
-    stripped = text.strip()
-    if stripped.startswith("{") and stripped.endswith("}"):
-        return stripped
-    match = _JSON_BLOCK_RE.search(text)
-    if match is None:
-        raise ValueError(
-            "Validator: model response contains no `{...}` block; "
-            f"excerpt={text[:500]!r}"
-        )
-    return match.group(0)
+    """Delegate to `_shared.extract_json_block` with the Validator's agent label."""
+    return _shared_extract_json_block(text, agent_name="Validator")
 
 
 def _assert_citations_subset(
@@ -461,36 +458,6 @@ def _build_audit_payload(
         ),
     }
     return payload
-
-
-def _excerpt(text: str, max_chars: int) -> str:
-    """Truncate `text` to `max_chars` with a length-suffix marker."""
-    if len(text) <= max_chars:
-        return text
-    return f"{text[:max_chars]}…(truncated, full length={len(text)})"
-
-
-def _clamp_unit(value: float) -> float:
-    """Clamp `value` to [0, 1] — defensive against pgvector edge cases."""
-    if value < 0.0:
-        return 0.0
-    if value > 1.0:
-        return 1.0
-    return value
-
-
-def _new_correlation_id() -> UUID:
-    """Generate a placeholder correlation id for the APILogger record.
-
-    The Validator threads its caller's correlation id through to the
-    audit log (which is what links the run together); the LLM-call
-    record carries its own UUID so a single Validator run with multiple
-    LLM retries (a Phase 6 enhancement) can distinguish them. For the
-    Phase 2 implementation there's exactly one call per run.
-    """
-    from uuid import uuid4
-
-    return uuid4()
 
 
 # --------------------------------------------------------------------------- #

@@ -67,6 +67,20 @@ llm:
   # bad values at config time.
   validator_max_tokens: 1024
   validator_temperature: 0.1
+  # Doc-Parser runs at temperature 0 — structured field extraction must
+  # be deterministic. 512 tokens is enough for the six-field JSON plus
+  # a bounded summary.
+  doc_parser_max_tokens: 512
+  doc_parser_temperature: 0.0
+  # Adjuster needs a touch of latitude (0.2) to pick a sensible value
+  # inside the looked-up range without inviting hallucinated citations.
+  adjuster_max_tokens: 768
+  adjuster_temperature: 0.2
+  # Guardrail is a discrimination task; temperature 0 keeps the flag
+  # set stable. 512 tokens covers the flags array plus a 500-char
+  # summary.
+  guardrail_max_tokens: 512
+  guardrail_temperature: 0.0
   request_timeout_s: 60.0
 
   # Optional rate table. Keys are model identifiers; values are
@@ -124,6 +138,15 @@ logging:
 retrieval:
   policy_source_path: backend/data/sample_policy.txt
   top_k: 3
+
+# --- adjuster --------------------------------------------------------------
+
+# Adjuster-agent configuration. The market-data lookup table is static
+# YAML keyed by (claim_type, severity); the loader at
+# backend/data/market_data.py owns the schema. Point this at an
+# alternative file for a deployment that wants a different rate book.
+adjuster:
+  market_data_path: backend/data/market_data.yaml
 
 # --- escalation ------------------------------------------------------------
 
