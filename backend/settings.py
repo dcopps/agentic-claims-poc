@@ -38,6 +38,26 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Per-call defaults for the Validator agent. Low temperature keeps the
+# coverage decision deterministic across runs; max_tokens is generous
+# enough for the JSON verdict plus reasoning paragraph without inviting
+# rambling output. Both are configurable via settings.yaml / env.
+_DEFAULT_VALIDATOR_MAX_TOKENS = 1024
+_DEFAULT_VALIDATOR_TEMPERATURE = 0.1
+_DEFAULT_REQUEST_TIMEOUT_S = 60.0
+
+# Bounds for the APILogger's prompt/response excerpt budget. Below 100
+# the excerpt is useless; above 20_000 we're effectively logging full
+# bodies twice (the audit log already has the full content).
+_MIN_LOG_EXCERPT_CHARS = 100
+_MAX_LOG_EXCERPT_CHARS = 20_000
+_DEFAULT_LOG_EXCERPT_CHARS = 2000
+
+# Default location of the indexed policy excerpt. Mirrors the path used
+# by `backend/data/index_policy.py` so retrieval is scoped to the same
+# rows the indexer wrote.
+_DEFAULT_POLICY_SOURCE_PATH = Path("backend/data/sample_policy.txt")
+
 # Locate the YAML overlay relative to this file. The overlay sits next to
 # `settings.py` so a developer who copies the template doesn't need to know
 # where the resolution logic looks.
@@ -152,12 +172,77 @@ class MistralProviderSettings(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    """Top-level LLM block. Holds one provider sub-block per vendor."""
+    """
+    Top-level LLM block. Holds one provider sub-block per vendor plus
+    the per-call defaults the Gateway hands to every provider.
+
+    `pricing` is the optional rate table the APILogger consults to fill
+    `cost_usd`. Keys are model identifiers; values are
+    `(input_per_million_tokens, output_per_million_tokens)` in USD. Left
+    empty by default — `cost_usd` is null when no rate is configured,
+    which is preferable to silently emitting incorrect numbers. Populate
+    when the demo's pricing story matters (recommended Phase 6 polish).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     anthropic: AnthropicSettings = Field(default_factory=AnthropicSettings)
     mistral: MistralProviderSettings = Field(default_factory=MistralProviderSettings)
+
+    # Per-call defaults. The Gateway hands these to every provider unless
+    # a caller overrides them. Bounds are tight enough that a typo
+    # ("temprature: 5") is rejected at config time.
+    validator_max_tokens: int = Field(default=_DEFAULT_VALIDATOR_MAX_TOKENS, ge=1, le=8192)
+    validator_temperature: float = Field(
+        default=_DEFAULT_VALIDATOR_TEMPERATURE, ge=0.0, le=1.0
+    )
+    request_timeout_s: float = Field(
+        default=_DEFAULT_REQUEST_TIMEOUT_S, ge=1.0, le=600.0
+    )
+
+    # Optional pricing table. Decimal so float drift on six-figure
+    # token counts can't silently corrupt the cost field. Default empty.
+    pricing: dict[str, tuple[Decimal, Decimal]] = Field(default_factory=dict)
+
+
+class LoggingSettings(BaseModel):
+    """
+    Structured-log surface for the APILogger.
+
+    The logger writes one JSON record per LLM call. `api_log_enabled`
+    gates the whole subsystem (off => silent). `api_log_excerpt_chars`
+    caps the prompt/response excerpts so a noisy call does not flood
+    the log; the full content already lives in the audit vault.
+    `api_log_path` is an optional sidecar file the logger also writes
+    to — useful in local development for grepping records without
+    scrolling the server log. None means stdout-only.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_log_enabled: bool = True
+    api_log_excerpt_chars: int = Field(
+        default=_DEFAULT_LOG_EXCERPT_CHARS,
+        ge=_MIN_LOG_EXCERPT_CHARS,
+        le=_MAX_LOG_EXCERPT_CHARS,
+    )
+    api_log_path: Path | None = None
+
+
+class RetrievalSettings(BaseModel):
+    """
+    RAG retrieval parameters for the Validator.
+
+    `policy_source_path` filters `policy_chunks` by the row's
+    `source_path` column so retrieval is scoped to the corpus the
+    indexer wrote. `top_k` defaults to 3 to match the diagram's
+    "Cosine similarity search (top 3)" step — overrideable for tuning.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy_source_path: Path = _DEFAULT_POLICY_SOURCE_PATH
+    top_k: int = Field(default=3, ge=1, le=20)
 
 
 class EmbeddingSettings(BaseModel):
@@ -278,6 +363,10 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)
+
+    # Phase 2 sub-models.
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
 
     @model_validator(mode="before")
     @classmethod

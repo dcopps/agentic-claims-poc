@@ -127,10 +127,10 @@ Together these make the build reproducible end-to-end.
 
 ## Current Status
 
-- **Date:** 2026-05-08
-- **Phase:** Phase 1 complete; Phase 2 next.
-- **What works:** Database schema (claims, audit_log, policy_chunks) applied to Neon, settings infrastructure with five sub-models, audit chain with defensive guards, indexed sample policy excerpt, synthetic claim seeds. All persistent state in place; no agents yet.
-- **What's next:** Phase 2 — LLM Gateway and Validator agent.
+- **Date:** 2026-05-11
+- **Phase:** Phase 2 complete; Phase 3 next.
+- **What works:** LLM Gateway with `AnthropicProvider` and `MistralProvider` (system/user separation enforced at the interface), structured `APILogger` writing one JSON record per call, `PromptLoader` reading externalised system/user prompts, Validator agent running end-to-end (embed → retrieve top-3 policy chunks via pgvector → augmented prompt → Mistral Large JSON mode → typed verdict with anti-hallucination citation cross-check → audit log row). 124 backend+frontend tests green; gated `RUN_LLM_E2E_TESTS=1` confirmed live Mistral integration.
+- **What's next:** Phase 3 — Remaining agents (Doc-Parser, Adjuster, Guardrail).
 
 ## Standing Instructions
 

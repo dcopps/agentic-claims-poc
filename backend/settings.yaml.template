@@ -62,6 +62,23 @@ llm:
     validator_model: mistral-large-latest
     adjuster_model: mistral-large-latest
 
+  # Per-call defaults. The Gateway hands these to every provider unless
+  # a caller overrides them. Bounds in settings.py reject obviously
+  # bad values at config time.
+  validator_max_tokens: 1024
+  validator_temperature: 0.1
+  request_timeout_s: 60.0
+
+  # Optional rate table. Keys are model identifiers; values are
+  # [input_per_million_tokens, output_per_million_tokens] in USD. Left
+  # empty means the APILogger emits `cost_usd: null` — preferable to
+  # silently fabricating numbers from stale rates. Example shape:
+  #
+  # pricing:
+  #   "mistral-large-latest": ["2.00", "6.00"]
+  #   "claude-haiku-4-5-20251001": ["1.00", "5.00"]
+  pricing: {}
+
 # --- embedding -------------------------------------------------------------
 
 # Embedding model used for indexing the policy and encoding query
@@ -85,6 +102,28 @@ langfuse:
   # public_key: loaded from env — do not put values here
   # secret_key: loaded from env — do not put values here
   host: https://cloud.langfuse.com
+
+# --- logging ---------------------------------------------------------------
+
+# Structured log surface for the APILogger. The logger writes one JSON
+# record per LLM call (model, tokens, latency, correlation ID). The
+# excerpt-chars cap keeps prompts and responses readable in the log
+# without flooding it — full content always lives in the audit vault.
+# `api_log_path` writes a sidecar file alongside stdout; null disables.
+logging:
+  api_log_enabled: true
+  api_log_excerpt_chars: 2000
+  # api_log_path: backend/data/api-log.ndjson
+
+# --- retrieval -------------------------------------------------------------
+
+# RAG retrieval parameters. `policy_source_path` scopes the
+# `policy_chunks` query to the corpus the indexer wrote so a future
+# multi-corpus deployment can keep them straight. `top_k` matches the
+# RAG diagram's "Cosine similarity search (top 3)" step.
+retrieval:
+  policy_source_path: backend/data/sample_policy.txt
+  top_k: 3
 
 # --- escalation ------------------------------------------------------------
 

@@ -13,6 +13,9 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    buildCommand: uv sync
+    # `--no-dev` keeps test/lint tools out of the production container.
+    # CI still installs the dev group via plain `uv sync` because the
+    # ruff/mypy/pytest pipeline needs them.
+    buildCommand: uv sync --no-dev
     startCommand: uv run uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
