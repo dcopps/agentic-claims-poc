@@ -75,6 +75,9 @@ After Phase execution completes:
 | # | Prompt | Plan | Report | Phase |
 |---|---|---|---|---|
 | 01 | [`01-phase-0-repository-scaffold.md`](01-phase-0-repository-scaffold.md) | [`01-phase-0-repository-scaffold-plan.md`](01-phase-0-repository-scaffold-plan.md) | [`01-phase-0-repository-scaffold-report.md`](01-phase-0-repository-scaffold-report.md) | Phase 0 — Repository scaffold |
+| 02 | [`02-phase-1-data-layer.md`](02-phase-1-data-layer.md) | [`02-phase-1-data-layer-plan.md`](02-phase-1-data-layer-plan.md) | [`02-phase-1-data-layer-report.md`](02-phase-1-data-layer-report.md) | Phase 1 — Data layer and settings infrastructure |
+| 03 | [`03-phase-2-llm-gateway-and-validator.md`](03-phase-2-llm-gateway-and-validator.md) | [`03-phase-2-llm-gateway-and-validator-plan.md`](03-phase-2-llm-gateway-and-validator-plan.md) | [`03-phase-2-llm-gateway-and-validator-report.md`](03-phase-2-llm-gateway-and-validator-report.md) | Phase 2 — LLM Gateway and Validator agent |
+| 04 | [`04-phase-3-remaining-agents.md`](04-phase-3-remaining-agents.md) | [`04-phase-3-remaining-agents-plan.md`](04-phase-3-remaining-agents-plan.md) | [`04-phase-3-remaining-agents-report.md`](04-phase-3-remaining-agents-report.md) | Phase 3 — Remaining agents (Doc-Parser, Adjuster, Guardrail) |
 
 (Further prompts are added as the build progresses.)
 
