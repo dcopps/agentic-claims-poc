@@ -1,5 +1,11 @@
 # Diagrams
 
+## Architecture diagram
+
+The centrepiece of the design is the interactive **[Architecture Diagram](Architecture_Diagram.html)** — view it via GitHub Pages to render it in the browser. From the GitHub repo view this link shows HTML source only; the Pages-served version is what's meant for reading.
+
+## Mermaid sources
+
 Four Mermaid source files (`.mmd`). Render with [mermaid.live](https://mermaid.live), the VS Code Mermaid extension, or any Mermaid-aware tool.
 
 | File | Purpose |
