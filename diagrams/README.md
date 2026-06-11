@@ -2,7 +2,13 @@
 
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    securityLevel: 'loose',
+    sequence: { useMaxWidth: false },
+    flowchart: { useMaxWidth: false },
+  });
 </script>
 
 ## Architecture diagram (interactive)
@@ -13,6 +19,10 @@ The centrepiece of the design is the interactive **[Architecture Diagram](Archit
 
 The "what this is" sequence diagram — agents, audit vault, and the four-tier model strategy.
 
+The diagram below renders at natural width — scroll horizontally to see it all, or open it full-screen in mermaid.live for zoom and pan:
+**[→ Open headline diagram in mermaid.live](https://mermaid.live/edit#pako:eNqlVU1v2zgQ_SsDnVRshBTd9UWHFqr8WTiRYXndQ1wUjDiWuKFIlyLduEX_-w4txVYbI11gdRAo8c3jvOHj8HtQaI5BHDT4xaEqcChYaVi9UUAPc1YrV9-jab93zFhRiB1TFlJgDaSSidp_hX83aF49R2UelZmiwsYaZrWBu7HRygo0sY92HCHXSqH99Dx46IOHuogWzBA93OU1k_IUN2XiwV0IW_uwNZOCtwtmO1TRRxRlZWO4ET4RCXNmSrwQnPjghP_jGosvxsIfMNfL5ALFxFNMHDPcMCH_a9ZTHzV1VE2CKC4v1Tw5SkscF6SSOWnhbsqaKkorJhRymCMv0RB5G5pGb99mMeTuvha22ywIZzUrsble4aPtNiwjXLKOSU8JuaX1INXGoGRWaPV5NnziM1hYMOV9-Oav11fw9OpIbrVFML5QoLcwjGE1Gy0hgvwmmc8hHLPGwuiR6ld41t7KBO3-w5BZ1k4Meyl1s6TvQ57dwg1axn8CksYlWmdUQ-kbV9CQwGcyVPy5hDc--z8H9BoMLkpYnyRki9Ft9HE0m0xXEK5Q-a2IYDGbQc622JNCIWs0YnugAu7RUJ0hXCbkh5L2h_QvtBTFAWaK42MXtu4J7abTyqmHxksyAvekJMy1MwXCnDaZOHuRPeWnFVOttsLUyP-P-OSy-DFlEFnnvaZVa6imbyLaysZSRyCqHK2VWKOy7XzSF2rI0aqk3FmjlR8tmK3OuP6GnmjoV6FrGvGjL19Q91t3Tn51Z-bsztnzoe1pImxaYfFwbgodOHwv6DBeH31wTWdWSkeiWM_dk57kcz8gh3BR2DOkp3bBmgaoZ40J-ILAweA3ArOTwPEyuz0Ow1FTsPZI-4RE0dNI8GS3kwfoYTozRrAiVuoqXW9a4l7g13fn2GkMY8lK2FLaRGL0njpkmFf6K4z2gvs7hVplKuyR9skt015pWuKhKAkjIRclFZFO8BnYptcyTwydvgve9qmksS-D2IqilRB1La_1EP-52ZGV6Yr4hl3ThJGy5uC7Y-0su5e-UTcVZRtcBTWamglOt-R3z7EJbEWO3AQxDTlufSPeBBv1g6D-xswPqghiakR4FbgdufXpUm1__vgXbqBeaQ)**
+
+<div style="overflow-x: auto;">
 <pre class="mermaid">
 sequenceDiagram
     autonumber
@@ -67,6 +77,7 @@ sequenceDiagram
     O->>C: Notification - Claim Settled
     O->>AV: Finalize Ledger Entry (Immutable Hash)
 </pre>
+</div>
 
 ## Other diagrams (sources only — not yet embedded inline)
 
