@@ -11,9 +11,19 @@ theme: minima
 # Site language
 lang: en-IE
 
-# Empty header nav — site title alone links home. Stops minima auto-listing
-# every .md file in the repo as a nav item.
-header_pages: []
+# Short explicit nav. Site title links home; these are the only other
+# entries. Empty array does NOT work — minima treats it as falsy and
+# falls back to auto-listing every titled page in the repo.
+header_pages:
+  - diagrams/README.md
+  - docs/prompts/README.md
+
+# Stop jekyll-titles-from-headings (auto-enabled on GitHub Pages) from
+# extracting the README's first H1 into page.title, which otherwise
+# causes minima to render that title above the content's own H1 —
+# producing a duplicate heading on the homepage.
+titles_from_headings:
+  enabled: false
 
 # Keep Jekyll from rendering code, build artefacts, lock files, and internal
 # project documents as web pages.
