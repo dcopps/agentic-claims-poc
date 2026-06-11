@@ -13,3 +13,30 @@ lang: en-IE
 
 # Cleaner URL handling
 permalink: pretty
+
+# Empty header nav — site title alone links home. Stops minima auto-listing
+# every .md file in the repo as a nav item.
+header_pages: []
+
+# Keep Jekyll from rendering code, build artefacts, lock files, and internal
+# project documents as web pages.
+exclude:
+  - .claude/
+  - .github/
+  - .mypy_cache/
+  - .pytest_cache/
+  - .ruff_cache/
+  - .venv/
+  - backend/
+  - frontend/
+  - infra/
+  - node_modules/
+  - scripts/
+  - vendor/
+  - BUILD-PLAN.md
+  - CLAUDE.md
+  - HANDOFF.md
+  - pyproject.toml
+  - render.yaml
+  - uv.lock
+  - "*.lock"

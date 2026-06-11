@@ -1,3 +1,7 @@
+---
+layout: home
+---
+
 # Agentic Claims POC
 
 A working prototype demonstrating multi-agent agentic AI for insurance claims processing — retrieval-augmented coverage validation, structured settlement estimation, output guardrails, tamper-evident audit, and human-in-the-loop escalation.
