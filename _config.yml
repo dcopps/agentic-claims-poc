@@ -1,0 +1,15 @@
+title: Agentic Insurance Claims Processing — Proof of Concept
+description: >-
+  Multi-agent AI prototype and reference architecture for commercial property
+  insurance claims processing in a regulated context. Provider substitutability
+  via an LLM Gateway, retrieval-augmented coverage validation, a SHA-256
+  hash-chained audit vault, and human-in-the-loop escalation.
+
+# Default Jekyll theme used by GitHub Pages
+theme: minima
+
+# Site language
+lang: en-IE
+
+# Cleaner URL handling
+permalink: pretty
