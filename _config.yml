@@ -11,9 +11,6 @@ theme: minima
 # Site language
 lang: en-IE
 
-# Cleaner URL handling
-permalink: pretty
-
 # Empty header nav — site title alone links home. Stops minima auto-listing
 # every .md file in the repo as a nav item.
 header_pages: []
