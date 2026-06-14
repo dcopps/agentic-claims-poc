@@ -238,7 +238,10 @@ def test_evaluate_returns_typed_result(
     assert payload["verdict"]["covered"] is True
     assert payload["retrieval"]["top_k"] == 3
     assert len(payload["retrieval"]["chunks"]) == 3
-    assert payload["llm_call"]["provider"] == "mistral"
+    # The audit reflects the *actual* provider in use (its `vendor`), not a
+    # hardcoded vendor — so a variant that substitutes the provider records the
+    # substitution truthfully. Here the injected MockProvider reports "mock".
+    assert payload["llm_call"]["provider"] == mock_provider.vendor == "mock"
     assert payload["error"] is None
 
 

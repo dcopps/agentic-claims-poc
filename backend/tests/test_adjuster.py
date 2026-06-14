@@ -215,6 +215,10 @@ def test_evaluate_returns_typed_result_inside_range(
     assert payload["market_data"]["ceiling"] == "200000"
     assert payload["output"]["recommended_settlement"] == "85000.00"
     assert payload["llm_call"]["provider"] == "mistral"
+    # The audit carries the full reasoning (Phase 5 runs reconstruction reads it).
+    # For a short demo reasoning it equals the excerpt — i.e. nothing truncated.
+    assert payload["output"]["reasoning"] == payload["output"]["reasoning_excerpt"]
+    assert len(payload["output"]["reasoning"]) > 0
 
 
 # --------------------------------------------------------------------------- #

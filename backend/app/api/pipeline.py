@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from uuid import UUID, uuid4
 
 import psycopg
@@ -35,13 +35,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
 
-from backend.app.escalation import EscalationPolicy
 from backend.app.orchestrator import (
     PipelineEventBus,
     PipelineOrchestrator,
     PipelineResult,
 )
 from backend.app.orchestrator.models import EventEmitter, PipelineEvent
+from backend.app.orchestrator.variant_factory import build_variant_orchestrator
+from backend.app.orchestrator.variant_registry import (
+    UnknownVariantError,
+    VariantRegistry,
+)
+from backend.app.runs import RunsRepository
 from backend.db.connection import open_connection
 from backend.settings import Settings
 
@@ -65,22 +70,44 @@ def get_event_bus(request: Request) -> PipelineEventBus:
     return bus
 
 
-def get_orchestrator(request: Request) -> PipelineOrchestrator:
-    """
-    Return the app's orchestrator, building it lazily on first use.
+def get_variant_registry(request: Request) -> VariantRegistry:
+    registry: VariantRegistry = request.app.state.variant_registry
+    return registry
 
-    The build wires the real agent graph, which loads the embedder — too heavy
-    to pay at every startup (it would slow health probes and CI). Deferring to
-    first pipeline request keeps startup cheap; the result is cached on app
-    state so subsequent requests reuse it.
+
+# A factory that produces an orchestrator for a given variant name. Routing all
+# orchestrator construction through one factory gives the tests a single override
+# point and lets `run` and `replay` share the default/variant logic.
+OrchestratorFactory = Callable[[str], PipelineOrchestrator]
+
+
+def get_orchestrator_factory(request: Request) -> OrchestratorFactory:
+    """
+    Return a factory `make(variant) -> PipelineOrchestrator`.
+
+    The `default` variant resolves the lazily-built, cached default orchestrator
+    (the build wires the real agent graph and loads the embedder, too heavy for
+    every startup). A non-default variant is built fresh per run — variant agents
+    are not cached.
     """
     app = request.app
-    orchestrator: PipelineOrchestrator | None = getattr(app.state, "orchestrator", None)
-    if orchestrator is None:
-        policy: EscalationPolicy = app.state.policy
-        orchestrator = PipelineOrchestrator.with_defaults(app.state.settings, policy=policy)
-        app.state.orchestrator = orchestrator
-    return orchestrator
+
+    def make(variant: str) -> PipelineOrchestrator:
+        if variant == "default":
+            orchestrator: PipelineOrchestrator | None = getattr(
+                app.state, "orchestrator", None
+            )
+            if orchestrator is None:
+                orchestrator = PipelineOrchestrator.with_defaults(
+                    app.state.settings, policy=app.state.policy
+                )
+                app.state.orchestrator = orchestrator
+            return orchestrator
+        return build_variant_orchestrator(
+            app.state.settings, app.state.policy, app.state.variant_registry, variant
+        )
+
+    return make
 
 
 # --------------------------------------------------------------------------- #
@@ -91,21 +118,42 @@ def get_orchestrator(request: Request) -> PipelineOrchestrator:
 @pipeline_router.post("/run/{claim_id}", response_model=PipelineResult)
 async def run_pipeline(
     claim_id: UUID,
+    variant: str = "default",
     correlation_id: UUID | None = None,
-    orchestrator: PipelineOrchestrator = Depends(get_orchestrator),
+    factory: OrchestratorFactory = Depends(get_orchestrator_factory),
+    registry: VariantRegistry = Depends(get_variant_registry),
     bus: PipelineEventBus = Depends(get_event_bus),
     settings: Settings = Depends(get_settings),
 ) -> PipelineResult:
-    """Run the pipeline for `claim_id` and return the typed outcome."""
+    """Run the pipeline for `claim_id` (optionally under a variant)."""
     await _require_known_claim(settings, claim_id)
-    cid = correlation_id or uuid4()
-    emit = _make_emitter(bus, cid)
-    # Offload the blocking orchestrator to a worker thread so the event loop
-    # stays free to serve the concurrent SSE stream for this correlation id.
-    result: PipelineResult = await run_in_threadpool(
-        orchestrator.run, claim_id, correlation_id=cid, emit=emit
-    )
-    return result
+    _require_known_variant(registry, variant)
+    await _reject_if_active(settings, claim_id)
+    return await _execute(factory(variant), claim_id, correlation_id, variant, bus)
+
+
+@pipeline_router.post("/replay/{claim_id}", response_model=PipelineResult)
+async def replay_pipeline(
+    claim_id: UUID,
+    variant: str = "v2_strict_validator",
+    correlation_id: UUID | None = None,
+    factory: OrchestratorFactory = Depends(get_orchestrator_factory),
+    registry: VariantRegistry = Depends(get_variant_registry),
+    bus: PipelineEventBus = Depends(get_event_bus),
+    settings: Settings = Depends(get_settings),
+) -> PipelineResult:
+    """
+    Re-process a claim under a variant.
+
+    Unlike `run`, replay requires a prior completed run (409 if none — nothing to
+    replay) and mints a fresh correlation_id so the prior run is never
+    overwritten; both runs sit side-by-side in the audit vault.
+    """
+    await _require_known_claim(settings, claim_id)
+    _require_known_variant(registry, variant)
+    await _require_prior_terminal_run(settings, claim_id)
+    await _reject_if_active(settings, claim_id)
+    return await _execute(factory(variant), claim_id, correlation_id, variant, bus)
 
 
 @pipeline_router.get("/stream/{correlation_id}")
@@ -143,6 +191,59 @@ def _make_emitter(bus: PipelineEventBus, correlation_id: UUID) -> EventEmitter:
         bus.publish_threadsafe(loop, correlation_id, event)
 
     return emit
+
+
+async def _execute(
+    orchestrator: PipelineOrchestrator,
+    claim_id: UUID,
+    correlation_id: UUID | None,
+    variant: str,
+    bus: PipelineEventBus,
+) -> PipelineResult:
+    """Run the orchestrator in a worker thread, bridging its events to the bus."""
+    cid = correlation_id or uuid4()
+    emit = _make_emitter(bus, cid)
+    result: PipelineResult = await run_in_threadpool(
+        orchestrator.run, claim_id, correlation_id=cid, emit=emit, variant=variant
+    )
+    return result
+
+
+def _require_known_variant(registry: VariantRegistry, variant: str) -> None:
+    """404 if the variant is not registered — checked before any agent is built."""
+    try:
+        registry.resolve(variant)
+    except UnknownVariantError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+async def _reject_if_active(settings: Settings, claim_id: UUID) -> None:
+    """409 if a run is already in flight for the claim (single-writer per claim)."""
+    if await run_in_threadpool(_is_run_active, settings, claim_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"a run is already in flight for claim {claim_id}",
+        )
+
+
+async def _require_prior_terminal_run(settings: Settings, claim_id: UUID) -> None:
+    """409 if the claim has no completed run to replay."""
+    if not await run_in_threadpool(_has_terminal_run, settings, claim_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"nothing to replay: claim {claim_id} has no completed run",
+        )
+
+
+def _is_run_active(settings: Settings, claim_id: UUID) -> bool:
+    with open_connection(settings) as conn:
+        return RunsRepository.is_run_active(conn, claim_id)
+
+
+def _has_terminal_run(settings: Settings, claim_id: UUID) -> bool:
+    with open_connection(settings) as conn:
+        summaries = RunsRepository.list_runs_for_claim(conn, claim_id)
+    return any(summary.status != "running" for summary in summaries)
 
 
 async def _require_known_claim(settings: Settings, claim_id: UUID) -> None:

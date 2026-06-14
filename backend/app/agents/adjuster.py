@@ -400,6 +400,12 @@ def _build_audit_payload(
                 # `mode="json"` converts Decimal -> string here too.
                 "recommended_settlement": str(output.recommended_settlement),
                 "confidence": output.confidence,
+                # Full reasoning is stored so the audit log alone is sufficient to
+                # reconstruct any past decision (Phase 5 runs reconstruction reads
+                # this). `reasoning_excerpt` is retained for human triage at a
+                # glance; `reasoning` is the authoritative, untruncated value
+                # (bounded to 2000 chars by the model constraint).
+                "reasoning": output.reasoning,
                 "reasoning_excerpt": _excerpt(
                     output.reasoning, _REASONING_AUDIT_EXCERPT_CHARS
                 ),

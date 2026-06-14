@@ -1,0 +1,28 @@
+# Pipeline variant registry.
+#
+# A variant reconfigures one or more agents for a replay run — a different model,
+# a different provider, or a different prompt template — without changing the
+# pipeline itself. The point is to demonstrate model/provider substitutability:
+# the same claim, re-processed under a different configuration, produces a second
+# run recorded side-by-side in the audit vault.
+#
+# Phase 5 supports per-agent overrides for the Validator only (the agent both
+# shipped variants target). Each override may set `model`, `provider`, and/or
+# `prompt_template` (a file under prompts/user/). An unknown variant name, an
+# unknown agent key, or an unknown provider is a load/resolve-time error.
+
+version: 1
+variants:
+  default:
+    description: "Baseline configuration matching Phase 4 — agents as constructed."
+
+  v2_strict_validator:
+    description: "Validator uses the strict prompt template; same model and provider."
+    validator:
+      prompt_template: "validator_strict.md"
+
+  v2_haiku_validator:
+    description: "Validator runs on Claude Haiku (Anthropic) instead of Mistral."
+    validator:
+      model: "claude-haiku-4-5-20251001"
+      provider: "anthropic"

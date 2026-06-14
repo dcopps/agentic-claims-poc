@@ -14,7 +14,7 @@ orchestrator's audit entries.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date
@@ -263,6 +263,7 @@ def _build(
     validator: _StubValidator | None = None,
     adjuster: _StubAdjuster | None = None,
     guardrail: _StubGuardrail | None = None,
+    status_writer: Callable[[UUID, str], None] | None = None,
 ) -> PipelineOrchestrator:
     return PipelineOrchestrator(
         doc_parser=doc or _StubDocParser(output=_doc_output()),
@@ -272,6 +273,7 @@ def _build(
         policy=POLICY,
         settings=db_settings,
         connection_factory=lambda: _conn_factory(conn),
+        status_writer=status_writer,
     )
 
 
@@ -469,3 +471,73 @@ def test_emit_sequence_on_abort(
         "agent_started",
         "pipeline_aborted",
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Phase 5 — status lifecycle + variant recording
+# --------------------------------------------------------------------------- #
+
+
+def test_status_advances_through_lifecycle(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    writes: list[str] = []
+    orch = _build(
+        clean_db, db_settings, status_writer=lambda _cid, status: writes.append(status)
+    )
+    orch.run(_insert_claim(clean_db))
+    assert writes == [
+        "extracted",
+        "coverage_verified",
+        "estimated",
+        "guardrail_checked",
+        "settled",
+    ]
+
+
+def test_status_frozen_on_abort(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    writes: list[str] = []
+    doc = _StubDocParser(output=_doc_output(), error=ValueError("boom"))
+    orch = _build(
+        clean_db, db_settings, doc=doc, status_writer=lambda _cid, s: writes.append(s)
+    )
+    orch.run(_insert_claim(clean_db))
+    # Doc-Parser threw before completing — no status was ever written.
+    assert writes == []
+
+
+def test_variant_recorded_in_pipeline_started(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim_id = _insert_claim(clean_db)
+    orch = _build(clean_db, db_settings, status_writer=lambda _c, _s: None)
+    events: list[PipelineEvent] = []
+    orch.run(claim_id, emit=events.append, variant="v2_strict_validator")
+
+    started = events[0]
+    assert started.event_type == "pipeline_started"
+    assert started.variant == "v2_strict_validator"
+    # ...and the audit entry records it too.
+    with clean_db.cursor() as cur:
+        cur.execute(
+            "SELECT payload FROM audit_log WHERE claim_id = %s AND step = 'pipeline_started'",
+            (claim_id,),
+        )
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0]["variant"] == "v2_strict_validator"
+
+
+def test_status_write_failure_is_non_fatal(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    def _boom(_claim_id: UUID, _status: str) -> None:
+        raise RuntimeError("status DB unreachable")
+
+    orch = _build(clean_db, db_settings, status_writer=_boom)
+    result = orch.run(_insert_claim(clean_db))
+    # The pipeline completes despite every status write failing — the audit_log
+    # is the trusted record, status is best-effort.
+    assert result.status == "settled"

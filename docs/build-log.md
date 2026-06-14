@@ -370,3 +370,57 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Phase 5 — Decoupling and replay.
 
 ---
+
+## Phase 5 — Decoupling and Replay
+
+**Date:** 2026-06-14
+
+**Phase / Prompt:** Phase 5 — [`docs/prompts/06-phase-5-decoupling-and-replay.md`](prompts/06-phase-5-decoupling-and-replay.md)
+**Plan (approved):** [`docs/prompts/06-phase-5-decoupling-and-replay-plan.md`](prompts/06-phase-5-decoupling-and-replay-plan.md) — approved 2026-06-14T16:14:04Z
+**Plan iterations:** 0 rejected revisions (approved first pass, with two amendments applied at the gate: D1 → option (a) full Adjuster reasoning in audit; D6 → Validator audit reports the actual provider/model).
+**Report:** [`docs/prompts/06-phase-5-decoupling-and-replay-report.md`](prompts/06-phase-5-decoupling-and-replay-report.md)
+
+**Prompt summary.** Decouple submission from processing (`POST /api/claims` before any agent fires); write the claim-status lifecycle as the pipeline runs; add a configured replay variant; reconstruct any past run from the audit_log; expose runs/comparison APIs; build a functional (unpolished) frontend; bump the version to 0.5.0.
+
+**What changed:**
+
+- `backend/app/agents/adjuster.py` — audit payload gains full `reasoning` alongside `reasoning_excerpt` (amendment 1: the audit log is fully sufficient to reconstruct any past decision).
+- `backend/app/agents/validator.py` — audit `llm_call.provider` now reports `self._provider.vendor` (amendment 2: a provider-swap variant is recorded truthfully, supporting the DORA Article 28 substitutability story); added an additive `user_template_name` constructor param.
+- `backend/app/prompts/user/validator_strict.md` — new strict user template for `v2_strict_validator`.
+- `backend/app/claims/{models,repository,__init__}.py` — new. `ClaimStatus`/`ClaimType`/`ScenarioTag`, `ClaimSubmission`, `ClaimRecord`; `ClaimsRepository` (insert/get/list/update_status), connection-scoped.
+- `backend/app/runs/{models,repository,__init__}.py` — new. `RunSummary`/`RunComparison`/`DiffSummary`; `RunsRepository` reconstructs `PipelineResult` purely from the audit_log (`get_run`, `list_runs_for_claim`, `is_run_active`, `compare`, `compute_diff`).
+- `backend/app/orchestrator/variants.yaml` + `variant_registry.py` + `variant_factory.py` — new. The variant registry (Literal-validated), `VariantSpec`, pure `resolve_validator_config`, and `build_variant_orchestrator`.
+- `backend/app/orchestrator/pipeline.py` — `run(...)` gains `variant` (recorded in `pipeline_started` audit + SSE); injected `status_writer` (default DB writer); status writes at each agent completion and finalisation, non-fatal on failure.
+- `backend/app/orchestrator/models.py` — `PipelineStartedEvent` gains additive `variant` field (default `"default"`).
+- `backend/app/api/claims.py` + `runs.py` — new routers. `backend/app/api/pipeline.py` — `replay` endpoint, `run` gains `?variant=` and the active-run guard, orchestrator construction routed through an overridable factory.
+- `backend/app/api/__init__.py`, `backend/app/main.py` — mount the new routers; lifespan loads the variant registry.
+- `backend/settings.py` + `settings.yaml.template` — `PipelineSettings.variants_path`.
+- `pyproject.toml` — version `0.4.0 → 0.5.0`.
+- `frontend/src/` — new `api/{types,client}.ts`, `copy/tooltips.ts`, `fixtures/demoClaims.ts`, `hooks/{useClaims,useRunStream}.ts`, `components/{Tooltip,ClaimForm,ClaimList,ProgressStrip,CompareView}.tsx`, and a rewritten `App.tsx` (view toggle). No new frontend dependency (plain fetch + EventSource).
+- `CLAUDE.md` — Current Status updated to "Phase 5 complete; Phase 6 next".
+
+**Tests:** 277 backend passing, 6 skipped; 13 frontend passing. Repository total **290 passing, 6 skipped, 0 failing**. Phase 5 adds **52 backend + 11 frontend** new tests:
+
+| Area | Tests |
+|---|---|
+| ClaimsRepository + submission | 13 |
+| VariantRegistry + factory | 11 |
+| RunsRepository reconstruction | 11 |
+| Claims/runs/replay API | 12 |
+| Orchestrator status + variant (added) | 4 |
+| Integration (submit→run→replay→compare) | 1 |
+| Frontend (Vitest) | 13 total (+11) |
+
+`uv run ruff check .` clean; `uv run mypy backend` clean (95 source files); frontend `tsc -b --noEmit` and `eslint .` clean.
+
+**Issues discovered:**
+
+- **The prompt's frontend-dependency claim was wrong.** TanStack Query is not installed; Phase 5 uses plain `fetch` + hooks (no new dep), with TanStack Query deferred to Phase 6.
+- **Stub agents don't write agent-step audit entries**, which runs reconstruction reads — so the runs and integration tests use *real* agents with mock providers.
+- **ESLint's `react-hooks/set-state-in-effect`** flagged synchronous `setState` in the data hooks; resolved by moving every `setState` into the subscription / promise callbacks.
+- **Omitted `narrative` from `ClaimRecord`** caught immediately by `extra="forbid"` at the first repository test.
+- **Anonymisation review.** `grep -i` for client/competitor names across the new backend and frontend files returned no matches.
+
+**Next:** Phase 6 — Frontend polish.
+
+---

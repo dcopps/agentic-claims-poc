@@ -26,6 +26,7 @@ from backend.app.api import api_router
 from backend.app.api.health import health_router
 from backend.app.escalation import EscalationPolicy
 from backend.app.orchestrator import PipelineEventBus
+from backend.app.orchestrator.variant_registry import VariantRegistry
 from backend.settings import Settings
 
 
@@ -36,11 +37,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Load + validate the policy once. A malformed policy fails here, at
     # startup, rather than at the first request.
     app.state.policy = EscalationPolicy.load_from_yaml(cfg.escalation.policy_path)
+    # Load + validate the variant registry once, alongside the policy.
+    app.state.variant_registry = VariantRegistry.load_from_yaml(cfg.pipeline.variants_path)
     app.state.event_bus = PipelineEventBus(
         grace_period_s=cfg.pipeline.event_grace_period_s,
         queue_maxsize=cfg.pipeline.event_queue_maxsize,
     )
-    # Built lazily on first pipeline request; see api/pipeline.get_orchestrator.
+    # Built lazily on first pipeline request; see api/pipeline.get_orchestrator_factory.
     app.state.orchestrator = None
     yield
 

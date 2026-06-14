@@ -94,11 +94,16 @@ class Validator:
         connection_factory: (
             Callable[[], AbstractContextManager[psycopg.Connection]] | None
         ) = None,
+        user_template_name: str = "validator_template",
     ) -> None:
         self._provider: LLMProvider = provider
         self._prompt_loader: PromptLoader = prompt_loader
         self._embedder: Callable[[str], np.ndarray] = embedder
         self._settings: Settings = settings
+        # The user-message template the agent loads. Defaults to the standard
+        # template; a replay variant (e.g. `v2_strict_validator`) overrides it to
+        # exercise a different instruction without touching the system prompt.
+        self._user_template_name: str = user_template_name
         self._connection_factory: Callable[
             [], AbstractContextManager[psycopg.Connection]
         ] = connection_factory or self._default_connection_factory
@@ -261,7 +266,7 @@ class Validator:
         """
         system_prompt = self._prompt_loader.system("validator")
         user_prompt = self._prompt_loader.user(
-            "validator_template",
+            self._user_template_name,
             claim_narrative=narrative,
             retrieved_chunks=_format_chunks_for_prompt(retrieved),
         )
@@ -313,6 +318,7 @@ class Validator:
             verdict=verdict,
             latency_ms=latency_ms,
             error=error,
+            provider_label=self._provider.vendor,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -416,8 +422,17 @@ def _build_audit_payload(
     verdict: ValidatorVerdict | None,
     latency_ms: int,
     error: BaseException | None,
+    provider_label: str,
 ) -> dict[str, Any]:
-    """Assemble the locked validator-step audit payload."""
+    """Assemble the locked validator-step audit payload.
+
+    `provider_label` is the *actual* provider the call ran against
+    (`self._provider.vendor`), not a hardcoded vendor. This keeps the audit
+    truthful when a replay variant substitutes the provider — e.g. running the
+    Validator on Anthropic Haiku instead of Mistral records `"anthropic"`. An
+    audit entry that misreported the provider would undermine the provider-
+    substitutability evidence the audit log exists to furnish.
+    """
     payload: dict[str, Any] = {
         "input": {
             "claim_id": str(claim_id),
@@ -439,14 +454,14 @@ def _build_audit_payload(
         },
         "llm_call": (
             {
-                "provider": "mistral",
+                "provider": provider_label,
                 "model": response.model,
                 "prompt_tokens": response.prompt_tokens,
                 "completion_tokens": response.completion_tokens,
                 "latency_ms": latency_ms,
             }
             if response is not None
-            else {"provider": "mistral", "latency_ms": latency_ms}
+            else {"provider": provider_label, "latency_ms": latency_ms}
         ),
         "verdict": (
             verdict.model_dump(mode="json") if verdict is not None else None

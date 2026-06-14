@@ -82,6 +82,11 @@ _DEFAULT_MARKET_DATA_PATH = Path("backend/data/market_data.yaml")
 _DEFAULT_EVENT_GRACE_PERIOD_S = 5.0
 _DEFAULT_EVENT_QUEUE_MAXSIZE = 1000
 
+# Default location of the replay variant registry. Declarative YAML registering
+# named per-agent overrides (model / provider / prompt template); the loader at
+# `backend/app/orchestrator/variant_registry.py` owns the schema.
+_DEFAULT_VARIANTS_PATH = Path("backend/app/orchestrator/variants.yaml")
+
 # Bounds for the APILogger's prompt/response excerpt budget. Below 100
 # the excerpt is useless; above 20_000 we're effectively logging full
 # bodies twice (the audit log already has the full content).
@@ -388,6 +393,9 @@ class PipelineSettings(BaseModel):
     event_queue_maxsize: int = Field(
         default=_DEFAULT_EVENT_QUEUE_MAXSIZE, ge=1, le=100_000
     )
+    # Replay variant registry. Point this at an alternative file for a deployment
+    # that ships a different variant set.
+    variants_path: Path = _DEFAULT_VARIANTS_PATH
 
 
 class EscalationSettings(BaseModel):

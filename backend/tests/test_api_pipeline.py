@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 import psycopg
 from fastapi.testclient import TestClient
 
-from backend.app.api.pipeline import get_event_bus, get_orchestrator
+from backend.app.api.pipeline import get_event_bus, get_orchestrator_factory
 from backend.app.escalation.models import EscalationDecision
 from backend.app.main import create_app
 from backend.app.orchestrator.models import (
@@ -54,6 +54,7 @@ class _StubOrchestrator:
         *,
         correlation_id: UUID | None = None,
         emit: EventEmitter | None = None,
+        variant: str = "default",
     ) -> PipelineResult:
         cid = correlation_id or uuid4()
         return PipelineResult(
@@ -115,7 +116,10 @@ def _insert_claim(conn: psycopg.Connection) -> UUID:
 
 def _client(db_settings: Settings, orchestrator: _StubOrchestrator) -> TestClient:
     app = create_app(db_settings)
-    app.dependency_overrides[get_orchestrator] = lambda: orchestrator
+    # The factory ignores the variant and always returns the stub.
+    app.dependency_overrides[get_orchestrator_factory] = lambda: (
+        lambda _variant: orchestrator
+    )
     return TestClient(app)
 
 

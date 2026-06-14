@@ -175,3 +175,4 @@ escalation:
 pipeline:
   event_grace_period_s: 5.0
   event_queue_maxsize: 1000
+  variants_path: backend/app/orchestrator/variants.yaml

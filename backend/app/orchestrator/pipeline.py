@@ -52,6 +52,7 @@ from backend.app.agents.validator_models import (
     ValidatorVerdict,
 )
 from backend.app.audit import AuditEvent, AuditWriter
+from backend.app.claims.repository import ClaimsRepository
 from backend.app.escalation import EscalationDecision, EscalationPolicy, PipelineState
 from backend.app.escalation.models import FiredRule
 from backend.app.llm import get_provider
@@ -89,6 +90,21 @@ _STEP_ESCALATION = "escalation_decision"
 _STEP_SETTLED = "pipeline_settled"
 _STEP_AWAITING = "pipeline_awaiting_human"
 _STEP_ABORTED = "pipeline_aborted"
+
+# Claim-status values written as the pipeline progresses (Phase 5). Each mirrors a
+# value in the `claims.status` CHECK constraint; the orchestrator advances the
+# claim one step per agent completion plus the terminal state at finalisation.
+_STATUS_EXTRACTED = "extracted"
+_STATUS_COVERAGE_VERIFIED = "coverage_verified"
+_STATUS_ESTIMATED = "estimated"
+_STATUS_GUARDRAIL_CHECKED = "guardrail_checked"
+_STATUS_SETTLED = "settled"
+_STATUS_AWAITING_HUMAN = "awaiting_human"
+
+# A sink for claim-status updates: (claim_id, status) -> None. Injected so the
+# "status write failure does not abort the pipeline" behaviour is testable, and so
+# the orchestrator stays decoupled from the claims repository's connection choice.
+StatusWriter = Callable[[UUID, str], None]
 
 
 # --------------------------------------------------------------------------- #
@@ -179,6 +195,7 @@ class PipelineOrchestrator:
         connection_factory: (
             Callable[[], AbstractContextManager[psycopg.Connection]] | None
         ) = None,
+        status_writer: StatusWriter | None = None,
     ) -> None:
         self._doc_parser = doc_parser
         self._validator = validator
@@ -187,10 +204,15 @@ class PipelineOrchestrator:
         self._policy = policy
         self._settings = settings
         self._connection_factory = connection_factory or self._default_connection_factory
+        self._status_writer: StatusWriter = status_writer or self._default_status_writer
 
     @classmethod
     def with_defaults(
-        cls, settings: Settings, *, policy: EscalationPolicy
+        cls,
+        settings: Settings,
+        *,
+        policy: EscalationPolicy,
+        status_writer: StatusWriter | None = None,
     ) -> PipelineOrchestrator:
         """Wire the production agent graph from settings and the shared policy."""
         anthropic = get_provider(settings, "anthropic")
@@ -202,6 +224,7 @@ class PipelineOrchestrator:
             guardrail=Guardrail.with_defaults(settings, provider=anthropic),
             policy=policy,
             settings=settings,
+            status_writer=status_writer,
         )
 
     def run(
@@ -210,18 +233,22 @@ class PipelineOrchestrator:
         *,
         correlation_id: UUID | None = None,
         emit: EventEmitter | None = None,
+        variant: str = "default",
     ) -> PipelineResult:
         """
         Run the full pipeline synchronously and return the typed outcome.
 
         `correlation_id` is generated if not supplied; injecting it lets an SSE
         client subscribe before triggering the run. `emit` receives a progress
-        event as each step completes; the default discards them.
+        event as each step completes; the default discards them. `variant` is
+        recorded in the `pipeline_started` audit entry and SSE event so a replay's
+        configuration is part of its permanent record — the agent swapping itself
+        is done at construction time, not here.
         """
         cid = correlation_id or new_correlation_id()
         sink: EventEmitter = emit or _noop_emit
         collected = _Collected()
-        self._start(claim_id, cid, sink)
+        self._start(claim_id, cid, variant, sink)
         try:
             collected.doc_parser = self._extract(claim_id, cid, sink)
             validated = self._validate(claim_id, cid, sink)
@@ -251,6 +278,7 @@ class PipelineOrchestrator:
         except _AGENT_ERRORS as exc:
             raise _AgentFailure("doc_parser", exc) from exc
         sink(_agent_completed("doc_parser", cid, t0, {"claim_type": result.output.claim_type}))
+        self._update_status(claim_id, _STATUS_EXTRACTED)
         return result.output
 
     def _validate(self, claim_id: UUID, cid: UUID, sink: EventEmitter) -> ValidatorResult:
@@ -261,6 +289,7 @@ class PipelineOrchestrator:
         except _AGENT_ERRORS as exc:
             raise _AgentFailure("validator", exc) from exc
         sink(_agent_completed("validator", cid, t0, {"covered": result.verdict.covered}))
+        self._update_status(claim_id, _STATUS_COVERAGE_VERIFIED)
         return result
 
     def _adjust(
@@ -281,6 +310,7 @@ class PipelineOrchestrator:
             raise _AgentFailure("adjuster", exc) from exc
         settlement = str(result.output.recommended_settlement)
         sink(_agent_completed("adjuster", cid, t0, {"recommended_settlement": settlement}))
+        self._update_status(claim_id, _STATUS_ESTIMATED)
         return result
 
     def _guard(
@@ -301,6 +331,7 @@ class PipelineOrchestrator:
             # Fail-closed: a broken guardrail escalates, never aborts or approves.
             raise _GuardrailFailure(exc) from exc
         sink(_agent_completed("guardrail", cid, t0, {"passed": result.output.passed}))
+        self._update_status(claim_id, _STATUS_GUARDRAIL_CHECKED)
         return result
 
     def _decide_escalation(
@@ -342,6 +373,9 @@ class PipelineOrchestrator:
         status: PipelineStatus = "awaiting_human" if decision.escalate else "settled"
         completed_at = _now()
         step = _STEP_AWAITING if decision.escalate else _STEP_SETTLED
+        self._update_status(
+            claim_id, _STATUS_AWAITING_HUMAN if decision.escalate else _STATUS_SETTLED
+        )
         names = [r.name for r in decision.fired_rules]
         settlement = (
             str(collected.adjuster.recommended_settlement) if collected.adjuster else None
@@ -379,6 +413,7 @@ class PipelineOrchestrator:
         completed_at = _now()
         message = _sanitise(str(exc.original))
         decision = _fail_closed_guardrail_decision()
+        self._update_status(claim_id, _STATUS_AWAITING_HUMAN)
         self._audit(
             cid,
             claim_id,
@@ -450,11 +485,16 @@ class PipelineOrchestrator:
     # Shared builders / plumbing
     # ------------------------------------------------------------------ #
 
-    def _start(self, claim_id: UUID, cid: UUID, sink: EventEmitter) -> None:
+    def _start(
+        self, claim_id: UUID, cid: UUID, variant: str, sink: EventEmitter
+    ) -> None:
         started_at = _now()
         sink(
             PipelineStartedEvent(
-                correlation_id=cid, timestamp=started_at, claim_id=claim_id
+                correlation_id=cid,
+                timestamp=started_at,
+                claim_id=claim_id,
+                variant=variant,
             )
         )
         self._audit(
@@ -464,6 +504,7 @@ class PipelineOrchestrator:
             {
                 "claim_id": str(claim_id),
                 "correlation_id": str(cid),
+                "variant": variant,
                 "started_at": started_at.isoformat(),
             },
         )
@@ -525,6 +566,32 @@ class PipelineOrchestrator:
         )
         with self._connection_factory() as conn:
             AuditWriter(conn).append(event)
+
+    def _update_status(self, claim_id: UUID, status: str) -> None:
+        """
+        Advance the claim's denormalised status. Non-fatal by design.
+
+        The audit_log is the trusted record; `claims.status` is a UI convenience.
+        A status-write failure (DB hiccup mid-pipeline) is logged and swallowed so
+        a transient denormalisation problem never aborts a run whose audit trail is
+        already intact.
+        """
+        try:
+            self._status_writer(claim_id, status)
+        except Exception as exc:  # noqa: BLE001 — status is best-effort, see docstring
+            _logger.warning(
+                "PipelineOrchestrator: status update to %r failed for claim_id=%s "
+                "(%s: %s); continuing — audit_log is authoritative",
+                status,
+                claim_id,
+                type(exc).__name__,
+                exc,
+            )
+
+    def _default_status_writer(self, claim_id: UUID, status: str) -> None:
+        """Write the status via `ClaimsRepository`, opening a short-lived connection."""
+        with self._connection_factory() as conn:
+            ClaimsRepository.update_status(conn, claim_id, status)
 
     def _default_connection_factory(
         self,

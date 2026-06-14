@@ -41,6 +41,7 @@ from backend.app.escalation.policy import EscalationPolicy
 from backend.app.orchestrator.models import PipelineResult
 from backend.app.orchestrator.pipeline import PipelineOrchestrator
 from backend.app.prompts import PromptLoader
+from backend.app.runs.repository import RunsRepository
 from backend.data.market_data import load_market_data
 from backend.settings import Settings
 
@@ -190,6 +191,7 @@ def _build_orchestrator(
     validator_text: str,
     adjuster_text: str,
     guardrail_text: str,
+    validator_template: str = "validator_template",
 ) -> PipelineOrchestrator:
     factory = lambda: _conn_factory(conn)  # noqa: E731 — terse on purpose
     doc = DocParser(
@@ -204,6 +206,7 @@ def _build_orchestrator(
         embedder=stub_embedder,
         settings=db_settings,
         connection_factory=factory,
+        user_template_name=validator_template,
     )
     adjuster = Adjuster(
         provider=MockProvider(response_text=adjuster_text),
@@ -460,3 +463,67 @@ def test_scenario_auto_approve_real_call(
     assert result.status in {"settled", "awaiting_human"}
     assert result.doc_parser_output is not None
     assert result.adjuster_output is not None
+
+
+# --------------------------------------------------------------------------- #
+# Phase 5 — submit -> run -> replay -> compare
+# --------------------------------------------------------------------------- #
+
+
+def test_submit_run_replay_compare(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    stub_embedder: Callable[[str], np.ndarray],
+) -> None:
+    """The decoupling story end-to-end: one claim, two runs, a comparison.
+
+    Run 1 (default) auto-approves a confident verdict; the replay under
+    `v2_strict_validator` uses the strict template and a lower-confidence verdict,
+    which trips the validator-confidence floor and escalates. Both runs land in
+    the audit vault under distinct correlation ids; the comparison attributes the
+    escalation to the variant.
+    """
+    source_path = str(db_settings.retrieval.policy_source_path)
+    chunk_id, section = _insert_chunk(clean_db, stub_embedder, source_path)
+    claim_id = _insert_claim(
+        clean_db,
+        claim_type="water_damage",
+        amount=Decimal("85000.00"),
+        narrative="Burst supply line flooded the warehouse mezzanine.",
+    )
+
+    orch_default = _build_orchestrator(
+        clean_db, db_settings, prompt_loader, stub_embedder,
+        doc_text=_doc_json("water_damage", "85000.00"),
+        validator_text=_validator_json(chunk_id, section, 0.92),
+        adjuster_text=_adjuster_json("85000.00", 0.9, "Within the market range."),
+        guardrail_text=_guardrail_json([]),
+    )
+    run_default = orch_default.run(claim_id, variant="default")
+    assert run_default.status == "settled"
+
+    orch_strict = _build_orchestrator(
+        clean_db, db_settings, prompt_loader, stub_embedder,
+        doc_text=_doc_json("water_damage", "85000.00"),
+        validator_text=_validator_json(chunk_id, section, 0.5),  # below the floor
+        adjuster_text=_adjuster_json("85000.00", 0.9, "Within the market range."),
+        guardrail_text=_guardrail_json([]),
+        validator_template="validator_strict",
+    )
+    run_strict = orch_strict.run(claim_id, variant="v2_strict_validator")
+    assert run_strict.status == "awaiting_human"
+
+    # Both runs are in the vault, recorded under their variants.
+    summaries = RunsRepository.list_runs_for_claim(clean_db, claim_id)
+    assert len(summaries) == 2
+    assert {s.variant for s in summaries} == {"default", "v2_strict_validator"}
+
+    # The comparison surfaces the escalation the strict validator caused.
+    comparison = RunsRepository.compare(
+        clean_db, run_default.correlation_id, run_strict.correlation_id
+    )
+    assert comparison.diff.escalation_changed is True
+    assert comparison.diff.escalate_a is False
+    assert comparison.diff.escalate_b is True
+    assert "validator_confidence_floor" in comparison.diff.fired_rules_added

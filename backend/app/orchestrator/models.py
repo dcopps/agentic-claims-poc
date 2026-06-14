@@ -113,6 +113,9 @@ class _BaseEvent(BaseModel):
 class PipelineStartedEvent(_BaseEvent):
     event_type: Literal["pipeline_started"] = "pipeline_started"
     claim_id: UUID
+    # The variant this run used (Phase 5). Default "default" so Phase 4 callers
+    # and the reconstruction of pre-variant runs are unaffected.
+    variant: str = "default"
 
 
 class AgentStartedEvent(_BaseEvent):
