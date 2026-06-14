@@ -150,10 +150,10 @@ adjuster:
 
 # --- escalation ------------------------------------------------------------
 
-# Escalation rule parameters. Hard rules always escalate; threshold rules
-# trigger when monetary or confidence floors are breached. The actual
-# rule engine and its policy.yaml file land in Phase 4; Phase 1 just
-# declares the configuration block.
+# Escalation rule parameters. `policy_path` locates policy.yaml, which is the
+# single authoritative source the EscalationPolicy engine evaluates (Phase 4).
+# The numeric fields below are superseded by policy.yaml for rule evaluation and
+# kept only for interface stability; they mirror the policy.yaml values exactly.
 escalation:
   auto_approve_ceiling: "250000"
   validator_confidence_floor: 0.65
@@ -164,3 +164,14 @@ escalation:
     - claimant_watchlist
     - cross_jurisdictional
   policy_path: backend/app/escalation/policy.yaml
+
+# --- pipeline --------------------------------------------------------------
+
+# Pipeline-orchestrator runtime parameters. These govern the in-process event
+# bus that streams pipeline progress to the SSE endpoint. event_grace_period_s
+# is how long a per-correlation queue survives after its terminal event (so a
+# late SSE subscriber still drains the run); event_queue_maxsize bounds the
+# events buffered per run.
+pipeline:
+  event_grace_period_s: 5.0
+  event_queue_maxsize: 1000

@@ -74,6 +74,14 @@ _DEFAULT_GUARDRAIL_TEMPERATURE = 0.0
 # `backend/data/market_data.py` owns the schema.
 _DEFAULT_MARKET_DATA_PATH = Path("backend/data/market_data.yaml")
 
+# Pipeline event-bus defaults. The grace period is how long a per-correlation
+# SSE queue lingers after its terminal event so a late subscriber still drains
+# the whole run; 5 seconds comfortably covers a browser reconnect without
+# leaking queues. The queue cap bounds memory per run — a pipeline emits ~12
+# events, so 1000 is far above any real run and only guards a pathological loop.
+_DEFAULT_EVENT_GRACE_PERIOD_S = 5.0
+_DEFAULT_EVENT_QUEUE_MAXSIZE = 1000
+
 # Bounds for the APILogger's prompt/response excerpt budget. Below 100
 # the excerpt is useless; above 20_000 we're effectively logging full
 # bodies twice (the audit log already has the full content).
@@ -360,15 +368,42 @@ class AdjusterSettings(BaseModel):
     market_data_path: Path = _DEFAULT_MARKET_DATA_PATH
 
 
+class PipelineSettings(BaseModel):
+    """
+    Pipeline-orchestrator runtime parameters.
+
+    These govern the in-process `PipelineEventBus` that fans pipeline progress
+    events out to the SSE endpoint. `event_grace_period_s` is how long a
+    per-correlation queue survives after its terminal event (so a late SSE
+    subscriber still drains the full run); `event_queue_maxsize` bounds the
+    events buffered per run. Both have tight ranges so a typo is rejected at
+    config time rather than surfacing as a runtime surprise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_grace_period_s: float = Field(
+        default=_DEFAULT_EVENT_GRACE_PERIOD_S, ge=0.0, le=120.0
+    )
+    event_queue_maxsize: int = Field(
+        default=_DEFAULT_EVENT_QUEUE_MAXSIZE, ge=1, le=100_000
+    )
+
+
 class EscalationSettings(BaseModel):
     """
     Escalation policy parameters.
 
     Mirrors the locked decisions in `CLAUDE.md`'s Architectural Decisions
     block exactly: hard rules are always-escalate categories, threshold
-    rules trigger when monetary or confidence floors are breached. The
-    actual `policy.yaml` file is created by Phase 4; Phase 1 just declares
-    the field so the consumer can read it without further plumbing.
+    rules trigger when monetary or confidence floors are breached.
+
+    Phase 4 note: `policy.yaml` (located by `policy_path`) is the single
+    authoritative source the `EscalationPolicy` engine evaluates. The numeric
+    fields below (`auto_approve_ceiling`, `validator_confidence_floor`,
+    `adjuster_confidence_floor`, `hard_rules`) are *superseded* by that file for
+    rule evaluation and are retained only for interface stability; they ship
+    with values identical to `policy.yaml` so there is no divergence.
 
     Decimal is used for `auto_approve_ceiling` so monetary comparisons are
     exact — float drift at six-figure values is a real, documented risk.
@@ -425,6 +460,9 @@ class Settings(BaseSettings):
 
     # Phase 3 sub-models.
     adjuster: AdjusterSettings = Field(default_factory=AdjusterSettings)
+
+    # Phase 4 sub-models.
+    pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
     @model_validator(mode="before")
     @classmethod

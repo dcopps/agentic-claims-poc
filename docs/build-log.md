@@ -310,3 +310,63 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Phase 4 — Pipeline orchestrator.
 
 ---
+
+## Phase 4 — Pipeline Orchestrator
+
+**Date:** 2026-06-14
+
+**Phase / Prompt:** Phase 4 — [`docs/prompts/05-phase-4-pipeline-orchestrator.md`](prompts/05-phase-4-pipeline-orchestrator.md)
+**Plan (approved):** [`docs/prompts/05-phase-4-pipeline-orchestrator-plan.md`](prompts/05-phase-4-pipeline-orchestrator-plan.md) — approved 2026-06-14T14:00:04Z
+**Plan iterations:** 0 rejected revisions (approved first pass, with one amendment applied at the gate: `" and "` dropped from `cross_jurisdictional_markers`).
+**Report:** [`docs/prompts/05-phase-4-pipeline-orchestrator-report.md`](prompts/05-phase-4-pipeline-orchestrator-report.md)
+
+**Prompt summary.** Wire the four Phase 2/3 agents into a single end-to-end pipeline under one correlation_id; add a typed escalation policy engine driven by `policy.yaml` (OR semantics, hard + threshold rules); expose a synchronous trigger endpoint and an SSE progress-stream endpoint; verify the three locked demo scenarios; bump the version to 0.4.0.
+
+**What changed:**
+
+- `backend/app/escalation/policy.yaml` — new. The single authoritative rule set: version, watchlists, `cross_jurisdictional_markers` (`/`, `multi-jurisdiction`, `cross-border` — `" and "` deliberately excluded), four hard rules, three threshold rules.
+- `backend/app/escalation/models.py` — new. `PipelineState`, `FiredRule`, `EscalationDecision`, `RuleType`. Placed in the escalation package so the orchestrator depends on it one-directionally (no circular import).
+- `backend/app/escalation/policy.py` — new. `EscalationPolicy.load_from_yaml` (all I/O + schema validation at load; Literal-typed `PolicyDocument` rejects unknown rule names / fields / comparators) and `evaluate(state) -> EscalationDecision` (pure, OR semantics, fail-closed on any per-rule error). Exact `Decimal` comparisons throughout.
+- `backend/app/escalation/__init__.py` — exports the engine and the shared types.
+- `backend/app/orchestrator/models.py` — new. `PipelineResult`, `PipelineStatus`, `FailingAgent`, the six-member `PipelineEvent` union, `EventEmitter`. Re-exports the escalation types for one import surface.
+- `backend/app/orchestrator/event_bus.py` — new. `PipelineEventBus`: one `asyncio.Queue` per correlation_id, buffered late-subscriber delivery, terminal-driven teardown after a grace period, thread-safe `publish_threadsafe`.
+- `backend/app/orchestrator/pipeline.py` — new. `PipelineOrchestrator` wiring Doc-Parser → Validator → Adjuster → Guardrail → Escalation → Outcome. `run(claim_id, *, correlation_id=None, emit=None)` reads as named helper calls; the abort matrix (doc-parser/validator/adjuster throw → `aborted`; guardrail throw → `awaiting_human` fail-closed) is locked. Agent collaborators typed as Protocols. Writes three pipeline-level audit entries under `agent="orchestrator"`.
+- `backend/app/orchestrator/__init__.py` — new. Public surface exports.
+- `backend/app/api/pipeline.py` — new. `POST /api/pipeline/run/{claim_id}` (synchronous, optional `correlation_id`, blocking orchestrator offloaded via `run_in_threadpool`, thread→loop emit bridge) and `GET /api/pipeline/stream/{correlation_id}` (SSE via `EventSourceResponse`). Pre-flight unknown-claim → 404; malformed UUID → 422; pipeline outcomes (settled/awaiting_human/aborted) → 200.
+- `backend/app/api/__init__.py` — mounts the pipeline router under `/api`.
+- `backend/app/main.py` — added a `lifespan` that loads the policy (fail-fast) and builds the event bus at startup; the orchestrator is built lazily on first request (avoids the embedder cold-load on every startup). `create_app` stashes settings on `app.state`.
+- `backend/settings.py` — new `PipelineSettings` (`event_grace_period_s`, `event_queue_maxsize`) with named-constant defaults; threaded into `Settings` as `pipeline`. `EscalationSettings` docstring notes its numeric fields are superseded by `policy.yaml`.
+- `backend/settings.yaml.template` — new `pipeline:` block; escalation comment updated.
+- `pyproject.toml` — version `0.3.0 → 0.4.0`; added `sse-starlette>=2.1`; added `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls = ["fastapi.Depends"]` so B008 does not flag the FastAPI DI pattern.
+- `uv.lock` — regenerated (`sse-starlette` 3.4.4 added).
+- `backend/tests/test_escalation_policy.py` — new, 20 tests.
+- `backend/tests/test_pipeline_event_bus.py` — new, 8 tests.
+- `backend/tests/test_pipeline_orchestrator.py` — new, 10 tests.
+- `backend/tests/test_api_pipeline.py` — new, 6 tests.
+- `backend/tests/test_pipeline_scenarios.py` — new, 3 integration + 1 gated.
+- `CLAUDE.md` — Current Status updated to "Phase 4 complete; Phase 5 next".
+
+**Tests:** 225 backend passing, 6 skipped (the Phase-1 embedding test + five `RUN_LLM_E2E_TESTS=1` gated tests, now including the Phase 4 pipeline real-call). Frontend 2 passing. Repository total **227 passing, 6 skipped, 0 failing**. Phase 4 adds **47 passing new tests + 1 gated**:
+
+| Area | Tests |
+|---|---|
+| Escalation policy engine | 20 |
+| Pipeline event bus | 8 |
+| Pipeline orchestrator | 10 |
+| Pipeline API | 6 |
+| Integration scenarios | 3 (+1 gated) |
+
+`uv run ruff check .` clean; `uv run mypy backend` clean (81 source files).
+
+**Issues discovered:**
+
+- **`cross_jurisdictional` has no native data signal.** Each claim carries a single `jurisdiction` string. Resolved by configured substring markers in `policy.yaml`; the architect dropped `" and "` at the approval gate (it false-positives on "Trinidad and Tobago" etc.). A regression test pins this.
+- **Two sources of truth for the thresholds.** `EscalationSettings` (Phase 1) already held the numbers; `policy.yaml` is now authoritative and the settings fields are documented as superseded with identical values.
+- **Eager orchestrator construction would cold-load the embedder on every startup.** Resolved by lazy first-request construction; the lifespan loads only the cheap policy + event bus.
+- **B008 on FastAPI `Depends` defaults.** Resolved via ruff `extend-immutable-calls` rather than per-line `# noqa`.
+- **Circular import risk** (orchestrator ↔ escalation). Resolved by placing the shared types in `escalation/models.py` and re-exporting from the orchestrator.
+- **Anonymisation review.** `grep -i` for client/competitor names against the new files returned no matches.
+
+**Next:** Phase 5 — Decoupling and replay.
+
+---

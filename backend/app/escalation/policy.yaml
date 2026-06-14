@@ -1,0 +1,63 @@
+# Escalation policy — the single source of truth for escalation rules.
+#
+# The engine in `policy.py` loads this file once at startup and evaluates it
+# against a `PipelineState` after the Guardrail returns. OR semantics: any
+# single rule firing escalates the claim to a human. Every rule that fires is
+# captured, not just the first.
+#
+# These values mirror the locked decisions in CLAUDE.md. They are authoritative
+# here; the numeric fields on `EscalationSettings` (settings.py) are superseded
+# by this file for rule evaluation and retained only for interface stability.
+
+version: 1
+
+# Named lists the hard-rule detectors consult. Matched case-insensitively after
+# a normalising strip (lower-cased, surrounding whitespace removed). Empty for
+# the demo — none of the three scripted scenarios sits on a watchlist.
+watchlists:
+  claim_types: []
+  claimants: []
+
+# Substring markers that indicate a cross-jurisdictional claim. Matched
+# case-insensitively against the parsed `jurisdiction` string.
+#
+# Note: " and " is deliberately NOT a marker — single jurisdictions such as
+# "Trinidad and Tobago", "Antigua and Barbuda", or "Bosnia and Herzegovina"
+# contain it and would false-positive.
+cross_jurisdictional_markers:
+  - "/"
+  - "multi-jurisdiction"
+  - "cross-border"
+
+# Always-escalate rules. `name` must be one of the four recognised hard-rule
+# names (an unknown name fails at load). `description` is human-readable copy
+# surfaced in the decision and the UI.
+hard_rules:
+  - name: guardrail_failed
+    description: "Guardrail output check did not pass"
+  - name: claim_type_watchlist
+    description: "Claim type is on the escalation watchlist"
+  - name: claimant_watchlist
+    description: "Claimant is on the escalation watchlist"
+  - name: cross_jurisdictional
+    description: "Claim spans multiple jurisdictions"
+
+# Threshold rules. `field` selects a PipelineState accessor (fixed registry);
+# `comparator` is one of > < >= <=; `value` is the boundary. A claim escalates
+# when the comparison is true.
+threshold_rules:
+  - name: settlement_over_ceiling
+    field: adjuster_settlement
+    comparator: ">"
+    value: "250000"
+    description: "settlement > $250,000"
+  - name: validator_confidence_floor
+    field: validator_confidence
+    comparator: "<"
+    value: "0.65"
+    description: "validator confidence < 0.65"
+  - name: adjuster_confidence_floor
+    field: adjuster_confidence
+    comparator: "<"
+    value: "0.75"
+    description: "adjuster confidence < 0.75"

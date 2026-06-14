@@ -127,10 +127,10 @@ Together these make the build reproducible end-to-end.
 
 ## Current Status
 
-- **Date:** 2026-05-11
-- **Phase:** Phase 3 complete; Phase 4 next.
-- **What works:** All four agents (Doc-Parser, Validator, Adjuster, Guardrail) run end-to-end in isolation against the seeded claims, each producing typed structured output with a full audit-log entry per call. Doc-Parser (Haiku) extracts structured fields from FNOL narratives; Adjuster (Mistral) looks up `(claim_type, severity)` in the static market-data table and instructs the LLM to pick within `[floor, ceiling]` with a parse-time range-enforcement guard; Guardrail (Haiku) combines a deterministic regex floor (PII / hallucinated-citation / bias) with an LLM semantic check and fail-closed combine. No orchestrator wiring yet; that's Phase 4. 180 backend+frontend tests green; ruff and mypy clean across 69 source files.
-- **What's next:** Phase 4 — Pipeline orchestrator.
+- **Date:** 2026-06-14
+- **Phase:** Phase 4 complete; Phase 5 next.
+- **What works:** The four agents now run as a single composed pipeline against any seeded claim under one correlation_id; the escalation policy engine (`backend/app/escalation/policy.py`, driven by `policy.yaml`) evaluates hard and threshold rules with OR semantics and produces a typed `EscalationDecision`; a synchronous REST endpoint (`POST /api/pipeline/run/{claim_id}`) runs the pipeline and an SSE endpoint (`GET /api/pipeline/stream/{correlation_id}`) streams progress events via an in-process `PipelineEventBus`; the orchestrator writes pipeline-level audit entries (`pipeline_started`, `escalation_decision`, finalised/aborted) on top of each agent's own entries; the abort matrix is locked (doc-parser/validator/adjuster throw → `aborted`; guardrail throw → `awaiting_human`, fail-closed). The three locked demo scenarios behave correctly end-to-end (auto-approve $85k, threshold escalation $850k, guardrail escalation $1.4M). No decoupling / replay yet; that's Phase 5. 227 backend+frontend tests passing (6 skipped/gated); ruff and mypy clean across 81 source files. `/health` reports `version=0.4.0`.
+- **What's next:** Phase 5 — Decoupling and replay.
 
 ## Standing Instructions
 
