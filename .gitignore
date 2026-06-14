@@ -1,6 +1,7 @@
 # Local working material — kept out of the public repo.
 BUILD-PLAN.md
 HANDOFF.md
+Claude_Desktop_Orientation.md
 
 # Secrets and environment files.
 .env
