@@ -166,6 +166,11 @@ def _build_scripted_claims() -> list[SyntheticClaim]:
             ),
             claim_type="storm_complex",
             reported_amount=Decimal("1400000.00"),
+            # The `guardrail_escalation` tag also drives the Phase 7 demo fixture:
+            # the Adjuster returns `backend/data/demo_fixtures/guardrail_adjuster.json`
+            # (a planted hallucinated endorsement) instead of calling the LLM, so the
+            # guardrail escalation reproduces deterministically live. See
+            # `Adjuster._load_demo_fixture`.
             scenario_tag="guardrail_escalation",
         ),
     ]

@@ -35,6 +35,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -86,6 +87,18 @@ _AUDIT_STEP_NAME = "settlement_estimate"
 # Adjuster routes through Mistral, per the project's architectural
 # decisions.
 _PROVIDER_LABEL = "mistral"
+
+# Deterministic demo affordance (Phase 7). A seeded claim carrying one of these
+# scenario tags returns the named fixture's Adjuster output instead of calling the
+# LLM, so the demo reproduces reliably. The audit payload records `demo_fixture`
+# truthfully, so the trail shows the output came from a fixture, not a model.
+_DEMO_FIXTURES_DIR = Path("backend/data/demo_fixtures")
+_SCENARIO_FIXTURES: dict[str, str] = {
+    "guardrail_escalation": "guardrail_adjuster.json",
+}
+# Provider/model labels recorded in the audit when the demo fixture is used.
+_DEMO_FIXTURE_PROVIDER = "demo_fixture"
+_DEMO_FIXTURE_MODEL = "demo_fixture"
 
 
 class Adjuster:
@@ -140,11 +153,20 @@ class Adjuster:
         """
         with self._connection_factory() as conn:
             market_range = self._lookup_market_range(parsed_claim)
-            response, output, error, latency_ms = self._invoke_llm(
-                parsed_claim=parsed_claim,
-                validator_verdict=validator_verdict,
-                market_range=market_range,
-            )
+            # Deterministic demo path: a seeded scenario claim returns a fixture
+            # instead of calling the model. Otherwise the live LLM path runs.
+            fixture = self._load_demo_fixture(conn, claim_id, market_range)
+            response: ProviderResponse | None
+            output: AdjusterOutput | None
+            error: BaseException | None
+            if fixture is not None:
+                response, output, error, latency_ms = None, fixture, None, 0
+            else:
+                response, output, error, latency_ms = self._invoke_llm(
+                    parsed_claim=parsed_claim,
+                    validator_verdict=validator_verdict,
+                    market_range=market_range,
+                )
             self._write_audit(
                 conn=conn,
                 correlation_id=correlation_id,
@@ -156,18 +178,19 @@ class Adjuster:
                 output=output,
                 latency_ms=latency_ms,
                 error=error,
+                demo_fixture=fixture is not None,
             )
 
             if error is not None:
                 raise error
             assert output is not None
-            assert response is not None
+            model = response.model if response is not None else _DEMO_FIXTURE_MODEL
             return AdjusterResult(
                 claim_id=claim_id,
                 correlation_id=correlation_id,
                 output=output,
                 market_range=market_range,
-                model=response.model,
+                model=model,
                 latency_ms=latency_ms,
             )
 
@@ -204,6 +227,45 @@ class Adjuster:
             claim_type=parsed_claim.claim_type,
             reported_amount=parsed_claim.claimed_amount,
         )
+
+    def _load_demo_fixture(
+        self,
+        conn: psycopg.Connection,
+        claim_id: UUID,
+        market_range: MarketRange,
+    ) -> AdjusterOutput | None:
+        """
+        Return the demo-fixture Adjuster output for a seeded scenario claim, or
+        None for a normal claim.
+
+        Keyed on the claim's `scenario_tag` (already a demo marker). Fail-closed:
+        a tagged claim whose fixture is missing, malformed, or out of the
+        looked-up market range raises — it never silently falls through to a live
+        call, which would defeat the determinism the fixture exists to provide.
+        """
+        scenario_tag = self._read_scenario_tag(conn, claim_id)
+        fixture_name = (
+            _SCENARIO_FIXTURES.get(scenario_tag) if scenario_tag is not None else None
+        )
+        if fixture_name is None:
+            return None
+        output = _load_fixture_output(_DEMO_FIXTURES_DIR / fixture_name)
+        # The fixture must satisfy the same within-range invariant as a live value.
+        _assert_within_range(output.recommended_settlement, market_range)
+        return output
+
+    def _read_scenario_tag(
+        self, conn: psycopg.Connection, claim_id: UUID
+    ) -> str | None:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT scenario_tag FROM claims WHERE claim_id = %s", (claim_id,)
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        tag: str | None = row[0]
+        return tag
 
     def _invoke_llm(
         self,
@@ -268,6 +330,7 @@ class Adjuster:
         output: AdjusterOutput | None,
         latency_ms: int,
         error: BaseException | None,
+        demo_fixture: bool = False,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -278,6 +341,7 @@ class Adjuster:
             output=output,
             latency_ms=latency_ms,
             error=error,
+            demo_fixture=demo_fixture,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -377,6 +441,60 @@ def _assert_within_range(value: Decimal, market_range: MarketRange) -> None:
         )
 
 
+def _llm_call_block(
+    response: ProviderResponse | None, latency_ms: int, demo_fixture: bool
+) -> dict[str, Any]:
+    """Build the audit `llm_call` block, truthful about the demo-fixture path."""
+    if demo_fixture:
+        return {
+            "provider": _DEMO_FIXTURE_PROVIDER,
+            "note": "no model call; deterministic demo fixture",
+            "latency_ms": latency_ms,
+        }
+    if response is not None:
+        return {
+            "provider": _PROVIDER_LABEL,
+            "model": response.model,
+            "prompt_tokens": response.prompt_tokens,
+            "completion_tokens": response.completion_tokens,
+            "latency_ms": latency_ms,
+        }
+    return {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}
+
+
+def _load_fixture_output(path: Path) -> AdjusterOutput:
+    """
+    Load a demo-fixture file into a validated `AdjusterOutput`. Fail-closed.
+
+    Keys prefixed with `_` (the JSON-comment convention used in the fixture) are
+    stripped before strict validation. Any failure — missing file, non-JSON,
+    non-object, or a body that does not satisfy `AdjusterOutput` — raises
+    `ValueError`; the caller never falls through to a live call on a bad fixture.
+    """
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise ValueError(f"Adjuster: demo fixture not found at {resolved}")
+    try:
+        data = json.loads(resolved.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Adjuster: demo fixture is not valid JSON at {resolved}; error={exc}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Adjuster: demo fixture must be a JSON object at {resolved}; "
+            f"got type={type(data).__name__}"
+        )
+    fields = {key: value for key, value in data.items() if not key.startswith("_")}
+    try:
+        return AdjusterOutput.model_validate(fields)
+    except PydanticValidationError as exc:
+        raise ValueError(
+            "Adjuster: demo fixture failed AdjusterOutput validation at "
+            f"{resolved}; errors={exc.errors()}"
+        ) from exc
+
+
 def _build_audit_payload(
     *,
     claim_id: UUID,
@@ -387,8 +505,15 @@ def _build_audit_payload(
     output: AdjusterOutput | None,
     latency_ms: int,
     error: BaseException | None,
+    demo_fixture: bool = False,
 ) -> dict[str, Any]:
-    """Assemble the locked adjuster-step audit payload."""
+    """Assemble the locked adjuster-step audit payload.
+
+    `demo_fixture` is True when the output came from the deterministic demo
+    fixture rather than a model call (Phase 7). It is recorded at the top level
+    and the `llm_call` block reports no model call, so the trail is truthful about
+    the source — the demo affordance is auditable, not hidden.
+    """
     # Decimal fields routed through `mode="json"` so the canonical
     # audit encoder (which refuses Decimal) sees only strings.
     validator_excerpt = {
@@ -411,17 +536,8 @@ def _build_audit_payload(
             "floor": str(market_range.floor),
             "ceiling": str(market_range.ceiling),
         },
-        "llm_call": (
-            {
-                "provider": _PROVIDER_LABEL,
-                "model": response.model,
-                "prompt_tokens": response.prompt_tokens,
-                "completion_tokens": response.completion_tokens,
-                "latency_ms": latency_ms,
-            }
-            if response is not None
-            else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}
-        ),
+        "demo_fixture": demo_fixture,
+        "llm_call": _llm_call_block(response, latency_ms, demo_fixture),
         "output": (
             {
                 # `mode="json"` converts Decimal -> string here too.

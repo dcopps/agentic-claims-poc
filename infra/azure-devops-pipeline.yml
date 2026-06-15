@@ -1,0 +1,231 @@
+# Azure DevOps Pipelines — production CI/CD reference
+# =====================================================================
+# This is the production-target pipeline that would REPLACE the prototype's
+# GitHub Actions (`.github/workflows/ci.yml`) in the organisation's Azure DevOps
+# environment. It is an illustrative reference — it is NOT run by this repository
+# and references resources (service connections, Bicep, SQL MI, Container Apps,
+# Key Vault) that exist only in the production tenant.
+#
+# Each stage's comment names what the production equivalent does and, where useful,
+# what the prototype's GitHub Actions does or does NOT have. The spine is:
+#   build → test → security scan → CAB-approval gate → migration runner →
+#   staging deploy → smoke test → production deploy → post-deploy verification.
+# =====================================================================
+
+trigger:
+  branches:
+    include: [main]
+
+# Variable groups are backed by Azure Key Vault; no secret is ever inline.
+# (Prototype equivalent: Render/Vercel dashboard environment variables.)
+variables:
+  - group: claims-ai-shared          # non-secret config (region, image registry)
+  - group: claims-ai-secrets-kv      # Key Vault-backed: DB conn, Foundry endpoints
+  - name: pythonVersion
+    value: "3.11"
+
+stages:
+  # -------------------------------------------------------------------
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: build
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          # Build the backend container + the frontend static bundle. In production
+          # the image is pushed to Azure Container Registry inside the tenant.
+          # (Prototype: Render/Vercel build images on their own infra on push.)
+          - script: uv sync --frozen
+            displayName: "uv sync (locked)"
+          - script: cd frontend && npm ci && npm run build
+            displayName: "Frontend build"
+          - task: Docker@2
+            displayName: "Build + push backend image to ACR"
+            inputs:
+              command: buildAndPush
+              repository: claims-ai/backend
+              containerRegistry: acr-claims-ai      # ACR service connection
+              tags: $(Build.BuildId)
+
+  # -------------------------------------------------------------------
+  - stage: Test
+    displayName: Test
+    dependsOn: Build
+    jobs:
+      - job: test
+        pool: { vmImage: ubuntu-latest }
+        services:
+          postgres: postgres:17           # pgvector-enabled image in the tenant ACR
+        steps:
+          # Same gates the prototype's GitHub Actions runs — ruff, mypy, pytest,
+          # frontend eslint/tsc/vitest — PLUS the eval gate the prototype lacks.
+          - script: uv run ruff check . && uv run mypy backend
+            displayName: "Lint + type-check (backend)"
+          - script: uv run pytest -q
+            displayName: "Backend tests"
+          - script: cd frontend && npm run lint && npm run typecheck && npm test
+            displayName: "Frontend lint + types + tests"
+          # EVAL GATE — the boundary of a "standard" change (see
+          # docs/change-governance.md). Runs the golden historical-claims set and
+          # fails the build if any known outcome regresses. The prototype has a
+          # synthetic-claim harness but no golden eval set; this stage is new in
+          # production.
+          - script: uv run python -m backend.eval.run_golden_set --fail-on-regression
+            displayName: "AI eval gate (golden claims)"
+
+  # -------------------------------------------------------------------
+  - stage: SecurityScan
+    displayName: Security scan
+    dependsOn: Test
+    jobs:
+      - job: scan
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          # Dependency + container + IaC scanning. Prototype runs an advisory
+          # `pip-audit`; production adds Microsoft Defender for Cloud image
+          # scanning, Bicep linting, and secret scanning as hard gates.
+          - script: uv run pip-audit
+            displayName: "Python dependency audit"
+          - task: AzureCLI@2
+            displayName: "Defender image scan + Bicep What-If"
+            inputs:
+              azureSubscription: claims-ai-prod
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az acr check-health --name acrClaimsAi
+                # Bicep What-If previews the infra delta before any approval.
+                # The prototype has no IaC and therefore no What-If.
+                az deployment group what-if \
+                  --resource-group rg-claims-ai-prod \
+                  --template-file infra/bicep/main.bicep
+
+  # -------------------------------------------------------------------
+  - stage: ChangeApproval
+    displayName: CAB approval gate
+    dependsOn: SecurityScan
+    jobs:
+      # Manual approval checkpoint. The AI Change Control Board signs off against
+      # the change's classification (standard / normal / emergency) and the linked
+      # Work Item (risk rating, rollback plan, eval evidence). A standard change is
+      # pre-authorised and passes automatically; normal/emergency require sign-off.
+      # The prototype has NO change-control gate — this stage has no equivalent.
+      - deployment: cabApproval
+        environment: claims-ai-cab-gate     # environment with approval checks configured
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: echo "Approved by CAB; Work Item linked."
+                  displayName: "CAB approval recorded"
+
+  # -------------------------------------------------------------------
+  - stage: MigrationRunner
+    displayName: Database migration
+    dependsOn: ChangeApproval
+    jobs:
+      - job: migrate
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          # Apply Alembic migrations against the staging DB first. The same
+          # `alembic upgrade head` the prototype runs locally — but against Azure
+          # SQL Managed Instance, reached over a private endpoint, with the
+          # connection string from Key Vault. Migration 0002's downgrade hazard
+          # (human/aborted rows) is documented in the migration itself.
+          - script: |
+              uv run alembic --config backend/alembic.ini upgrade head
+            displayName: "alembic upgrade head (staging)"
+            env:
+              DATABASE_URL: $(staging-db-conn)   # Key Vault-backed
+
+  # -------------------------------------------------------------------
+  - stage: DeployStaging
+    displayName: Deploy to staging
+    dependsOn: MigrationRunner
+    jobs:
+      - deployment: staging
+        environment: claims-ai-staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Deploy the image to Azure Container Apps (blue slot). Prototype
+                # equivalent: Render auto-deploy on push to main.
+                - task: AzureContainerApps@1
+                  inputs:
+                    azureSubscription: claims-ai-prod
+                    containerAppName: claims-ai-backend-staging
+                    resourceGroup: rg-claims-ai-prod
+                    imageToDeploy: acrClaimsAi.azurecr.io/claims-ai/backend:$(Build.BuildId)
+
+  # -------------------------------------------------------------------
+  - stage: SmokeTest
+    displayName: Staging smoke test
+    dependsOn: DeployStaging
+    jobs:
+      - job: smoke
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          # /health version assertion + the three-scenario verification script.
+          # This is exactly what the prototype's architect runs by hand
+          # (scripts/verify-demo-scenarios.py) — promoted here to an automated gate.
+          - script: |
+              curl -fsS "$STAGING_URL/health" | grep '"version":"0.7.0"'
+              uv run python scripts/verify-demo-scenarios.py --backend "$STAGING_URL"
+            displayName: "Health + demo-scenario verification"
+            env:
+              STAGING_URL: $(staging-backend-url)
+
+  # -------------------------------------------------------------------
+  - stage: DeployProduction
+    displayName: Deploy to production
+    dependsOn: SmokeTest
+    jobs:
+      - deployment: production
+        environment: claims-ai-production    # gated environment (second approval)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Run the production migration, then blue/green swap the Container
+                # App to the new revision. Traffic shifts only after the swap; the
+                # prior revision is the instant rollback target.
+                - script: uv run alembic --config backend/alembic.ini upgrade head
+                  displayName: "alembic upgrade head (production)"
+                  env:
+                    DATABASE_URL: $(prod-db-conn)
+                - task: AzureContainerApps@1
+                  inputs:
+                    azureSubscription: claims-ai-prod
+                    containerAppName: claims-ai-backend
+                    resourceGroup: rg-claims-ai-prod
+                    imageToDeploy: acrClaimsAi.azurecr.io/claims-ai/backend:$(Build.BuildId)
+
+  # -------------------------------------------------------------------
+  - stage: PostDeployVerify
+    displayName: Post-deploy verification
+    dependsOn: DeployProduction
+    jobs:
+      - job: verify
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          # Health + scenario verification against production, plus a ledger
+          # digest check. In production the audit chain is SQL Server Ledger
+          # Tables, so verification is `sys.sp_verify_database_ledger` against the
+          # latest digest in immutable Blob Storage — not the prototype's
+          # application-level whole-ledger walk.
+          - script: |
+              curl -fsS "$PROD_URL/health" | grep '"version":"0.7.0"'
+              uv run python scripts/verify-demo-scenarios.py --backend "$PROD_URL"
+            displayName: "Production health + scenario verification"
+            env:
+              PROD_URL: $(prod-backend-url)
+          - task: AzureCLI@2
+            displayName: "Verify ledger digest"
+            inputs:
+              azureSubscription: claims-ai-prod
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                # sys.sp_verify_database_ledger against the latest committed digest.
+                echo "Run sp_verify_database_ledger against the Blob digest here."

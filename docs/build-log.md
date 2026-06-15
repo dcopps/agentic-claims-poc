@@ -463,3 +463,44 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Phase 7 — Demo polish and documentation.
 
 ---
+
+## Phase 7 — Demo Polish and Documentation
+
+**Date:** 2026-06-15
+
+**Phase / Prompt:** Phase 7 — [`docs/prompts/08-phase-7-demo-polish-and-documentation.md`](prompts/08-phase-7-demo-polish-and-documentation.md)
+**Plan (approved):** [`docs/prompts/08-phase-7-demo-polish-and-documentation-plan.md`](prompts/08-phase-7-demo-polish-and-documentation-plan.md) — approved 2026-06-15T10:30:53Z
+**Plan iterations:** 0 rejected revisions (approved as written; architect performs a one-time manual grep of the real client name before push, with the candidate-list test as the standing guard).
+**Report:** [`docs/prompts/08-phase-7-demo-polish-and-documentation-report.md`](prompts/08-phase-7-demo-polish-and-documentation-report.md)
+
+**Prompt summary.** Expand the README to its final demo-ready form; ship the change-governance, DORA register, design-decisions, walkthrough, verification docs and the Azure pipeline reference; close the scenario-3 live-reproducibility gap with a deterministic Adjuster demo fixture; land the audit-payload addendum in CLAUDE.md; run a final anonymisation pass; bump to 0.7.0.
+
+**What changed:**
+
+- `backend/data/demo_fixtures/guardrail_adjuster.json` — new. Deterministic Adjuster output with a planted "Endorsement Coastal Surge Rider" the policy lacks.
+- `backend/app/agents/adjuster.py` — one fixture branch in `evaluate` keyed on the claim's `scenario_tag` (`_load_demo_fixture` / `_read_scenario_tag` / `_load_fixture_output`, fail-closed), additive `demo_fixture: bool` in the audit payload with a truthful `llm_call` block.
+- `backend/data/seed_claims.py` — comment noting the `guardrail_escalation` tag drives the fixture (no schema change).
+- `backend/tests/test_demo_fixture.py` — new (5): fixture schema; loader fail-closed guards (missing/non-JSON/schema); end-to-end deterministic guardrail escalation asserting the Adjuster LLM is never called and the audit records `demo_fixture: true`.
+- `backend/tests/test_anonymisation.py` — new (10): parameterised grep over shipping artefacts for candidate client-name patterns; expected zero matches.
+- `CLAUDE.md` — "Locked interface extensions since Phase 4" subsection; Current Status → "Phase 7 complete; clone-and-run verification next".
+- `README.md` — expanded to the locked nine-section structure (elevator pitch, headline diagram inline, what-this-demonstrates, one-command setup, live demo + three scenarios, four diagrams in `<details>`, design decisions, production architecture + dev→prod table, reproducible build, governance/DORA links).
+- `docs/change-governance.md`, `docs/dora-third-party-register.md`, `docs/design-decisions.md`, `docs/walkthrough.md`, `docs/verification/phase-7/scenarios.md` — new.
+- `infra/azure-devops-pipeline.yml` — new (was an empty `.gitkeep`): build → test → security scan → CAB gate → migration → staging deploy → smoke → production deploy → post-deploy verification, each stage naming the production equivalent.
+- `scripts/verify-demo-scenarios.py` — new: stdlib runner that submits + runs the three scenarios against a deployed backend and asserts outcomes.
+- `pyproject.toml` — version `0.6.0 → 0.7.0`.
+
+**Tests:** 326 backend passing, 7 skipped; 22 frontend passing. Repository total **348 passing, 7 skipped, 0 failing**. Phase 7 adds **15 backend** tests. **Scenario-3 fixture test:** `test_guardrail_escalation_reproduces_deterministically` — asserts `awaiting_human` + `guardrail_failed`, the Adjuster LLM is never called (`MockProvider.calls == []`), and the audit `demo_fixture: true`. `ruff` clean; `mypy backend` clean (106 files); frontend tsc/eslint/vitest unchanged and green.
+
+**Anonymisation pass:** the parameterised test greps the shipping artefacts (backend + frontend code, README, CLAUDE.md, user-facing `docs/`, `infra/`, `scripts/`, `diagrams/`) for candidate regulated/specialty-insurer identifiers — **zero matches**. The build meta-record (`docs/prompts/`, `docs/build-log.md`) is excluded because it legitimately documents the grep methodology; `backend/app/prompts/` (deliverables) is scanned. The architect performs a one-time manual grep of the real client name before push.
+
+**Verification pass:** scenarios 1 and 2 reproduce live via the real agents; scenario 3 is now deterministic via the demo fixture and verified end-to-end in test. The architect runs `scripts/verify-demo-scenarios.py` against the deployed backend and fills `docs/verification/phase-7/scenarios.md`.
+
+**Issues discovered:**
+
+- **`infra/azure-devops-pipeline.yml` did not exist** (the prompt called it a stub; `infra/` held only `.gitkeep`) — created fresh.
+- **The citation regex requires the endorsement name to start with a letter**, so "Endorsement 7" would not match; the fixture uses "Endorsement Coastal Surge Rider" for a deterministic regex catch.
+- **`AdjusterOutput` is `extra="forbid"`**, so the fixture's `_comment` key is stripped (JSON-comment convention) before validation by `_load_fixture_output`.
+
+**Next:** Clone-and-run verification.
+
+---

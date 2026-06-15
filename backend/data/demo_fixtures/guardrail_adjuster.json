@@ -1,0 +1,6 @@
+{
+  "_comment": "Deterministic Adjuster output for the guardrail-escalation demo scenario. When the seeded claim with scenario_tag='guardrail_escalation' is processed, the Adjuster returns this fixture instead of calling the LLM, so the demo reproduces reliably without depending on model non-determinism to surface a hallucinated endorsement. The reasoning deliberately cites 'Endorsement Coastal Surge Rider' — an endorsement NOT present in the indexed policy — which the Guardrail's deterministic hallucinated-citation regex catches, driving passed=False and a guardrail escalation. The settlement (1,400,000) sits inside the storm_complex/severe market range [600000, 1800000]. The audit payload records demo_fixture=true, so the trail is truthful about the source.",
+  "recommended_settlement": "1400000.00",
+  "confidence": 0.82,
+  "reasoning": "Severe storm produced wind damage to the headquarters roof followed by consequential internal water ingress; business operations were suspended at the site. The recommended settlement assumes coverage extended under Endorsement Coastal Surge Rider, which the claimant cited but which does not appear in the carrier's retrieved policy text."
+}

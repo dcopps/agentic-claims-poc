@@ -127,10 +127,10 @@ Together these make the build reproducible end-to-end.
 
 ## Current Status
 
-- **Date:** 2026-06-14
-- **Phase:** Phase 6 complete; Phase 7 next.
-- **What works:** Polished React SPA with routing (React Router) and server state (TanStack Query): a claims landing page (submit + list), a single-claim view (metadata + runs + human-review panel), a single-run view with **live pipeline visualisation** (one card per agent; expand to fetch the agent's prompt source and render its LLM response from the audit payload), an **audit-log viewer** with one-click **whole-ledger** chain verification, a **human review panel** (Approve/Reject writes an `agent='human'` audit entry and moves the claim to `settled`/`aborted`), an **agent test bench** (per-agent out-of-band invocation, no audit written), and a deep-linkable comparison view. Backend gained the supporting endpoints — `GET /api/audit` + `/api/audit/verify/{cid}`, `POST /api/claims/{id}/human-decision`, `POST /api/agents/test/{agent}` + `GET /api/agents/{agent}/prompt` — plus migration 0002 (audit_log agent CHECK +`human`; claims status CHECK +`aborted`) and additive agent `probe` methods. The three demo scenarios still pass. 311 backend + 22 frontend tests passing (7 skipped/gated); ruff and mypy clean across 104 source files; frontend tsc + eslint clean. `/health` reports `version=0.6.0`.
-- **What's next:** Phase 7 — Demo polish and documentation.
+- **Date:** 2026-06-15
+- **Phase:** Phase 7 complete; clone-and-run verification next.
+- **What works:** The full demo is reproducible end-to-end live for all three scripted scenarios — including guardrail escalation, now made deterministic by a demo fixture (the seeded claim's `scenario_tag='guardrail_escalation'` drives `Adjuster._load_demo_fixture`, returning a planted hallucinated endorsement the Guardrail's regex catches; the audit records `demo_fixture: true`, so the affordance is auditable). The README tells the full architectural story without external context (locked nine-section structure, headline diagram inline, dev→prod table, design decisions). `docs/change-governance.md` (standard/normal/emergency AI-change taxonomy), `docs/dora-third-party-register.md` (provider substitution paths + Article 28 rationale), `docs/design-decisions.md`, `docs/walkthrough.md` (3-minute demo script), `docs/verification/phase-7/scenarios.md`, and `infra/azure-devops-pipeline.yml` (credible production CI/CD reference) all ship. `scripts/verify-demo-scenarios.py` verifies the deployed backend. The audit-payload addendum is on the locked-interfaces list (`CLAUDE.md` → "Locked interface extensions since Phase 4"). A parameterised anonymisation regression test guards the repo. 326 backend + 22 frontend tests passing (7 skipped/gated); ruff and mypy clean across 106 source files. `/health` reports `version=0.7.0`.
+- **What's next:** Clone-and-run verification.
 
 ## Standing Instructions
 
@@ -177,6 +177,20 @@ Together these make the build reproducible end-to-end.
 - **Demo content.** Commercial Property line. Three scripted scenarios: auto-approve $85,000 commercial water damage; threshold escalation $850,000 fire loss; guardrail escalation $1.4M with hallucinated endorsement.
 - **Escalation policy.** OR semantics. Hard rules (always escalate): guardrail_failed, claim_type_watchlist, claimant_watchlist, cross_jurisdictional. Threshold rules: settlement > $250,000, validator confidence < 0.65, adjuster confidence < 0.75. Policy lives in `backend/app/escalation/policy.yaml`. Every decision logs which rules fired.
 - **Local dev environment.** Native Postgres (Postgres.app or Homebrew), no Docker. Chosen to keep the local footprint small and avoid virtualisation overhead.
+
+### Locked interface extensions since Phase 4
+
+These additive extensions to the Phase 4 contracts are locked. All are additive
+(existing keys unchanged), so they preserve the audit-log-as-trusted-record
+property — the audit log alone is sufficient to reconstruct and explain any past
+decision. Any change to these is an interface-stability event.
+
+- **Adjuster `settlement_estimate` audit `output`** gains a full `reasoning` field (untruncated, alongside `reasoning_excerpt`) — Phase 5.
+- **Validator `coverage_check` audit `llm_call.provider` / `model`** report the *actual* provider (`self._provider.vendor`) and model in use, not a hardcoded vendor — so a provider-substitution variant is recorded truthfully — Phase 5.
+- **`pipeline_started` audit payload + SSE event** gain a `variant` field (default `"default"`) — Phase 5.
+- **`audit_log.agent` CHECK** extended to include `'human'`; audit steps `human_approval` / `human_rejection` — Phase 6 (migration 0002).
+- **`claims.status` CHECK** extended to include `'aborted'` (terminal state for a human-rejected claim) — Phase 6 (migration 0002).
+- **Adjuster `settlement_estimate` audit** gains a top-level `demo_fixture: bool`; when `true` the `llm_call` block records no model call — Phase 7. The deterministic demo affordance is auditable, not hidden.
 
 ## Repository Name
 
