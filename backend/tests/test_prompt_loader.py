@@ -45,39 +45,13 @@ def test_loads_real_user_template(prompt_loader: PromptLoader) -> None:
     assert "[chunk_id=abc] example chunk" in rendered
 
 
-# Each pair is one worked example baked into the doc_parser prompt: the hedged
-# narrative phrase the model must recognise, and the normalised decimal string it
-# must emit. Pinning both halves guards against a future edit that drops the
-# few-shot block and silently weakens dollar-figure extraction.
-_HEDGED_DOLLAR_EXAMPLES = [
-    ("estimated at $85,000", "85000.00"),
-    ("approximately $1.4M", "1400000.00"),
-    ("around $500,000", "500000.00"),
-    ("totals $250k", "250000.00"),
-    ("damages of $1,400,000", "1400000.00"),
-    ("in the region of $850,000", "850000.00"),
-]
-
-
-@pytest.mark.parametrize(("phrase", "expected"), _HEDGED_DOLLAR_EXAMPLES)
-def test_doc_parser_prompt_covers_hedged_dollar_figures(
-    prompt_loader: PromptLoader, phrase: str, expected: str
-) -> None:
-    """The doc_parser prompt must teach extraction of hedged/abbreviated amounts.
-
-    The seeded demo narratives state their figures with hedging language
-    ("estimated at", "in the region of") and abbreviations ($1.4M); the prompt
-    carries a few-shot block covering exactly these so Doc-Parser extracts the
-    amount instead of defaulting to a downstream-rejected "0.00". This regression
-    test fails if that block is removed or an example is dropped.
-    """
-    text = prompt_loader.system("doc_parser")
-    assert phrase in text
-    assert expected in text
-    # The abbreviation-expansion rule is what turns "$1.4M"/"$250k" into the
-    # expected decimals — assert it survives alongside the examples.
-    assert "millions" in text
-    assert "thousands" in text
+# Note: the Phase 8.1 `test_doc_parser_prompt_covers_hedged_dollar_figures`
+# regression test was removed in Phase 8.2. It pinned a few-shot dollar-extraction
+# block into the doc_parser prompt — the very approach Phase 8.2 abandons. The
+# structured fields (including the amount) now come from the claim record, and the
+# prompt asks Haiku only for a plain-prose summary, so there is no extraction block
+# left to guard. The summariser-prompt shape is covered by
+# `test_doc_parser_prompts.py::test_system_prompt_declares_summary_role_and_output_shape`.
 
 
 def test_missing_file_raises_prompt_not_found(temp_prompt_root: Path) -> None:

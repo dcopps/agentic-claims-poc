@@ -5,14 +5,17 @@ import { Button, Card, JsonBlock } from './ui'
 // One agent's test-bench panel. The request body is a JSON textarea (pre-filled
 // with a valid sample); submit posts to the agent's test endpoint and renders the
 // typed output + LLM-call metadata. Out-of-band: no claim, no audit entry.
+// `note` is optional per-agent helper copy (e.g. Doc-Parser's sentinel caveat).
 export function AgentTestPanel({
   agent,
   label,
   sample,
+  note,
 }: {
   agent: string
   label: string
   sample: string
+  note?: string
 }) {
   const [body, setBody] = useState(sample)
   const [result, setResult] = useState<unknown>(null)
@@ -34,6 +37,7 @@ export function AgentTestPanel({
 
   return (
     <Card title={label}>
+      {note && <p className="mb-2 text-xs text-slate-500">{note}</p>}
       <textarea
         aria-label={`${label} input`}
         className="w-full rounded border border-slate-300 p-2 font-mono text-xs"

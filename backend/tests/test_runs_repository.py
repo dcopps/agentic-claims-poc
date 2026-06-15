@@ -32,7 +32,7 @@ from backend.settings import Settings
 from .test_pipeline_scenarios import (
     _adjuster_json,
     _build_orchestrator,
-    _doc_json,
+    _doc_summary,
     _guardrail_json,
     _insert_chunk,
     _validator_json,
@@ -41,8 +41,18 @@ from .test_pipeline_scenarios import (
 _REASONING = "Settlement sits within the market range for the loss."
 
 
-def _insert_claim(conn: psycopg.Connection) -> UUID:
-    """Insert a claim with a unique claim_number (tests here insert several)."""
+def _insert_claim(
+    conn: psycopg.Connection,
+    *,
+    claim_type: str = "water_damage",
+    amount: Decimal = Decimal("85000.00"),
+) -> UUID:
+    """Insert a claim with a unique claim_number (tests here insert several).
+
+    Phase 8.2: Doc-Parser sources its structured fields from this row, so the
+    inserted `claim_type`/`amount` are what the pipeline actually sees — the
+    market-range lookup and escalation read them, not a DocParser mock.
+    """
     number = f"RUN-{uuid4().hex[:8].upper()}"
     with conn.cursor() as cur:
         cur.execute(
@@ -64,8 +74,8 @@ def _insert_claim(conn: psycopg.Connection) -> UUID:
                 date(2026, 4, 3),
                 "United Kingdom",
                 "Burst supply line flooded the warehouse mezzanine.",
-                "water_damage",
-                Decimal("85000.00"),
+                claim_type,
+                amount,
                 "received",
             ),
         )
@@ -88,19 +98,22 @@ def _run(
     claim_type: str = "water_damage",
     amount: str = "85000.00",
     settlement: str = "85000.00",
+    confidence: float = 0.9,
     variant: str = "default",
     doc_text: str | None = None,
 ) -> tuple[UUID, PipelineResult]:
+    # A fresh claim carries the requested type/amount so the record — now the
+    # Doc-Parser's source of truth — drives the market lookup and escalation.
     if claim_id is None:
-        claim_id = _insert_claim(conn)
+        claim_id = _insert_claim(conn, claim_type=claim_type, amount=Decimal(amount))
     orch = _build_orchestrator(
         conn,
         db_settings,
         prompt_loader,
         stub_embedder,
-        doc_text=doc_text if doc_text is not None else _doc_json(claim_type, amount),
+        doc_text=doc_text if doc_text is not None else _doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.9),
-        adjuster_text=_adjuster_json(settlement, 0.9, _REASONING),
+        adjuster_text=_adjuster_json(settlement, confidence, _REASONING),
         guardrail_text=_guardrail_json([]),
     )
     result = orch.run(claim_id, variant=variant)
@@ -163,10 +176,12 @@ def test_reconstruct_aborted_run(
     stub_embedder: Callable[[str], np.ndarray],
 ) -> None:
     chunk_id, section = _chunk(clean_db, db_settings, stub_embedder)
-    # Invalid doc-parser output → DocParser raises → abort.
+    # An empty/whitespace summary → DocParser's summary guard raises → abort.
+    # (Post-refactor the model returns prose, not JSON, so a malformed-JSON
+    # string would be a *valid* summary; only an empty one aborts the agent.)
     _claim, result = _run(
         clean_db, db_settings, prompt_loader, stub_embedder, chunk_id, section,
-        doc_text="not valid json at all",
+        doc_text="   ",
     )
     rebuilt = RunsRepository.get_run(clean_db, result.correlation_id)
     assert rebuilt is not None
@@ -265,20 +280,26 @@ def test_compare_same_claim_reveals_diff(
     prompt_loader: PromptLoader,
     stub_embedder: Callable[[str], np.ndarray],
 ) -> None:
+    # Same claim (water_damage / $85k → moderate band [50k, 200k]), two runs.
+    # Run A settles; run B returns a different in-band settlement with a low
+    # adjuster confidence, tripping the adjuster-confidence floor. The structured
+    # fields are now record-sourced, so the variant difference is expressed
+    # through the Adjuster's confidence and in-range value, not a settlement jump
+    # the record's band could never permit.
     chunk_id, section = _chunk(clean_db, db_settings, stub_embedder)
     claim_id, run_a = _run(clean_db, db_settings, prompt_loader, stub_embedder, chunk_id, section)
     _claim, run_b = _run(
         clean_db, db_settings, prompt_loader, stub_embedder, chunk_id, section,
-        claim_id=claim_id, claim_type="fire", amount="850000.00", settlement="850000.00",
+        claim_id=claim_id, settlement="120000.00", confidence=0.6,
     )
     comparison = RunsRepository.compare(
         clean_db, run_a.correlation_id, run_b.correlation_id
     )
     assert comparison.diff.settlement_changed is True
     assert comparison.diff.settlement_a == "85000.00"
-    assert comparison.diff.settlement_b == "850000.00"
+    assert comparison.diff.settlement_b == "120000.00"
     assert comparison.diff.escalation_changed is True
-    assert "settlement_over_ceiling" in comparison.diff.fired_rules_added
+    assert "adjuster_confidence_floor" in comparison.diff.fired_rules_added
 
 
 def test_compare_different_claims_raises(

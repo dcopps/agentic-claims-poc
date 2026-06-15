@@ -34,7 +34,7 @@ from backend.settings import Settings
 from .conftest import MockProvider
 from .test_pipeline_scenarios import (
     POLICY,
-    _doc_json,
+    _doc_summary,
     _guardrail_json,
     _insert_chunk,
     _validator_json,
@@ -132,7 +132,7 @@ def test_guardrail_escalation_reproduces_deterministically(
     )
     orch = PipelineOrchestrator(
         doc_parser=DocParser(
-            provider=MockProvider(response_text=_doc_json("storm_complex", "1400000.00")),
+            provider=MockProvider(response_text=_doc_summary()),
             prompt_loader=prompt_loader, settings=db_settings, connection_factory=factory,
         ),
         validator=Validator(

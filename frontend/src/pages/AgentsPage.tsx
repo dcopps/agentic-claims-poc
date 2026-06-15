@@ -65,7 +65,12 @@ export function AgentsPage() {
         out-of-band: no claim is touched and <strong>no audit entry is written</strong>{' '}
         — only an API-logger record. Edit the JSON request and run.
       </p>
-      <AgentTestPanel agent="doc-parser" label="Doc-Parser" sample={DOC_SAMPLE} />
+      <AgentTestPanel
+        agent="doc-parser"
+        label="Doc-Parser"
+        sample={DOC_SAMPLE}
+        note="Generates a narrative summary. Structured fields are populated from sentinel values in the test bench (the live pipeline uses the claim record's structured columns)."
+      />
       <AgentTestPanel agent="validator" label="Validator" sample={VALIDATOR_SAMPLE} />
       <AgentTestPanel agent="adjuster" label="Adjuster" sample={ADJUSTER_SAMPLE} />
       <AgentTestPanel agent="guardrail" label="Guardrail" sample={GUARDRAIL_SAMPLE} />

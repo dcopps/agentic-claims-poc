@@ -128,8 +128,8 @@ Together these make the build reproducible end-to-end.
 ## Current Status
 
 - **Date:** 2026-06-15
-- **Phase:** Phase 8 complete; clone-and-run verification next.
-- **What works:** Live pipeline visualisation is restored — `ClaimsPage` now navigates to the run-detail page immediately and fires the POST in the background, so the SSE-driven agent cards light up progressively (running → done) with per-agent expected-duration progress bars and "what's happening" copy, rather than all appearing pre-completed. The run-detail page tolerates the in-flight 404 (no run data yet) gracefully and surfaces POST failures and `pipeline_aborted` events via an `ErrorBanner` instead of silently swallowing them. The three demo scenarios reproduce cleanly: the seeded demo narratives now embed their dollar figures (so Doc-Parser extracts `claimed_amount` instead of aborting on `0.00`), and the Guardrail prompt no longer false-positives on the Adjuster's market vocabulary ("market band", "within range") while still catching real hallucinated endorsements (scenario 3). The README's design-decisions section enumerates the audit-payload addendum for outward-facing readers. 330 backend + 30 frontend tests passing (7 skipped/gated); ruff and mypy clean; frontend tsc/eslint clean. `/health` reports `version=0.8.1` (0.8.1 hardens the Doc-Parser prompt to extract dollar figures from narratives with hedging language and currency abbreviations).
+- **Phase:** Phase 8.2 complete; clone-and-run verification next.
+- **What works:** Doc-Parser now sources its structured fields (`loss_date`, `jurisdiction`, `claim_type`, `claimed_amount`, `claimant_identifier`) directly from the `claims` row — the system-of-record set at submission time — and calls Haiku only for `narrative_summary`. This removes the Phase-8 failure mode where Haiku defaulted the structured fields to placeholders that tripped Pydantic and aborted the pipeline (the Phase 8.1 prompt-engineering route didn't move the model). `DocParserOutput`'s shape is unchanged; the `doc_extract` audit payload gains an additive top-level `"fields_source": "claim_record"` so the trail records honestly where each field came from. All three demo scenarios reproduce cleanly live: scenario 1 settles (`claimed_amount=85000.00` from the record), scenario 2 escalates on threshold only, scenario 3 escalates on guardrail (via the unchanged Phase 7 fixture path). The live pipeline visualisation (Phase 8) is unchanged — agent cards still light up progressively. 327 backend + 30 frontend tests passing (7 skipped/gated); ruff and mypy clean; frontend tsc/eslint clean. `/health` reports `version=0.8.2`.
 - **What's next:** Clone-and-run verification.
 
 ## Standing Instructions
@@ -191,6 +191,7 @@ decision. Any change to these is an interface-stability event.
 - **`audit_log.agent` CHECK** extended to include `'human'`; audit steps `human_approval` / `human_rejection` — Phase 6 (migration 0002).
 - **`claims.status` CHECK** extended to include `'aborted'` (terminal state for a human-rejected claim) — Phase 6 (migration 0002).
 - **Adjuster `settlement_estimate` audit** gains a top-level `demo_fixture: bool`; when `true` the `llm_call` block records no model call — Phase 7. The deterministic demo affordance is auditable, not hidden.
+- **Doc-Parser `doc_extract` audit** gains a top-level `"fields_source": "claim_record"` — Phase 8.2. Records that the structured fields were sourced from the claim record, not from LLM extraction (the LLM now produces only `narrative_summary`). Additive; the `output` block shape is unchanged.
 
 ## Repository Name
 

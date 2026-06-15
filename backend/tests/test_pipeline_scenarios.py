@@ -137,17 +137,10 @@ def _insert_chunk(
 # --------------------------------------------------------------------------- #
 
 
-def _doc_json(claim_type: str, amount: str) -> str:
-    return json.dumps(
-        {
-            "loss_date": "2026-04-18",
-            "jurisdiction": "United Kingdom",
-            "claim_type": claim_type,
-            "claimed_amount": amount,
-            "claimant_identifier": "Harborline Logistics Ltd",
-            "narrative_summary": "Loss to the insured commercial property.",
-        }
-    )
+def _doc_summary() -> str:
+    """Doc-Parser now returns a plain-prose summary; structured fields come from
+    the inserted claim row, so the canned response is just the summary text."""
+    return "Loss to the insured commercial property."
 
 
 def _validator_json(chunk_id: UUID, section: str, confidence: float) -> str:
@@ -277,7 +270,7 @@ def test_scenario_auto_approve(
         db_settings,
         prompt_loader,
         stub_embedder,
-        doc_text=_doc_json("water_damage", "85000.00"),
+        doc_text=_doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.92),
         adjuster_text=_adjuster_json(
             "85000.00", 0.9, "Settlement sits within the market range for the loss."
@@ -325,7 +318,7 @@ def test_scenario_threshold_escalation(
         db_settings,
         prompt_loader,
         stub_embedder,
-        doc_text=_doc_json("fire", "850000.00"),
+        doc_text=_doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.88),
         adjuster_text=_adjuster_json(
             "850000.00", 0.85, "Settlement sits within the severe fire range."
@@ -369,7 +362,7 @@ def test_scenario_guardrail_escalation(
         db_settings,
         prompt_loader,
         stub_embedder,
-        doc_text=_doc_json("storm_complex", "1400000.00"),
+        doc_text=_doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.8),
         adjuster_text=_adjuster_json(
             "1400000.00",
@@ -495,7 +488,7 @@ def test_submit_run_replay_compare(
 
     orch_default = _build_orchestrator(
         clean_db, db_settings, prompt_loader, stub_embedder,
-        doc_text=_doc_json("water_damage", "85000.00"),
+        doc_text=_doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.92),
         adjuster_text=_adjuster_json("85000.00", 0.9, "Within the market range."),
         guardrail_text=_guardrail_json([]),
@@ -505,7 +498,7 @@ def test_submit_run_replay_compare(
 
     orch_strict = _build_orchestrator(
         clean_db, db_settings, prompt_loader, stub_embedder,
-        doc_text=_doc_json("water_damage", "85000.00"),
+        doc_text=_doc_summary(),
         validator_text=_validator_json(chunk_id, section, 0.5),  # below the floor
         adjuster_text=_adjuster_json("85000.00", 0.9, "Within the market range."),
         guardrail_text=_guardrail_json([]),

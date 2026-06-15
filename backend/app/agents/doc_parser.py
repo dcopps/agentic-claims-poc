@@ -1,21 +1,27 @@
 """
-Doc-Parser agent — structured-field extraction from FNOL narratives.
+Doc-Parser agent — narrative summariser over the claim record.
+
+Strategy (Phase 8.2): the `claims` row is the source of truth for the
+structured fields. Live rehearsal showed Haiku reliably *defaults*
+`loss_date`, `jurisdiction`, `claimant_identifier`, and `claimed_amount`
+to placeholders rather than extracting them, tripping schema validation
+and aborting the pipeline. So the agent no longer asks the model for those
+fields at all.
 
 Step-for-step:
 
-  1. Load the narrative from the `claims` table by `claim_id`. The
-     orchestrator (Phase 4) is the canonical caller; isolation tests
-     pass a stub connection factory.
-  2. Build the user prompt via `PromptLoader` — no inline f-strings.
+  1. Load the full `ClaimRecord` from the `claims` table by `claim_id`
+     via the injected `ClaimsRepository`. The orchestrator (Phase 4) is
+     the canonical caller; isolation tests pass a stub connection factory.
+  2. Build the summary prompt via `PromptLoader` — no inline f-strings.
   3. Call Claude Haiku through the LLM Gateway with system/user
-     separation. Haiku has no native JSON mode; the system prompt
-     locks the format, and the parser strictly validates the result.
-  4. Parse the response into `DocParserOutput`. Fail fast on
-     malformed JSON, missing fields, type errors, or out-of-range
-     values — no retry-rescue at this layer (retry is deferred to
-     Phase 6).
-  5. Write a complete audit-log entry under the supplied
-     correlation id. Errors are audited alongside successes.
+     separation, asking only for a one-paragraph `narrative_summary`.
+     The model returns plain prose; a length/content guard bounds it.
+  4. Assemble `DocParserOutput` from the record's structured columns plus
+     the model-generated summary. The shape is the locked Phase 3 contract.
+  5. Write a complete audit-log entry under the supplied correlation id,
+     recording `fields_source="claim_record"` so the trail says honestly
+     where each field came from. Errors are audited alongside successes.
 
 Every collaborator is constructor-injected. Tests swap stubs;
 `with_defaults` wires the production graph.
@@ -23,16 +29,15 @@ Every collaborator is constructor-injected. Tests swap stubs;
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 import psycopg
-from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
     ProbeMetadata,
@@ -42,9 +47,6 @@ from backend.app.agents._shared import (
     excerpt as _excerpt,
 )
 from backend.app.agents._shared import (
-    extract_json_block as _extract_json_block,
-)
-from backend.app.agents._shared import (
     new_correlation_id as _new_correlation_id,
 )
 from backend.app.agents.doc_parser_models import (
@@ -52,6 +54,8 @@ from backend.app.agents.doc_parser_models import (
     DocParserResult,
 )
 from backend.app.audit import AuditEvent, AuditWriter
+from backend.app.claims.models import ClaimRecord
+from backend.app.claims.repository import ClaimsRepository
 from backend.app.llm.provider import (
     LLMProvider,
     LLMProviderError,
@@ -73,9 +77,29 @@ _AUDIT_STEP_NAME = "doc_extract"
 # architectural decisions in CLAUDE.md.
 _PROVIDER_LABEL = "anthropic"
 
+# Additive audit field (Phase 8.2): records that the structured fields were
+# sourced from the claim record, not from LLM extraction. Joins the Phase 5/6/7
+# additive extensions in CLAUDE.md's locked-extensions list.
+_FIELDS_SOURCE = "claim_record"
+
+# Summary bounds. The upper bound mirrors `DocParserOutput.narrative_summary`'s
+# 500-char cap so the guard rejects an over-long summary with a specific message
+# rather than deferring to a less precise Pydantic error.
+_SUMMARY_MAX_CHARS = 500
+
+# Probe-path sentinels. The agent test bench passes a bare narrative with no
+# claim, so the structured fields have no source of truth. Rather than fabricate
+# them from the narrative — the extraction this agent no longer performs — the
+# probe stamps explicit sentinels and the test-bench UI labels them as such.
+_PROBE_SENTINEL_LOSS_DATE = date(1970, 1, 1)
+_PROBE_SENTINEL_JURISDICTION = "Unknown"
+_PROBE_SENTINEL_CLAIM_TYPE = "unknown"
+_PROBE_SENTINEL_CLAIMANT = "Unknown"
+_PROBE_SENTINEL_CLAIMED_AMOUNT = Decimal("0.01")
+
 
 class DocParser:
-    """Structured-extraction agent for first-notice-of-loss narratives."""
+    """Narrative-summariser agent for first-notice-of-loss claims."""
 
     def __init__(
         self,
@@ -83,6 +107,7 @@ class DocParser:
         provider: LLMProvider,
         prompt_loader: PromptLoader,
         settings: Settings,
+        claims_repository: ClaimsRepository | None = None,
         connection_factory: (
             Callable[[], AbstractContextManager[psycopg.Connection]] | None
         ) = None,
@@ -90,6 +115,9 @@ class DocParser:
         self._provider: LLMProvider = provider
         self._prompt_loader: PromptLoader = prompt_loader
         self._settings: Settings = settings
+        self._claims_repository: ClaimsRepository = (
+            claims_repository or ClaimsRepository()
+        )
         self._connection_factory: Callable[
             [], AbstractContextManager[psycopg.Connection]
         ] = connection_factory or self._default_connection_factory
@@ -98,31 +126,38 @@ class DocParser:
     def with_defaults(
         cls, settings: Settings, *, provider: LLMProvider
     ) -> DocParser:
-        """Wire the production collaborators (`PromptLoader`, real DB connection)."""
+        """Wire the production collaborators (`PromptLoader`, repository, DB)."""
         return cls(
             provider=provider,
             prompt_loader=PromptLoader(),
             settings=settings,
+            claims_repository=ClaimsRepository(),
         )
 
     def evaluate(
         self, claim_id: UUID, correlation_id: UUID
     ) -> DocParserResult:
         """
-        Run the extraction flow against a single claim. Returns a
-        typed `DocParserResult`; raises `ValueError` on any
-        precondition failure or parse failure, and
-        `LLMProviderError` if the Gateway call itself fails. Audit
-        log entries are written on every exit path.
+        Run the summary flow against a single claim. Returns a typed
+        `DocParserResult`; raises `ValueError` on any precondition or
+        summary-guard failure, and `LLMProviderError` if the Gateway
+        call itself fails. Audit log entries are written on every exit
+        path that reaches the model call (a missing claim raises before
+        any audit, as it did before the refactor).
         """
         with self._connection_factory() as conn:
-            narrative = self._load_narrative(conn, claim_id)
-            response, output, error, latency_ms = self._invoke_llm(narrative)
+            record = self._load_claim_record(conn, claim_id)
+            response, summary, error, latency_ms = self._invoke_llm(record.narrative)
+            # The structured fields always come from the record; only the
+            # summary is model-derived, so the output exists iff the summary did.
+            output = (
+                _output_from_record(record, summary) if summary is not None else None
+            )
             self._write_audit(
                 conn=conn,
                 correlation_id=correlation_id,
                 claim_id=claim_id,
-                narrative=narrative,
+                narrative=record.narrative,
                 response=response,
                 output=output,
                 latency_ms=latency_ms,
@@ -143,59 +178,56 @@ class DocParser:
 
     def parse(self, narrative: str) -> tuple[DocParserOutput, ProbeMetadata]:
         """
-        Run the extraction LLM step on a raw narrative — no audit, no claim.
+        Run the summary LLM step on a raw narrative — no audit, no claim.
 
-        The agent-test-bench path: build the prompt, call the model, parse the
-        output, and return it with the LLM-call metadata. The only side effect is
-        the APILogger record `provider.complete` emits. `evaluate` is the
-        audit-writing, claim-bound counterpart; this reuses its core
-        (`_invoke_llm`) so the two cannot drift.
+        The agent-test-bench path: build the prompt, call the model, validate the
+        summary, and return a `DocParserOutput` whose structured fields are
+        sentinels (there is no claim record to read) and whose `narrative_summary`
+        is the real model output. The only side effect is the APILogger record
+        `provider.complete` emits. `evaluate` is the audit-writing, claim-bound
+        counterpart; this reuses its core (`_invoke_llm`) so the two cannot drift.
         """
-        response, output, error, latency_ms = self._invoke_llm(narrative)
+        response, summary, error, latency_ms = self._invoke_llm(narrative)
         if error is not None:
             raise error
-        assert response is not None and output is not None
-        return output, probe_metadata(response, latency_ms)
+        assert response is not None and summary is not None
+        return _probe_output(summary), probe_metadata(response, latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps
     # ------------------------------------------------------------------ #
 
-    def _load_narrative(self, conn: psycopg.Connection, claim_id: UUID) -> str:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT narrative FROM claims WHERE claim_id = %s",
-                (claim_id,),
-            )
-            row = cur.fetchone()
-        if row is None:
+    def _load_claim_record(
+        self, conn: psycopg.Connection, claim_id: UUID
+    ) -> ClaimRecord:
+        """
+        Read the claim row, or abort. The record is the source of truth for the
+        structured fields; a missing row is a caller error (the orchestrator
+        persists the claim before firing the pipeline). An empty narrative is
+        rejected here because the summary call has nothing to work from.
+        """
+        record = self._claims_repository.get(conn, claim_id)
+        if record is None:
             raise ValueError(
                 f"DocParser: claim not found in claims table; claim_id={claim_id}"
             )
-        narrative = row[0]
-        if not isinstance(narrative, str) or not narrative.strip():
+        if not record.narrative.strip():
             raise ValueError(
-                "DocParser: claim narrative is empty or non-string; "
-                f"claim_id={claim_id} type={type(narrative).__name__}"
+                "DocParser: claim narrative is empty or whitespace; "
+                f"claim_id={claim_id}"
             )
-        return narrative
+        return record
 
     def _invoke_llm(
         self, narrative: str
-    ) -> tuple[
-        ProviderResponse | None,
-        DocParserOutput | None,
-        BaseException | None,
-        int,
-    ]:
+    ) -> tuple[ProviderResponse | None, str | None, BaseException | None, int]:
         """
-        Build the prompt, call the provider, parse the output.
+        Build the summary prompt, call the provider, validate the prose.
 
-        Returns `(response, output, error, latency_ms)`. Either
-        `output` is populated and `error` is None, or `error` is
-        populated and `output` is None. `latency_ms` is measured
-        across the whole call so the audit entry can report
-        time-spent even on the failure paths.
+        Returns `(response, summary, error, latency_ms)`. Either `summary` is a
+        validated string and `error` is None, or `error` is populated and
+        `summary` is None. `latency_ms` is measured across the whole call so the
+        audit entry can report time-spent on the failure paths too.
         """
         system_prompt = self._prompt_loader.system("doc_parser")
         user_prompt = self._prompt_loader.user(
@@ -221,10 +253,10 @@ class DocParser:
             return None, None, exc, int((time.perf_counter() - t0) * 1000)
 
         try:
-            output = _parse_output(response.text)
+            summary = _validate_summary(response.text)
         except ValueError as exc:
             return response, None, exc, int((time.perf_counter() - t0) * 1000)
-        return response, output, None, int((time.perf_counter() - t0) * 1000)
+        return response, summary, None, int((time.perf_counter() - t0) * 1000)
 
     def _write_audit(
         self,
@@ -267,45 +299,68 @@ class DocParser:
 # --------------------------------------------------------------------------- #
 
 
-def _parse_output(response_text: str) -> DocParserOutput:
+def _validate_summary(response_text: str) -> str:
     """
-    Pull a `DocParserOutput` out of the model's text response.
+    Validate Haiku's plain-prose summary. Sanitise → validate → abort → return.
 
-    Failure modes, all surfaced as `ValueError` with the response
-    excerpt embedded:
-      - No `{...}` block in the response.
-      - Block is not valid JSON.
-      - JSON is not an object.
-      - Object fails `DocParserOutput` schema validation (missing
-        field, wrong type, bad date, non-positive amount, exceeded
-        length).
-
-    No retry-rescue. A misbehaving model is a hard failure; the
-    audit log captures the exact response that broke parsing.
+    The model now returns prose, not JSON, so there is nothing to parse — only to
+    bound. Both failure modes raise `ValueError` with the offending text:
+      - Empty or whitespace-only: the model produced no summary.
+      - Longer than the `DocParserOutput` cap: rejected here with the length and
+        an excerpt, rather than deferring to a less specific Pydantic error.
     """
-    raw = _extract_json_block(response_text, agent_name="DocParser")
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        excerpt_text = response_text[:500]
+    summary = response_text.strip()
+    if not summary:
         raise ValueError(
-            "DocParser: model response is not valid JSON; "
-            f"error={exc} excerpt={excerpt_text!r}"
-        ) from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError(
-            "DocParser: model response JSON is not an object; "
-            f"got type={type(parsed).__name__}"
+            "DocParser: model returned an empty or whitespace-only summary; "
+            f"excerpt={response_text[:500]!r}"
         )
-
-    try:
-        return DocParserOutput.model_validate(parsed)
-    except PydanticValidationError as exc:
+    if len(summary) > _SUMMARY_MAX_CHARS:
         raise ValueError(
-            "DocParser: model response failed schema validation; "
-            f"errors={exc.errors()} parsed={parsed!r}"
-        ) from exc
+            f"DocParser: model summary exceeds the {_SUMMARY_MAX_CHARS}-character "
+            f"cap; got {len(summary)} chars; excerpt={summary[:500]!r}"
+        )
+    return summary
+
+
+def _output_from_record(
+    record: ClaimRecord, narrative_summary: str
+) -> DocParserOutput:
+    """
+    Assemble the Doc-Parser output from the claim record plus the LLM summary.
+
+    This is the single place the column→field mapping lives, so the two name
+    differences — `reported_amount`→`claimed_amount` and
+    `claimant_name`→`claimant_identifier` — cannot drift across call sites. The
+    structured values come from an already-validated `ClaimRecord`; only
+    `narrative_summary` originates with the model, and it is pre-validated by
+    `_validate_summary`.
+    """
+    return DocParserOutput(
+        loss_date=record.loss_date,
+        jurisdiction=record.jurisdiction,
+        claim_type=record.claim_type,
+        claimed_amount=record.reported_amount,
+        claimant_identifier=record.claimant_name,
+        narrative_summary=narrative_summary,
+    )
+
+
+def _probe_output(narrative_summary: str) -> DocParserOutput:
+    """
+    Assemble a probe-path output: real LLM summary, sentinel structured fields.
+
+    The test bench has no claim record, so the structured fields have no source
+    of truth; the sentinels are honest placeholders the UI labels explicitly.
+    """
+    return DocParserOutput(
+        loss_date=_PROBE_SENTINEL_LOSS_DATE,
+        jurisdiction=_PROBE_SENTINEL_JURISDICTION,
+        claim_type=_PROBE_SENTINEL_CLAIM_TYPE,
+        claimed_amount=_PROBE_SENTINEL_CLAIMED_AMOUNT,
+        claimant_identifier=_PROBE_SENTINEL_CLAIMANT,
+        narrative_summary=narrative_summary,
+    )
 
 
 def _build_audit_payload(
@@ -317,12 +372,21 @@ def _build_audit_payload(
     latency_ms: int,
     error: BaseException | None,
 ) -> dict[str, Any]:
-    """Assemble the locked doc-parser-step audit payload."""
+    """Assemble the locked doc-parser-step audit payload.
+
+    `fields_source` is the Phase 8.2 additive field: it records that the
+    structured fields came from the claim record, not from LLM extraction. The
+    `output` block carries the full field set as before; the `llm_call` block now
+    reflects a call that produced only `narrative_summary`.
+    """
     payload: dict[str, Any] = {
         "input": {
             "claim_id": str(claim_id),
             "narrative_excerpt": _excerpt(narrative, _NARRATIVE_AUDIT_EXCERPT_CHARS),
         },
+        # Honest provenance: the structured fields are sourced from the claim
+        # record; only the summary is model-derived.
+        "fields_source": _FIELDS_SOURCE,
         "llm_call": (
             {
                 "provider": _PROVIDER_LABEL,

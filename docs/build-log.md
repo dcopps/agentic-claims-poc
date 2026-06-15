@@ -541,3 +541,44 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Clone-and-run verification.
 
 ---
+
+## Phase 8.2 — Doc-Parser Refactor (Claim Record as Source of Truth)
+
+**Date:** 2026-06-15
+
+**Phase / Prompt:** Phase 8.2 — [`docs/prompts/10-phase-8.2-doc-parser-refactor.md`](prompts/10-phase-8.2-doc-parser-refactor.md)
+**Plan (approved):** [`docs/prompts/10-phase-8.2-doc-parser-refactor-plan.md`](prompts/10-phase-8.2-doc-parser-refactor-plan.md) — approved 2026-06-15T17:50:28Z
+**Plan iterations:** 0 rejected revisions (approved as written; Q2 resolved to the fixed `"unknown"` sentinel).
+**Report:** [`docs/prompts/10-phase-8.2-doc-parser-refactor-report.md`](prompts/10-phase-8.2-doc-parser-refactor-report.md)
+
+**Prompt summary.** A focused architectural refactor of a single agent, prompted by a demo-rehearsal discovery. Haiku reliably *defaults* the structured fields (`loss_date`, `jurisdiction`, `claimant_identifier`, `claimed_amount`) to placeholders that trip Pydantic and abort the pipeline; Phase 8.1's prompt-engineering route didn't move the model. The architectural answer: source the structured fields from the `claims` row (the system-of-record) and call Haiku only for `narrative_summary`. `DocParserOutput`'s shape is unchanged; the audit payload gains one additive top-level field, `"fields_source": "claim_record"`. Bump to 0.8.2.
+
+**What changed:**
+
+- `backend/app/agents/doc_parser.py` — the core refactor. Injects `ClaimsRepository`; `_load_narrative` → `_load_claim_record` (returns the typed `ClaimRecord`, raises on missing claim / empty narrative). `_invoke_llm` now returns a validated summary *string* (no JSON parsing); the JSON machinery (`_parse_output`, `_extract_json_block`, `json` import) is deleted. New module helpers `_validate_summary` (length/content guard), `_output_from_record` (the single column→field mapping site), and `_probe_output` (sentinel structured fields for the test bench). `_build_audit_payload` gains top-level `"fields_source": "claim_record"`.
+- `backend/app/prompts/system/doc_parser.md` — replaced: focused "narrative summariser" role, plain-prose ≤500-char output, no JSON. Extraction rules and hedged-dollar examples deleted.
+- `backend/app/prompts/user/doc_parser_template.md` — replaced: narrative + "produce the summary" task.
+- `frontend/src/components/AgentTestPanel.tsx` — additive optional `note?` prop rendered as muted helper copy.
+- `frontend/src/pages/AgentsPage.tsx` — passes the sentinel caveat as the Doc-Parser panel's `note`.
+- `pyproject.toml` — version `0.8.1 → 0.8.2`.
+- `backend/tests/test_doc_parser.py` — rewritten for the prose-summary model: structured fields asserted against the inserted row; new empty-summary and oversized-summary guard tests; four obsolete JSON-path tests deleted.
+- `backend/tests/test_doc_parser_prompts.py` — system-prompt golden test rewritten for the summariser contract.
+- `backend/tests/test_prompt_loader.py` — the Phase 8.1 `test_doc_parser_prompt_covers_hedged_dollar_figures` regression (+ `_HEDGED_DOLLAR_EXAMPLES`) removed; it pinned the few-shot extraction block Phase 8.2 abandons.
+- `backend/tests/test_agent_probe.py` — Doc-Parser probe asserts sentinel structured fields + real summary.
+- `backend/tests/test_pipeline_scenarios.py` — `_doc_json(...)` → `_doc_summary()` (plain text); the three scenarios' inserted rows already carry the matching type/amount.
+- `backend/tests/test_runs_repository.py` — `_insert_claim` parametrised by `claim_type`/`amount` so the record drives the run; `_run` gains a `confidence` param; abort test uses an empty summary (an invalid-JSON string is now a *valid* summary); compare test redesigned around the adjuster-confidence floor (a same-claim settlement jump is no longer expressible once the record is authoritative).
+- `backend/tests/test_demo_fixture.py` — imports/uses `_doc_summary()`.
+
+**Tests:** 327 backend passing, 7 skipped; 30 frontend passing. Net backend delta vs Phase 8: −3 (4 JSON-path + 6 hedged-dollar tests removed; 2 summary-guard + adjustments added). `ruff` clean; `mypy backend` clean (106 files); frontend tsc/eslint/vitest clean.
+
+**Architectural talking-point added to the report.** Doc-Parser now treats the claim record as the source of truth for structured data; the LLM is used only for `narrative_summary`, the one task that genuinely needs natural-language understanding. The audit payload records this honestly via `"fields_source": "claim_record"`. Stronger narrative than "Doc-Parser extracts everything from the narrative": explicit data flows, the LLM used only where it's reliably good, and an audit trail that explains where each field came from.
+
+**Issues discovered:**
+
+- **An invalid-JSON string is now a *valid* summary.** `test_reconstruct_aborted_run` relied on `doc_text="not valid json at all"` to abort Doc-Parser; with no JSON parsing left, that is a perfectly good summary. Switched the abort trigger to an empty/whitespace response (the summary guard).
+- **Same-claim settlement divergence is no longer expressible.** `test_compare_same_claim_reveals_diff` expected an $85k→$850k settlement jump on one claim; once the record is authoritative, the Adjuster range-checks settlement against the record's $85k water-damage band. Redesigned the test to express the variant difference through the adjuster-confidence floor with an in-band settlement change — same feature coverage, compatible with the new data flow.
+- **A fifth obsolete extraction test** (`test_prompt_loader.py`'s hedged-dollar regression) surfaced beyond the four flagged in the plan; removed.
+
+**Next:** Clone-and-run verification.
+
+---

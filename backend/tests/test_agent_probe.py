@@ -117,16 +117,7 @@ def test_doc_parser_probe_no_audit(
     prompt_loader: PromptLoader,
     mock_provider: MockProvider,
 ) -> None:
-    mock_provider.response_text = json.dumps(
-        {
-            "loss_date": "2026-04-18",
-            "jurisdiction": "United Kingdom",
-            "claim_type": "water_damage",
-            "claimed_amount": "85000.00",
-            "claimant_identifier": "Acme Ltd",
-            "narrative_summary": "Burst supply line flooded the floor.",
-        }
-    )
+    mock_provider.response_text = "Burst supply line flooded the floor."
     parser = DocParser(
         provider=mock_provider,
         prompt_loader=prompt_loader,
@@ -134,7 +125,12 @@ def test_doc_parser_probe_no_audit(
         connection_factory=lambda: _conn_factory(clean_db),
     )
     output, meta = parser.parse("Burst supply line flooded the floor.")
-    assert output.claim_type == "water_damage"
+    # The summary is the real model output; structured fields are probe sentinels
+    # (no claim record exists on the probe path).
+    assert output.narrative_summary == "Burst supply line flooded the floor."
+    assert output.claim_type == "unknown"
+    assert output.jurisdiction == "Unknown"
+    assert output.claimant_identifier == "Unknown"
     assert meta.model == "mock-model-latest"
     assert _audit_count(clean_db) == 0
 
