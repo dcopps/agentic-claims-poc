@@ -18,7 +18,38 @@ rather than four near-identical copies.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from uuid import UUID, uuid4
+
+from backend.app.llm.provider import ProviderResponse
+
+
+@dataclass(frozen=True)
+class ProbeMetadata:
+    """
+    LLM-call metadata an agent's non-audit *probe* returns (Phase 6 test bench).
+
+    A probe runs the agent's prompt → LLM → parse path without writing an audit
+    entry and without a claim — it is for the agent test bench, where a developer
+    invokes one agent on arbitrary input. The metadata is what the bench shows
+    alongside the typed output: which model answered, how long it took, and the
+    token counts.
+    """
+
+    model: str
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
+def probe_metadata(response: ProviderResponse, latency_ms: int) -> ProbeMetadata:
+    """Build `ProbeMetadata` from a provider response and the measured latency."""
+    return ProbeMetadata(
+        model=response.model,
+        latency_ms=latency_ms,
+        prompt_tokens=response.prompt_tokens,
+        completion_tokens=response.completion_tokens,
+    )
 
 # Regex that finds the outermost `{...}` block in a string. Used to
 # rescue a JSON payload from a model that wrapped its output in prose

@@ -35,12 +35,17 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
+from backend.app.agents._shared import (
+    ProbeMetadata,
+    probe_metadata,
+)
 from backend.app.agents._shared import (
     excerpt as _excerpt,
 )
@@ -50,7 +55,7 @@ from backend.app.agents._shared import (
 from backend.app.agents._shared import (
     new_correlation_id as _new_correlation_id,
 )
-from backend.app.agents.adjuster_models import AdjusterResult
+from backend.app.agents.adjuster_models import AdjusterOutput, AdjusterResult
 from backend.app.agents.guardrail_models import (
     GuardrailFlag,
     GuardrailOutput,
@@ -65,6 +70,7 @@ from backend.app.llm.provider import (
     ProviderResponse,
 )
 from backend.app.prompts import PromptLoader
+from backend.data.market_data import MarketRange
 from backend.db.connection import open_connection
 from backend.settings import Settings
 
@@ -170,6 +176,45 @@ class Guardrail:
                 model=response.model,
                 latency_ms=latency_ms,
             )
+
+    def check(
+        self,
+        adjuster_output: AdjusterOutput,
+        retrieved_chunks: list[RetrievedChunk],
+    ) -> tuple[GuardrailOutput, ProbeMetadata]:
+        """
+        Run the guardrail check on an adjuster output — no audit, no claim.
+
+        The guardrail reads only the adjuster's *output* (reasoning + settlement),
+        so the test-bench path wraps it in a minimal `AdjusterResult` with a
+        synthetic range that contains the value, letting the existing rule-engine
+        + LLM path run unchanged. The wrapping is test-bench only; the orchestrator
+        always passes a real result. The only side effect is the APILogger record.
+        """
+        synthetic = AdjusterResult(
+            claim_id=_new_correlation_id(),
+            correlation_id=_new_correlation_id(),
+            output=adjuster_output,
+            market_range=MarketRange(
+                claim_type="probe",
+                severity="moderate",
+                floor=Decimal("0"),
+                ceiling=adjuster_output.recommended_settlement,
+            ),
+            model="probe",
+            latency_ms=0,
+        )
+        rule_flags = self._run_rule_checks(synthetic, retrieved_chunks)
+        response, llm_flags, error, latency_ms = self._invoke_llm(
+            adjuster_result=synthetic,
+            retrieved_chunks=retrieved_chunks,
+            rule_flags=rule_flags,
+        )
+        if error is not None:
+            raise error
+        assert response is not None
+        output = _combine_and_decide(rule_flags, llm_flags)
+        return output, probe_metadata(response, latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps

@@ -18,8 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Locked enumeration of agent identifiers. `system` is the orchestrator-
 # level identifier for events not attributable to a specific agent (e.g.
-# a pipeline-start marker). Anything outside this set is a programming
-# error, not a runtime input — the validator refuses early.
+# a pipeline-start marker). `human` (Phase 6) marks a reviewer's approve/
+# reject decision on an escalated claim. Anything outside this set is a
+# programming error, not a runtime input — the validator refuses early.
+# The `audit_log` agent CHECK constraint mirrors this set (migration 0002).
 AgentName = Literal[
     "system",
     "doc_parser",
@@ -27,6 +29,7 @@ AgentName = Literal[
     "adjuster",
     "guardrail",
     "orchestrator",
+    "human",
 ]
 
 

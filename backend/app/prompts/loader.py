@@ -91,6 +91,22 @@ class PromptLoader:
         except _MissingPlaceholderError as exc:
             raise PromptFormatError(str(exc)) from exc
 
+    def raw(self, kind: str, name: str) -> str:
+        """
+        Return the verbatim, *unformatted* contents of `{kind}/{name}.md`.
+
+        Unlike `user(...)`, no placeholder substitution happens — the template is
+        returned with its `{...}` placeholders intact. The prompt-display endpoint
+        (Phase 6) uses this to show the prompt *source* for an agent/variant, not
+        a filled prompt. `kind` must be "system" or "user"; the same name / path-
+        traversal / size guards as the other readers apply.
+        """
+        if kind not in _VALID_KINDS:
+            raise PromptFormatError(
+                f"PromptLoader.raw: kind must be one of {_VALID_KINDS}; got {kind!r}"
+            )
+        return self._load(kind, name)
+
     def _load(self, kind: str, name: str) -> str:
         # Sanitise — trim and re-validate so a stray whitespace cannot
         # mask a path-traversal attempt.

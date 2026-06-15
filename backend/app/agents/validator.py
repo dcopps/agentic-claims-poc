@@ -41,6 +41,10 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
+    ProbeMetadata,
+    probe_metadata,
+)
+from backend.app.agents._shared import (
     clamp_unit as _clamp_unit,
 )
 from backend.app.agents._shared import (
@@ -167,6 +171,28 @@ class Validator:
                 model=response.model,
                 latency_ms=latency_ms,
             )
+
+    def assess(
+        self, narrative: str
+    ) -> tuple[ValidatorVerdict, list[RetrievedChunk], ProbeMetadata]:
+        """
+        Run the RAG flow on a raw narrative — no audit, no claim (test bench).
+
+        Embeds the narrative, retrieves against the indexed policy, calls the
+        model, and returns the verdict, the retrieved chunks, and the LLM-call
+        metadata. Reuses `evaluate`'s steps so the two cannot drift; the only side
+        effect is the APILogger record.
+        """
+        with self._connection_factory() as conn:
+            query_vector = self._embed_narrative(narrative)
+            retrieved = self._retrieve_top_chunks(conn, query_vector)
+        response, verdict, error, latency_ms = self._invoke_llm(
+            narrative=narrative, retrieved=retrieved
+        )
+        if error is not None:
+            raise error
+        assert response is not None and verdict is not None
+        return verdict, retrieved, probe_metadata(response, latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps — each short, single-responsibility, defensively

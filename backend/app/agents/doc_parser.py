@@ -35,6 +35,10 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
+    ProbeMetadata,
+    probe_metadata,
+)
+from backend.app.agents._shared import (
     excerpt as _excerpt,
 )
 from backend.app.agents._shared import (
@@ -136,6 +140,22 @@ class DocParser:
                 model=response.model,
                 latency_ms=latency_ms,
             )
+
+    def parse(self, narrative: str) -> tuple[DocParserOutput, ProbeMetadata]:
+        """
+        Run the extraction LLM step on a raw narrative — no audit, no claim.
+
+        The agent-test-bench path: build the prompt, call the model, parse the
+        output, and return it with the LLM-call metadata. The only side effect is
+        the APILogger record `provider.complete` emits. `evaluate` is the
+        audit-writing, claim-bound counterpart; this reuses its core
+        (`_invoke_llm`) so the two cannot drift.
+        """
+        response, output, error, latency_ms = self._invoke_llm(narrative)
+        if error is not None:
+            raise error
+        assert response is not None and output is not None
+        return output, probe_metadata(response, latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps

@@ -122,6 +122,41 @@ export interface RunComparison {
   diff: DiffSummary
 }
 
+export interface AuditEntry {
+  audit_id: number
+  agent: string
+  step: string
+  created_at: string
+  payload: Record<string, unknown>
+  chain_hash: string
+}
+
+export interface AuditBreak {
+  audit_id: number
+  kind: string
+  expected: string
+  actual: string
+}
+
+export interface ChainVerification {
+  ok: boolean
+  rows_checked: number
+  first_break: AuditBreak | null
+}
+
+export interface HumanDecisionBody {
+  decision: 'approved' | 'rejected'
+  decided_by: string
+  comment?: string | null
+}
+
+export interface AgentPrompt {
+  agent: string
+  variant: string
+  system: string
+  user: string
+}
+
 // A loosely-typed SSE event — the strip reads a handful of fields by name.
 export interface PipelineEvent {
   event_type: string

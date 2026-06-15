@@ -37,6 +37,9 @@ ClaimStatus = Literal[
     "guardrail_checked",
     "settled",
     "awaiting_human",
+    # Terminal state for a human-rejected claim (Phase 6). Distinct from `settled`
+    # (human-approved). Added to the claims.status CHECK in migration 0002.
+    "aborted",
 ]
 
 # The six claim types with a cell in market_data.yaml. A drift guard test asserts

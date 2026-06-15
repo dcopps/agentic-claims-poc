@@ -119,3 +119,42 @@ def test_base_path_must_be_directory(tmp_path: Path) -> None:
     with pytest.raises(ValueError) as exc_info:
         PromptLoader(base_path=not_a_dir)
     assert "existing directory" in str(exc_info.value)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 6 — raw() unformatted reads
+# --------------------------------------------------------------------------- #
+
+
+def test_raw_user_returns_unformatted_template() -> None:
+    """raw() returns the template with placeholders intact (not substituted)."""
+    loader = PromptLoader()
+    content = loader.raw("user", "validator_template")
+    assert "{claim_narrative}" in content
+    assert "{retrieved_chunks}" in content
+
+
+def test_raw_system_returns_verbatim() -> None:
+    loader = PromptLoader()
+    content = loader.raw("system", "validator")
+    assert "coverage validator" in content
+
+
+def test_raw_rejects_unknown_kind() -> None:
+    loader = PromptLoader()
+    with pytest.raises(PromptFormatError) as exc:
+        loader.raw("instructions", "validator")
+    assert "kind must be one of" in str(exc.value)
+
+
+def test_raw_missing_file_raises(temp_prompt_root: Path) -> None:
+    loader = PromptLoader(base_path=temp_prompt_root)
+    with pytest.raises(PromptNotFoundError):
+        loader.raw("user", "does_not_exist")
+
+
+def test_raw_rejects_path_traversal() -> None:
+    loader = PromptLoader()
+    with pytest.raises(PromptFormatError) as exc:
+        loader.raw("user", "../system/validator")
+    assert "must match" in str(exc.value)

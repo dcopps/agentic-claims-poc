@@ -42,6 +42,10 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
+    ProbeMetadata,
+    probe_metadata,
+)
+from backend.app.agents._shared import (
     excerpt as _excerpt,
 )
 from backend.app.agents._shared import (
@@ -166,6 +170,29 @@ class Adjuster:
                 model=response.model,
                 latency_ms=latency_ms,
             )
+
+    def estimate(
+        self,
+        parsed_claim: DocParserOutput,
+        validator_verdict: ValidatorVerdict,
+    ) -> tuple[AdjusterOutput, ProbeMetadata]:
+        """
+        Run the settlement-estimate LLM step — no audit, no claim (test bench).
+
+        Looks up the market range for the parsed claim, calls the model, parses
+        and range-checks the output, and returns it with the LLM-call metadata.
+        Reuses `evaluate`'s steps; the only side effect is the APILogger record.
+        """
+        market_range = self._lookup_market_range(parsed_claim)
+        response, output, error, latency_ms = self._invoke_llm(
+            parsed_claim=parsed_claim,
+            validator_verdict=validator_verdict,
+            market_range=market_range,
+        )
+        if error is not None:
+            raise error
+        assert response is not None and output is not None
+        return output, probe_metadata(response, latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps

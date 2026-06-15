@@ -2,9 +2,13 @@
 // shares the same base URL and error handling. No state library — plain fetch.
 
 import type {
+  AgentPrompt,
+  AuditEntry,
+  ChainVerification,
   ClaimRecord,
   ClaimStatus,
   ClaimSubmission,
+  HumanDecisionBody,
   PipelineResult,
   RunComparison,
   RunSummary,
@@ -72,6 +76,43 @@ export function replayPipeline(
 
 export function compareRuns(a: string, b: string): Promise<RunComparison> {
   return request<RunComparison>(`/api/runs/compare/${a}/${b}`)
+}
+
+export function getClaim(claimId: string): Promise<ClaimRecord> {
+  return request<ClaimRecord>(`/api/claims/${claimId}`)
+}
+
+export function getRun(correlationId: string): Promise<PipelineResult> {
+  return request<PipelineResult>(`/api/runs/${correlationId}`)
+}
+
+export function listAuditEntries(correlationId: string): Promise<AuditEntry[]> {
+  return request<AuditEntry[]>(`/api/audit?correlation_id=${correlationId}`)
+}
+
+export function verifyChain(correlationId: string): Promise<ChainVerification> {
+  return request<ChainVerification>(`/api/audit/verify/${correlationId}`)
+}
+
+export function submitHumanDecision(
+  claimId: string,
+  body: HumanDecisionBody,
+): Promise<ClaimRecord> {
+  return request<ClaimRecord>(`/api/claims/${claimId}/human-decision`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function getAgentPrompt(agent: string, variant = 'default'): Promise<AgentPrompt> {
+  return request<AgentPrompt>(`/api/agents/${agent}/prompt?variant=${variant}`)
+}
+
+export function testAgent<T>(agent: string, body: unknown, variant = 'default'): Promise<T> {
+  return request<T>(`/api/agents/test/${agent}?variant=${variant}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 
 export function streamUrl(correlationId: string): string {

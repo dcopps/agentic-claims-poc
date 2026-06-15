@@ -1,9 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { streamUrl } from '../api/client'
 import type { PipelineEvent } from '../api/types'
 
-// SSE event names the backend emits; each is dispatched by name, so we subscribe
-// to each one. The two terminal events close the stream.
 const EVENT_NAMES = [
   'pipeline_started',
   'agent_started',
@@ -19,12 +18,18 @@ interface StreamState {
   events: PipelineEvent[]
 }
 
-// Open an EventSource for `correlationId` and accumulate its events. State is
-// keyed by the correlation id so a new run replaces the previous run's events
-// without a synchronous reset in the effect body — every setState happens inside
-// the subscription callback, which is how effects are meant to feed React.
-export function useRunStream(correlationId: string | null): PipelineEvent[] {
+// Open an EventSource for `correlationId`, accumulate its events, AND feed the
+// TanStack Query cache: each agent completion invalidates the run + audit queries
+// so a lazily-expanded agent card sees its payload as soon as it is written; the
+// terminal event invalidates the claim and its runs list. State is keyed by the
+// correlation id so a new run replaces the previous run's events without a
+// synchronous reset in the effect body.
+export function useRunStream(
+  correlationId: string | null,
+  claimId?: string,
+): PipelineEvent[] {
   const [state, setState] = useState<StreamState>({ cid: null, events: [] })
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!correlationId) return
@@ -34,10 +39,17 @@ export function useRunStream(correlationId: string | null): PipelineEvent[] {
         const parsed = JSON.parse(event.data) as PipelineEvent
         setState((prev) => ({
           cid: correlationId,
-          // First event of a new correlation id replaces the prior run's list.
           events: prev.cid === correlationId ? [...prev.events, parsed] : [parsed],
         }))
-        if (TERMINAL.has(parsed.event_type)) source.close()
+        if (parsed.event_type === 'agent_completed') {
+          void queryClient.invalidateQueries({ queryKey: ['run', correlationId] })
+          void queryClient.invalidateQueries({ queryKey: ['audit', correlationId] })
+        }
+        if (TERMINAL.has(parsed.event_type)) {
+          source.close()
+          void queryClient.invalidateQueries({ queryKey: ['claims'] })
+          if (claimId) void queryClient.invalidateQueries({ queryKey: ['claim', claimId] })
+        }
       } catch {
         // Ignore a malformed frame rather than tearing down the strip.
       }
@@ -46,9 +58,7 @@ export function useRunStream(correlationId: string | null): PipelineEvent[] {
       source.addEventListener(name, onEvent as EventListener)
     }
     return () => source.close()
-  }, [correlationId])
+  }, [correlationId, claimId, queryClient])
 
-  // Show events only for the active correlation id (the previous run's list is
-  // discarded the moment the id changes, before the first new event arrives).
   return state.cid === correlationId ? state.events : []
 }

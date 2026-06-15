@@ -424,3 +424,42 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Phase 6 — Frontend polish.
 
 ---
+
+## Phase 6 — Frontend Polish (+ supporting backend endpoints)
+
+**Date:** 2026-06-14
+
+**Phase / Prompt:** Phase 6 — [`docs/prompts/07-phase-6-frontend-polish.md`](prompts/07-phase-6-frontend-polish.md)
+**Plan (approved):** [`docs/prompts/07-phase-6-frontend-polish-plan.md`](prompts/07-phase-6-frontend-polish-plan.md) — approved 2026-06-14T21:16:53Z
+**Plan iterations:** 0 rejected revisions (approved as written, with two report-only notes: make the chain-verify UI copy explicit it verifies the whole ledger; call out that the human panel assembles evidence from `/api/audit?correlation_id=`).
+**Report:** [`docs/prompts/07-phase-6-frontend-polish-report.md`](prompts/07-phase-6-frontend-polish-report.md)
+
+**Prompt summary.** Polish the functional Phase 5 UI into a routed React SPA with a design system, live pipeline visualisation, an audit viewer with chain verification, a human-review panel, and an agent test bench — plus the backend endpoints and the schema migration those surfaces require; bump to 0.6.0.
+
+**What changed:**
+
+- `backend/db/migrations/versions/0002_audit_human_agent.py` — new. Extends `audit_log` agent CHECK with `'human'` and `claims` status CHECK with `'aborted'` (forward-only; downgrade hazard documented).
+- `backend/app/audit/event.py` — `AgentName` Literal gains `'human'`. `backend/app/claims/models.py` — `ClaimStatus` gains `'aborted'`.
+- `backend/app/prompts/loader.py` — additive `raw(kind, name)` (unformatted prompt source).
+- `backend/app/agents/_shared.py` — `ProbeMetadata` + `probe_metadata`.
+- `backend/app/agents/{doc_parser,validator,adjuster,guardrail}.py` — additive non-audit `probe` methods (`parse`/`assess`/`estimate`/`check`); `evaluate` unchanged.
+- `backend/app/api/audit.py`, `human.py`, `agents_test.py` — new routers (audit list + whole-ledger verify; human decision; 4 agent-test endpoints + prompt-source endpoint). `api/__init__.py` mounts them.
+- `pyproject.toml` — version `0.5.0 → 0.6.0`.
+- Backend tests: `test_migration_0002.py` (4), `test_prompt_loader.py` (+5), `test_agent_probe.py` (4), `test_audit_api.py` (5), `test_human_decision_api.py` (7), `test_agents_test_api.py` (10, 1 gated).
+- `frontend/package.json` — added `@tanstack/react-query`, `react-router-dom`. `main.tsx` — QueryClient + BrowserRouter. `App.tsx` — router shell, six routes.
+- `frontend/src/styles/tokens.ts` + `components/ui.tsx` (design system); `pages/` (Claims, ClaimDetail, RunDetail, Compare, Audit, Agents); `components/` (AgentCard, HumanReviewPanel, AgentTestPanel); `hooks/queries.ts` + rewired `useRunStream.ts`; `api/{client,types}.ts` extended; `test/utils.tsx`.
+- Removed superseded Phase 5 components (ClaimList, ProgressStrip, CompareView) and their tests.
+- `CLAUDE.md` — Current Status updated to "Phase 6 complete; Phase 7 next".
+
+**Tests:** 311 backend passing, 7 skipped; 22 frontend passing. Repository total **333 passing, 7 skipped, 0 failing**. Phase 6 adds **34 backend** + **~18 frontend** new tests (Migration 4, PromptLoader.raw 5, Agent probe 4, Audit API 5, Human decision 7, Agent test API 9+1 gated; frontend 22 total). `ruff` clean; `mypy backend` clean (104 files); frontend `tsc` + `eslint` clean.
+
+**Issues discovered:**
+
+- **`aborted` was not a valid claim status.** The prompt assumed human-rejection → `aborted` would work, but the `claims.status` CHECK had only the seven lifecycle values. Migration 0002 also extends `claims.status` with `aborted`; `ClaimStatus` gains it.
+- **Chain verification is whole-ledger, not per-run** — the verify endpoint runs the full-ledger verifier; the UI copy says so (approval note 1).
+- **The agent test bench needed a no-audit path** — resolved by additive `probe` methods (existing agent tests stay green).
+- **Anonymisation review.** No client/competitor names in the new files.
+
+**Next:** Phase 7 — Demo polish and documentation.
+
+---
