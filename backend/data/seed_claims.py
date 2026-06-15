@@ -125,7 +125,8 @@ def _build_scripted_claims() -> list[SyntheticClaim]:
                 "Burst supply line under the second-floor break room flooded "
                 "the warehouse mezzanine and damaged dry-stored inventory. "
                 "Plumbing contractor confirmed pipe failure was sudden and "
-                "accidental. No prior leakage history."
+                "accidental, with no prior leakage history. Damaged stock "
+                "replacement and structural drying are estimated at $85,000."
             ),
             claim_type="water_damage",
             reported_amount=Decimal("85000.00"),
@@ -142,7 +143,8 @@ def _build_scripted_claims() -> list[SyntheticClaim]:
                 "Overnight fire originating in an electrical panel destroyed "
                 "the finishing line and damaged the adjacent storage bay at "
                 "the manufacturing facility. Fire department report attached. "
-                "Production halted; equipment loss substantial."
+                "Production halted; combined equipment and structural loss is "
+                "estimated at $850,000."
             ),
             claim_type="fire",
             reported_amount=Decimal("850000.00"),
@@ -160,9 +162,9 @@ def _build_scripted_claims() -> list[SyntheticClaim]:
                 "headquarters building, followed by extensive internal water "
                 "damage as precipitation entered through the breach. "
                 "Adjacent flood barriers were overtopped during the same "
-                "weather event. Business operations suspended at the site. "
-                "The claimant has referenced an unlisted endorsement they "
-                "believe extends coverage."
+                "weather event. Business operations suspended at the site; the "
+                "total loss is estimated at $1,400,000. The claimant has "
+                "referenced an unlisted endorsement they believe extends coverage."
             ),
             claim_type="storm_complex",
             reported_amount=Decimal("1400000.00"),

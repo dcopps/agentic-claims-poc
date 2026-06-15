@@ -1,7 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import type { AuditEntry, PipelineEvent } from '../api/types'
 import { AgentCard, type AgentStatus } from '../components/AgentCard'
-import { Card, Spinner, StatusBadge } from '../components/ui'
+import { Card, ErrorBanner, StatusBadge } from '../components/ui'
 import { useAuditEntries, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
 
@@ -19,10 +20,22 @@ export function RunDetailPage() {
   const events = useRunStream(correlationId, claimId)
   const run = useRun(correlationId)
   const audit = useAuditEntries(correlationId)
+  // Subscribe to the run-scoped error the ClaimsPage trigger writes on a POST
+  // failure (fix #6). enabled:false — nothing fetches; this only re-renders when
+  // setQueryData(['runError', cid], …) fires.
+  const runError = useQuery<string | null>({
+    queryKey: ['runError', correlationId],
+    queryFn: async () => null,
+    enabled: false,
+  }).data
 
   const variant = _variant(events, audit.data)
   const completed = events.find((e) => e.event_type === 'pipeline_completed')
-  const status = completed?.status ?? run.data?.status
+  const aborted = events.find((e) => e.event_type === 'pipeline_aborted')
+  const status = completed?.status ?? (aborted ? 'aborted' : run.data?.status)
+  // Before the first SSE event, the runs/audit queries 404 (the run hasn't
+  // written anything yet) — that is expected in-flight state, not an error.
+  const awaiting = events.length === 0 && !completed && !aborted && !runError
 
   return (
     <div className="space-y-4">
@@ -39,6 +52,18 @@ export function RunDetailPage() {
         </p>
       </Card>
 
+      {runError && <ErrorBanner message={`Could not start the run: ${runError}`} />}
+      {aborted && (
+        <ErrorBanner
+          message={`Pipeline aborted at ${aborted.failing_agent}: ${aborted.error_type}${aborted.message ? ` — ${aborted.message}` : ''}`}
+        />
+      )}
+      {awaiting && (
+        <p className="text-sm text-slate-500" data-testid="awaiting-hint">
+          Awaiting pipeline_started…
+        </p>
+      )}
+
       <div className="space-y-2" aria-label="Pipeline agents">
         {AGENTS.map((agent) => (
           <AgentCard
@@ -53,8 +78,6 @@ export function RunDetailPage() {
           />
         ))}
       </div>
-
-      {!completed && run.isLoading && audit.data === undefined && <Spinner />}
     </div>
   )
 }

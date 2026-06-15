@@ -9,11 +9,13 @@ import { vi, type Mock } from 'vitest'
 // hooks work and deep-links can be exercised via `route`).
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/' }: { route?: string } = {},
+  { route = '/', client }: { route?: string; client?: QueryClient } = {},
 ): RenderResult {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  })
+  const queryClient =
+    client ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>

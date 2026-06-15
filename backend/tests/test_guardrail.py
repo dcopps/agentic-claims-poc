@@ -546,3 +546,42 @@ def test_guardrail_real_call(
     # the only invariant we assert is the typed return shape.
     assert isinstance(result, GuardrailResult)
     assert isinstance(result.output, GuardrailOutput)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 8 — market vocabulary is not a hallucinated citation (regression).
+# --------------------------------------------------------------------------- #
+
+
+def test_market_vocabulary_is_not_flagged(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """The Adjuster's market-data vocabulary must not trip the citation check.
+
+    'market band' / 'mid-range' / 'within range' / 'lookup table' carry none of
+    the citation keywords (endorsement, clause, section, …), so the deterministic
+    rule engine raises no hallucinated_citation flag; with a benign LLM response
+    the combined verdict passes.
+    """
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _llm_clean_response()
+    guardrail = _build_guardrail(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    result = guardrail.evaluate(
+        claim_id,
+        uuid4(),
+        adjuster_result=_adjuster_result(
+            "Settlement of $85,000 sits within the market band and mid-range of "
+            "the market-data lookup table for this loss; the value is within range."
+        ),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    assert result.output.passed is True
+    assert not any(f.kind == "hallucinated_citation" for f in result.output.flags)

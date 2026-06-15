@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders, stubFetch } from '../test/utils'
@@ -47,5 +47,37 @@ describe('AgentCard', () => {
     )
     await user.click(screen.getByRole('button'))
     expect(await screen.findByText(/waiting for this agent/i)).toBeInTheDocument()
+  })
+})
+
+describe('AgentCard running state', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('shows the description and expected duration while running', () => {
+    renderWithProviders(
+      <AgentCard agent="validator" label="Validator" status="running" variant="default" />,
+    )
+    expect(screen.getByText(/retrieving policy clauses/i)).toBeInTheDocument()
+    expect(screen.getByText(/~9s/)).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  it('advances the progress bar as time passes', () => {
+    vi.useFakeTimers()
+    renderWithProviders(
+      <AgentCard agent="guardrail" label="Guardrail" status="running" variant="default" />,
+    )
+    const before = Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'))
+    act(() => vi.advanceTimersByTime(1000)) // 1s of a 5s expected → ~20%
+    const after = Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'))
+    expect(after).toBeGreaterThan(before)
+  })
+
+  it('shows no running bar once the agent is done', () => {
+    renderWithProviders(
+      <AgentCard agent="validator" label="Validator" status="done" variant="default" />,
+    )
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getByText('Validator')).toBeInTheDocument()
   })
 })

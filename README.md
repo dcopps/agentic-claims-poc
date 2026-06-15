@@ -141,7 +141,15 @@ The questions a reviewer will ask, answered up front (full treatment in [`docs/d
 - **Why Mistral *and* Claude?** Tiered cost/capability and provider diversity: Sonnet for orchestration, Haiku for cheap deterministic-ish extraction/guardrails, Mistral (open-weight, fine-tunable, tenant-hostable) for the PII-sensitive coverage and settlement decisions.
 - **Why an in-process event bus, not a broker?** A single-process prototype simplification; production uses Service Bus + Durable Functions (which also unlocks the long human-review wait without holding app state).
 - **Why a demo fixture for scenario 3?** Guardrail escalation must reproduce reliably for a demo, but a hallucination is non-deterministic. The fixture makes it deterministic *and* records `demo_fixture: true` in the audit — the audit log stays the trusted record.
-- **The audit log is the trusted record.** Every additive interface change since Phase 4 (full Adjuster reasoning, truthful Validator provider/model, run `variant`, `human` agent, `aborted` status, `demo_fixture`) preserves the property that the audit log alone reconstructs and explains any past decision. See `CLAUDE.md` → "Locked interface extensions since Phase 4".
+- **The audit log is the trusted record.** Every additive interface extension since Phase 4 preserves the property that the audit log alone reconstructs and explains any past decision. Concretely, the additive audit-payload extensions are:
+  - Adjuster `settlement_estimate`: a full `reasoning` field (untruncated, alongside `reasoning_excerpt`) — so reconstruction is verbatim.
+  - Validator `coverage_check`: `llm_call.provider` / `model` report the *actual* provider and model in use, not a hardcoded vendor — so a provider-substitution variant is provable from the log.
+  - `pipeline_started` audit payload **and** SSE event: a `variant` field (default `"default"`).
+  - `audit_log.agent` CHECK extended to include `'human'`; audit steps `human_approval` / `human_rejection`.
+  - `claims.status` CHECK extended to include `'aborted'` (terminal state for a human-rejected claim).
+  - Adjuster `settlement_estimate`: a top-level `demo_fixture: bool` (true means the deterministic demo fixture was used and no model was called).
+
+  All are additive (existing keys unchanged). The locked list is in `CLAUDE.md` → "Locked interface extensions since Phase 4".
 
 ## Production architecture
 

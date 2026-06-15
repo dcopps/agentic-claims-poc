@@ -62,6 +62,17 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
+export function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+    >
+      {message}
+    </div>
+  )
+}
+
 export function JsonBlock({ value }: { value: unknown }) {
   return (
     <pre className="max-h-80 overflow-auto rounded bg-slate-900 p-3 font-mono text-xs text-slate-100">

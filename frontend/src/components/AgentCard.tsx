@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { agentDescriptions } from '../copy/agent-descriptions'
 import { useAgentPrompt } from '../hooks/queries'
 import { Badge, JsonBlock, Spinner } from './ui'
 
@@ -10,6 +11,32 @@ const STATUS_ICON: Record<AgentStatus, string> = {
   done: '✓',
   escalated: '⚠',
   failed: '✗',
+}
+
+// Expected per-agent runtime (ms), empirical from the Phase 8 rehearsal on Render
+// Standard and rounded conservatively upward. Display-only: the SSE
+// `agent_completed` event always wins; this only drives the running progress bar.
+const AGENT_EXPECTED_MS: Record<string, number> = {
+  doc_parser: 6000,
+  validator: 9000,
+  adjuster: 7000,
+  guardrail: 5000,
+}
+
+// While `active`, advance a 0–100 percentage from elapsed/expected. JS-driven
+// (not a pure CSS transition) so the progress is observable in tests; the only
+// setState is inside the interval callback, which the effect rules permit.
+function useProgress(active: boolean, expectedMs: number): number {
+  const [pct, setPct] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const start = Date.now()
+    const id = setInterval(() => {
+      setPct(Math.min(100, ((Date.now() - start) / expectedMs) * 100))
+    }, 200)
+    return () => clearInterval(id)
+  }, [active, expectedMs])
+  return active ? pct : 0
 }
 
 interface AgentCardProps {
@@ -36,6 +63,8 @@ export function AgentCard({
 }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
   const prompt = useAgentPrompt(agent, variant, expanded)
+  const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
+  const progress = useProgress(status === 'running', expectedMs)
 
   return (
     <div className="rounded border border-slate-200 bg-white">
@@ -57,6 +86,24 @@ export function AgentCard({
         )}
         <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
       </button>
+
+      {status === 'running' && (
+        <div className="px-3 pb-2" aria-label={`${label} running`}>
+          <p className="text-xs text-slate-500">
+            {agentDescriptions[agent] ?? 'Working…'} · ~{Math.round(expectedMs / 1000)}s
+          </p>
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-slate-100">
+            <div
+              className="h-1.5 rounded bg-blue-500 transition-[width] duration-200 ease-linear"
+              style={{ width: `${progress}%` }}
+              role="progressbar"
+              aria-valuenow={Math.round(progress)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            />
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="space-y-3 border-t border-slate-200 px-3 py-3">

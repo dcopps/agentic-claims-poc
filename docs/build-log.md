@@ -504,3 +504,40 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Clone-and-run verification.
 
 ---
+
+## Phase 8 — Demo Polish Fixes from Rehearsal Discoveries
+
+**Date:** 2026-06-15
+
+**Phase / Prompt:** Phase 8 — [`docs/prompts/09-phase-8-demo-polish-fixes.md`](prompts/09-phase-8-demo-polish-fixes.md)
+**Plan (approved):** [`docs/prompts/09-phase-8-demo-polish-fixes-plan.md`](prompts/09-phase-8-demo-polish-fixes-plan.md) — approved 2026-06-15T13:45:28Z
+**Plan iterations:** 0 rejected revisions (approved as written; the architect asked that the D3, D6, and D1 reasoning be carried into the report).
+**Report:** [`docs/prompts/09-phase-8-demo-polish-fixes-report.md`](prompts/09-phase-8-demo-polish-fixes-report.md)
+
+**Prompt summary.** A focused six-fix pack from the Phase-7 demo rehearsal: (1) restore live pipeline visualisation (the run page must mount and start watching *before* the 27s run completes); (2) handle the in-flight "no run data yet" 404 gracefully; (3) give each AgentCard a "running" state with an expected duration, a description, and an animated progress bar; (4) embed dollar figures in the three demo narratives so Doc-Parser extracts `claimed_amount`; (5) tune the Guardrail prompt so the Adjuster's market vocabulary is not mistaken for a hallucinated policy citation; (6) surface POST failures via an `ErrorBanner`; (7, bonus) enumerate the audit-payload addendum in the README. Bump to 0.8.0.
+
+**What changed:**
+
+- `frontend/src/pages/ClaimsPage.tsx` — **Fix #1 + #6.** `trigger` is now synchronous: it mints a correlation id, `navigate`s to the run page *immediately*, then fires the run/replay POST fire-and-forget. The POST's `.catch` records the failure under a `['runError', cid]` query-cache key. Dropped the per-claim `busy` state (navigate-immediately unmounts the page, so a `setState` on the unmounted component would only warn). Process always enabled; Re-process gated on `REPLAYABLE`.
+- `frontend/src/pages/RunDetailPage.tsx` — **Fix #2 + #6.** Tolerates the in-flight 404 (`run.data` absent) by deriving status from the SSE stream; an `awaiting-hint` shows until the first event. Reads the `['runError', cid]` cache key reactively (`useQuery({ enabled: false })`) and renders an `ErrorBanner` for both a failed POST and a `pipeline_aborted` SSE event.
+- `frontend/src/components/AgentCard.tsx` — **Fix #3.** New "running" block: per-agent expected duration (`AGENT_EXPECTED_MS`), a description from `agent-descriptions`, and a `role="progressbar"` driven by a `useProgress` hook (a `setInterval` percentage, not a CSS transition — jsdom can observe the JS value, vitest fake timers can advance it).
+- `frontend/src/components/ui.tsx` — **Fix #6.** New `ErrorBanner` (`role="alert"`).
+- `frontend/src/copy/agent-descriptions.ts` — new. Per-agent "what's happening" copy.
+- `backend/data/seed_claims.py` — **Fix #4.** The three demo narratives now state their figures in the text ($85,000 / $850,000 / $1,400,000) so Doc-Parser extracts `claimed_amount` instead of aborting on `0.00`. `reported_amount` Decimals unchanged.
+- `backend/app/prompts/system/guardrail.md` — **Fix #5.** Added a paragraph teaching the Guardrail that market-data vocabulary ("market band", "within range", "lookup table") is settlement framing, not a policy citation, and must not be flagged; only absent policy clauses/endorsements/sub-limits count.
+- `README.md` — **Fix #7.** The "audit log is the trusted record" design-decision bullet now enumerates the six additive audit-payload extensions, with a note that all are additive and the locked list lives in CLAUDE.md.
+- `pyproject.toml` — version `0.7.0 → 0.8.0`.
+
+**Tests:** 330 backend passing, 7 skipped; 30 frontend passing. Phase 8 adds **4 backend** tests (`test_demo_narrative_contains_dollar_figure` ×3 in `test_seed_claims.py`; `test_market_vocabulary_is_not_flagged` in `test_guardrail.py`) and **8 frontend** tests (new `ClaimsPage.test.tsx` ×2, new `RunDetailPage.test.tsx` ×3, `AgentCard` running-state ×3). `ruff` clean; `mypy backend` clean (106 files); frontend tsc/eslint clean.
+
+**Design decisions worth recording (per approval):**
+
+- **D3 — JS-driven progress, not CSS.** A CSS-interpolated width is invisible to jsdom; the `setInterval` percentage is both observable in jsdom and advanceable with vitest fake timers, so "the bar advances over time" is a real assertion rather than a visual hope.
+- **D6 — two independent error signals.** A failed *start* (POST rejects) is recorded in the query cache under `['runError', cid]`; a failed *run* (pipeline aborts mid-flight) arrives as a `pipeline_aborted` SSE event. `EventSource.onerror` is deliberately **not** used as an error signal because it also fires on a normal stream close, which would surface spurious banners on every completed run.
+- **D1 — drop the `busy` state.** Navigating immediately unmounts `ClaimsPage`, so the old "grey the button while awaiting" state had no component left to live on; keeping it would only produce a setState-on-unmounted warning.
+
+**Issues discovered:** none beyond the rehearsal findings the pack was scoped to fix. Root cause of #1: Phase 6 had collapsed the Phase-5 "open the stream, then trigger" ordering into `await runPipeline(...)` then `navigate(...)`, serialising the whole 27s run before the watching page mounted; the event bus's late-subscriber buffering makes the navigate-first ordering safe.
+
+**Next:** Clone-and-run verification.
+
+---

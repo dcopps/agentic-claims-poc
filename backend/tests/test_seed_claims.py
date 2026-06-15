@@ -81,3 +81,25 @@ def test_insert_with_truncate_overwrites_cleanly(
         row = cur.fetchone()
     assert row is not None
     assert row[0] == 9
+
+
+# --------------------------------------------------------------------------- #
+# Phase 8 — demo narratives embed the dollar figure (Doc-Parser extracts it).
+# --------------------------------------------------------------------------- #
+
+import pytest  # noqa: E402
+
+_EXPECTED_AMOUNTS = {
+    "auto_approve": "$85,000",
+    "threshold_escalation": "$850,000",
+    "guardrail_escalation": "$1,400,000",
+}
+
+
+@pytest.mark.parametrize(("tag", "amount"), list(_EXPECTED_AMOUNTS.items()))
+def test_demo_narrative_contains_dollar_figure(tag: str, amount: str) -> None:
+    claim = next(c for c in generate_claims() if c.scenario_tag == tag)
+    assert amount in claim.narrative, (
+        f"demo narrative for {tag} must mention {amount} so Doc-Parser can "
+        f"extract claimed_amount; got: {claim.narrative!r}"
+    )

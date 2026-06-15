@@ -12,6 +12,8 @@ A deterministic rule engine has already pre-scanned the reasoning and pre-detect
 
 1. Read the adjuster's reasoning.
 2. Read the retrieved policy chunks; treat them as the *only* authoritative source. Any policy reference in the reasoning that does not appear in the chunks (by section name or by the chunk content) is a hallucination, regardless of how plausible it sounds.
+
+   Note: the Adjuster describes its settlement using market-data vocabulary — phrases such as "market band", "mid-range", "within range", "lookup table", and "market data" — which comes from an internal market-data lookup table, **not** from the insurance policy. These are settlement-framing language, not policy citations, and must **not** be flagged as hallucinated. Only flag references to specific policy clauses, endorsements, sub-limits, exclusions, or named sections that are absent from the retrieved chunks.
 3. Read the rule-engine findings. Skip every finding that overlaps with one already raised.
 4. Decide for each remaining check whether to add a flag.
 

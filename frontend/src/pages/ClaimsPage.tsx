@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { replayPipeline, runPipeline } from '../api/client'
 import type { ClaimRecord } from '../api/types'
@@ -16,21 +15,30 @@ export function ClaimsPage() {
   const { data: claims, isLoading, error } = useClaims()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [busy, setBusy] = useState<string | null>(null)
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['claims'] })
 
-  const trigger = async (claimId: string, kind: 'process' | 'replay') => {
+  // Navigate to the run-detail page FIRST so its SSE subscription is open before
+  // the run emits events (the event bus buffers late subscribers, so this is
+  // safe), then fire the POST without awaiting — the ~27s run is observed live
+  // rather than blocking the navigation. A failed POST writes the error to a
+  // run-scoped cache key the run-detail page renders (fix #6); a successful one
+  // refreshes the claims list.
+  const trigger = (claimId: string, kind: 'process' | 'replay') => {
     const cid = crypto.randomUUID()
-    setBusy(claimId)
-    try {
-      if (kind === 'process') await runPipeline(claimId, cid)
-      else await replayPipeline(claimId, cid, REPLAY_VARIANT)
-      await refetch()
-      navigate(`/claims/${claimId}/runs/${cid}`)
-    } finally {
-      setBusy(null)
-    }
+    navigate(`/claims/${claimId}/runs/${cid}`)
+    const post =
+      kind === 'process'
+        ? runPipeline(claimId, cid)
+        : replayPipeline(claimId, cid, REPLAY_VARIANT)
+    post
+      .then(() => refetch())
+      .catch((err: unknown) => {
+        queryClient.setQueryData(
+          ['runError', cid],
+          err instanceof Error ? err.message : String(err),
+        )
+      })
   }
 
   return (
@@ -60,7 +68,6 @@ export function ClaimsPage() {
                 <ClaimRow
                   key={claim.claim_id}
                   claim={claim}
-                  busy={busy === claim.claim_id}
                   onProcess={() => trigger(claim.claim_id, 'process')}
                   onReplay={() => trigger(claim.claim_id, 'replay')}
                 />
@@ -75,12 +82,10 @@ export function ClaimsPage() {
 
 function ClaimRow({
   claim,
-  busy,
   onProcess,
   onReplay,
 }: {
   claim: ClaimRecord
-  busy: boolean
   onProcess: () => void
   onReplay: () => void
 }) {
@@ -98,15 +103,13 @@ function ClaimRow({
       </td>
       <td className="space-x-2 py-1">
         <Tooltip text={tooltips.processClaim}>
-          <Button onClick={onProcess} disabled={busy}>
-            Process
-          </Button>
+          <Button onClick={onProcess}>Process</Button>
         </Tooltip>
         <Tooltip text={tooltips.reprocessV2}>
           <Button
             variant="secondary"
             onClick={onReplay}
-            disabled={busy || !REPLAYABLE.has(claim.status)}
+            disabled={!REPLAYABLE.has(claim.status)}
           >
             Re-process with v2
           </Button>
