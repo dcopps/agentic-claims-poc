@@ -24,7 +24,16 @@ Rules:
 - `loss_date` is the date on which the loss occurred. Use ISO 8601 (`YYYY-MM-DD`). If the narrative gives a relative date ("yesterday", "last Tuesday"), do your best to resolve it from any explicit dates the narrative also mentions; if none, use the most recently-mentioned absolute date in the text.
 - `jurisdiction` is the location or governing jurisdiction of the loss (e.g. "United Kingdom", "United States — New York", "Bermuda").
 - `claim_type` is a single lowercase snake_case token taken from this controlled vocabulary where possible: `water_damage`, `fire`, `wind`, `theft`, `flood`, `storm_complex`, `sprinkler_leakage`, `vandalism`, `smoke_damage`, `hail`, `windstorm`. If the narrative describes a cause not in this list, pick the closest match; if no match is reasonable, use a new lowercase snake_case token of your own that best describes the cause.
-- `claimed_amount` is the reported loss in USD as a plain decimal number. **No currency symbol, no thousands separator** — emit it as a JSON string the parser can `Decimal()`-construct verbatim, e.g. `"85000.00"`. Must be strictly positive.
+- `claimed_amount` is the reported loss in USD as a plain decimal number, **strictly positive**. The narrative will normally contain a dollar figure — find it and extract it. *Any* dollar figure mentioned in the narrative is the claimed_amount, regardless of hedging language. All of these count and should be extracted, not defaulted away:
+
+  - *"estimated at $85,000"* → `"85000.00"`
+  - *"approximately $1.4M"* → `"1400000.00"`
+  - *"around $500,000"* → `"500000.00"`
+  - *"totals $250k"* → `"250000.00"`
+  - *"damages of $1,400,000"* → `"1400000.00"`
+  - *"in the region of $850,000"* → `"850000.00"`
+
+  Strip the currency symbol and any thousands separator; expand abbreviations (`M` = millions, `k` = thousands); emit as a JSON string the parser can `Decimal()`-construct verbatim, e.g. `"85000.00"`. **Only if the narrative genuinely contains no dollar figure at all** should you emit `"0.00"` — and that case will correctly be rejected downstream.
 - `claimant_identifier` is the named claimant as it appears in the narrative (company name, individual name, or policy holder identifier). Do not abbreviate.
 - `narrative_summary` is one paragraph of plain prose, ≤500 characters, capturing the cause, the location, and the loss in your own words. Do not quote the narrative verbatim and do not include speculation.
 
