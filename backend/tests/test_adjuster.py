@@ -221,6 +221,44 @@ def test_evaluate_returns_typed_result_inside_range(
     assert len(payload["output"]["reasoning"]) > 0
 
 
+def test_evaluate_captures_literal_prompt_in_audit(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    market_data_table: object,
+    parsed_claim: DocParserOutput,
+    validator_verdict: ValidatorVerdict,
+) -> None:
+    """Phase 8.3: the live path records the literal prompt under llm_call.prompt."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _valid_output_json("85000.00")
+    adjuster = _build_adjuster(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+        market_data_table=market_data_table,
+    )
+    adjuster.evaluate(
+        claim_id,
+        uuid4(),
+        parsed_claim=parsed_claim,
+        validator_verdict=validator_verdict,
+    )
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    prompt = row[0]["llm_call"]["prompt"]
+    assert isinstance(prompt["system"], str) and prompt["system"]
+    # The market range was substituted into the user prompt (no placeholder left).
+    assert "50000" in prompt["user"] and "200000" in prompt["user"]
+    assert "{range_floor}" not in prompt["user"]
+    assert prompt["user"] == mock_provider.calls[0].user
+
+
 # --------------------------------------------------------------------------- #
 # Range-enforcement guard — the headline Adjuster contract.
 # --------------------------------------------------------------------------- #

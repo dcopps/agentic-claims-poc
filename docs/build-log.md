@@ -582,3 +582,40 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Clone-and-run verification.
 
 ---
+
+## Phase 8.3 — Explainability Panel Fixes
+
+**Date:** 2026-06-16
+
+**Phase / Prompt:** Phase 8.3 — [`docs/prompts/11-phase-8.3-explainability-panel-fixes.md`](prompts/11-phase-8.3-explainability-panel-fixes.md)
+**Plan (approved):** [`docs/prompts/11-phase-8.3-explainability-panel-fixes-plan.md`](prompts/11-phase-8.3-explainability-panel-fixes-plan.md) — approved 2026-06-16T11:24:52Z
+**Plan iterations:** 0 rejected revisions (approved as written; the frontend data-flow decision — pass `AuditEntry` down as a prop rather than have `AgentCard` call `useAuditEntries`— was confirmed as the right architecture).
+**Report:** [`docs/prompts/11-phase-8.3-explainability-panel-fixes-report.md`](prompts/11-phase-8.3-explainability-panel-fixes-report.md)
+
+**Prompt summary.** Three surgical fixes making the explainability surfaces usable end-to-end. (A) the agent expand panel showed the raw prompt *template* with `{placeholder}` tokens; (B) the response panel said "Waiting…" indefinitely on completed runs; (C) the run header truncated the correlation_id and offered no path to the audit view. All three ship in one commit. Bump to 0.8.3.
+
+**What changed:**
+
+- `backend/app/agents/_shared.py` — new `CapturedPrompt(system, user)` frozen dataclass and `attach_prompt(llm_call, prompt)` helper. `attach_prompt` adds `llm_call["prompt"] = {system, user}` only when a prompt was sent, so a missing key truthfully signals "no LLM call".
+- `backend/app/agents/{doc_parser,validator,adjuster,guardrail}.py` — each agent's `_invoke_llm` now builds a `CapturedPrompt` before the provider call and returns it as a 5th tuple element (present on every path, including provider-exception). `evaluate` threads it into `_write_audit` → `_build_audit_payload`, which attaches it to the `llm_call` block. Probe paths (`parse`/`assess`/`estimate`/`check`) ignore it. The Adjuster's demo-fixture branch passes `prompt=None`, so the fixture path emits no `prompt` key.
+- `backend/app/api/agents_test.py` — unchanged; still serves the raw template for the test bench and the backwards-compatibility fallback.
+- `frontend/src/components/AgentCard.tsx` — prop `responsePayload?: unknown` → `auditEntry?: AuditEntry`. New `extractPrompt` / `extractResponseBlock` helpers. **Fix A:** renders the filled `llm_call.prompt` when present; otherwise falls back to the template endpoint (`TemplateFallback`) with a caveat banner. **Fix B:** new `ResponsePanel` with three explicit states — entry present → render response block; entry absent + agent `done` → audit-integrity error; otherwise → "Waiting…".
+- `frontend/src/pages/RunDetailPage.tsx` — passes `auditEntry={_entry(step, audit.data)}` (replacing `_payload`). **Fix C1:** full correlation_id with a `CopyButton`. **Fix C2:** "View audit log" `<Link to="/audit?correlation_id=…">`.
+- `frontend/src/components/ui.tsx` — new `CopyButton({ value, label? })`: clipboard write + 1500ms "Copied" confirmation (revert timer cleared on unmount via effect).
+- `frontend/src/pages/AuditPage.tsx` — **unchanged**; already reads `?correlation_id=` and pre-populates the filter, so the Fix-C2 deep link works as-is.
+- `pyproject.toml` — version `0.8.2 → 0.8.3`.
+- Tests: 4 new backend per-agent prompt-capture tests (Validator asserts the retrieved chunks are substituted; Adjuster the market range; Doc-Parser the narrative; Guardrail the adjuster reasoning); `test_demo_fixture.py` gains `assert "prompt" not in llm_call`. Frontend: `AgentCard.test.tsx` rewritten to the `auditEntry` prop (filled prompt / template fallback + caveat / response-from-output / waiting / done-but-missing error); `RunDetailPage.test.tsx` gains full-cid, copy-button, and audit-link tests.
+
+**Interface extension (locked, additive):** `llm_call.prompt: { system, user } | (absent)` on all four agents' audit payloads (`doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`). Existing keys unchanged; the audit-log-as-trusted-record property holds. The Adjuster demo-fixture path emits no `prompt` key. Added to CLAUDE.md's "Locked interface extensions since Phase 4".
+
+**Tests:** 331 backend passing, 7 skipped (+4 vs Phase 8.2); 36 frontend passing (+6). `ruff` clean; `mypy backend` clean (106 files); frontend tsc/eslint/vitest clean.
+
+**Fix B diagnostic correction.** The prompt hypothesised the "Waiting…" leak came from the panel testing for SSE-event presence. In this codebase the response already read from the audit log (`RunDetailPage._payload` → `audit.data`); the real defect was that an `undefined` response payload silently merged two distinct missing-entry cases — "entry not written yet" and "entry missing for a completed agent". The new three-state `ResponsePanel` distinguishes them: it gates on audit-entry existence and surfaces the done-but-missing case as an explicit audit-integrity error rather than a misleading "Waiting…". This fixes the reported behaviour regardless of the original (SSE-based) hypothesis.
+
+**Issues discovered:**
+
+- **`userEvent.setup()` installs its own `navigator.clipboard` stub**, shadowing the spy in the copy-button test. Switched that one test to `fireEvent.click` so the component reads the test's spy at click time.
+
+**Next:** Clone-and-run verification.
+
+---

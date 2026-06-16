@@ -43,7 +43,9 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
+    CapturedPrompt,
     ProbeMetadata,
+    attach_prompt,
     probe_metadata,
 )
 from backend.app.agents._shared import (
@@ -159,10 +161,14 @@ class Adjuster:
             response: ProviderResponse | None
             output: AdjusterOutput | None
             error: BaseException | None
+            # The fixture path never calls the LLM, so no prompt was sent; `prompt`
+            # stays None and the audit omits `llm_call.prompt` (truthful — see
+            # `attach_prompt`). The live path captures the literal prompt.
+            prompt: CapturedPrompt | None
             if fixture is not None:
-                response, output, error, latency_ms = None, fixture, None, 0
+                response, output, error, latency_ms, prompt = None, fixture, None, 0, None
             else:
-                response, output, error, latency_ms = self._invoke_llm(
+                response, output, error, latency_ms, prompt = self._invoke_llm(
                     parsed_claim=parsed_claim,
                     validator_verdict=validator_verdict,
                     market_range=market_range,
@@ -179,6 +185,7 @@ class Adjuster:
                 latency_ms=latency_ms,
                 error=error,
                 demo_fixture=fixture is not None,
+                prompt=prompt,
             )
 
             if error is not None:
@@ -207,7 +214,7 @@ class Adjuster:
         Reuses `evaluate`'s steps; the only side effect is the APILogger record.
         """
         market_range = self._lookup_market_range(parsed_claim)
-        response, output, error, latency_ms = self._invoke_llm(
+        response, output, error, latency_ms, _prompt = self._invoke_llm(
             parsed_claim=parsed_claim,
             validator_verdict=validator_verdict,
             market_range=market_range,
@@ -278,10 +285,13 @@ class Adjuster:
         AdjusterOutput | None,
         BaseException | None,
         int,
+        CapturedPrompt,
     ]:
         """
         Build the prompt, call the provider, parse and range-check
-        the output. Returns `(response, output, error, latency_ms)`.
+        the output. Returns `(response, output, error, latency_ms, prompt)`.
+        `prompt` is the literal text sent — built before the call, so returned on
+        every path including the provider-exception path.
         """
         system_prompt = self._prompt_loader.system("adjuster")
         user_prompt = self._prompt_loader.user(
@@ -293,6 +303,7 @@ class Adjuster:
             range_floor=str(market_range.floor),
             range_ceiling=str(market_range.ceiling),
         )
+        prompt = CapturedPrompt(system=system_prompt, user=user_prompt)
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
         try:
@@ -309,13 +320,13 @@ class Adjuster:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, None, exc, int((time.perf_counter() - t0) * 1000)
+            return None, None, exc, int((time.perf_counter() - t0) * 1000), prompt
 
         try:
             output = _parse_output(response.text, market_range)
         except ValueError as exc:
-            return response, None, exc, int((time.perf_counter() - t0) * 1000)
-        return response, output, None, int((time.perf_counter() - t0) * 1000)
+            return response, None, exc, int((time.perf_counter() - t0) * 1000), prompt
+        return response, output, None, int((time.perf_counter() - t0) * 1000), prompt
 
     def _write_audit(
         self,
@@ -331,6 +342,7 @@ class Adjuster:
         latency_ms: int,
         error: BaseException | None,
         demo_fixture: bool = False,
+        prompt: CapturedPrompt | None = None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -342,6 +354,7 @@ class Adjuster:
             latency_ms=latency_ms,
             error=error,
             demo_fixture=demo_fixture,
+            prompt=prompt,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -442,9 +455,17 @@ def _assert_within_range(value: Decimal, market_range: MarketRange) -> None:
 
 
 def _llm_call_block(
-    response: ProviderResponse | None, latency_ms: int, demo_fixture: bool
+    response: ProviderResponse | None,
+    latency_ms: int,
+    demo_fixture: bool,
+    prompt: CapturedPrompt | None,
 ) -> dict[str, Any]:
-    """Build the audit `llm_call` block, truthful about the demo-fixture path."""
+    """Build the audit `llm_call` block, truthful about the demo-fixture path.
+
+    The literal `prompt` is attached when one was sent (Phase 8.3). The demo-fixture
+    path passes `prompt=None`, so its block carries no `prompt` key — there was no
+    model call to capture text from.
+    """
     if demo_fixture:
         return {
             "provider": _DEMO_FIXTURE_PROVIDER,
@@ -452,14 +473,17 @@ def _llm_call_block(
             "latency_ms": latency_ms,
         }
     if response is not None:
-        return {
-            "provider": _PROVIDER_LABEL,
-            "model": response.model,
-            "prompt_tokens": response.prompt_tokens,
-            "completion_tokens": response.completion_tokens,
-            "latency_ms": latency_ms,
-        }
-    return {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}
+        return attach_prompt(
+            {
+                "provider": _PROVIDER_LABEL,
+                "model": response.model,
+                "prompt_tokens": response.prompt_tokens,
+                "completion_tokens": response.completion_tokens,
+                "latency_ms": latency_ms,
+            },
+            prompt,
+        )
+    return attach_prompt({"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}, prompt)
 
 
 def _load_fixture_output(path: Path) -> AdjusterOutput:
@@ -506,6 +530,7 @@ def _build_audit_payload(
     latency_ms: int,
     error: BaseException | None,
     demo_fixture: bool = False,
+    prompt: CapturedPrompt | None = None,
 ) -> dict[str, Any]:
     """Assemble the locked adjuster-step audit payload.
 
@@ -513,6 +538,9 @@ def _build_audit_payload(
     fixture rather than a model call (Phase 7). It is recorded at the top level
     and the `llm_call` block reports no model call, so the trail is truthful about
     the source — the demo affordance is auditable, not hidden.
+
+    `prompt` (Phase 8.3) is the literal text sent to the model; it is attached to
+    the `llm_call` block on the live path and absent on the demo-fixture path.
     """
     # Decimal fields routed through `mode="json"` so the canonical
     # audit encoder (which refuses Decimal) sees only strings.
@@ -537,7 +565,7 @@ def _build_audit_payload(
             "ceiling": str(market_range.ceiling),
         },
         "demo_fixture": demo_fixture,
-        "llm_call": _llm_call_block(response, latency_ms, demo_fixture),
+        "llm_call": _llm_call_block(response, latency_ms, demo_fixture, prompt),
         "output": (
             {
                 # `mode="json"` converts Decimal -> string here too.

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { AuditEntry } from '../api/types'
 import { agentDescriptions } from '../copy/agent-descriptions'
 import { useAgentPrompt } from '../hooks/queries'
 import { Badge, JsonBlock, Spinner } from './ui'
@@ -46,12 +47,16 @@ interface AgentCardProps {
   durationMs?: number
   summary?: Record<string, unknown>
   variant: string
-  responsePayload?: unknown // the agent's audit-step payload, if written
+  auditEntry?: AuditEntry // this agent's audit-step entry, once written
 }
 
 // One agent in the live pipeline visualisation. Collapsed: status + summary +
-// duration. Expanded (lazy): the prompt source (system + user, fetched on demand)
-// and the agent's full LLM response from the audit payload.
+// duration. Expanded (lazy): the prompt the LLM actually received and the agent's
+// response — both read from the audit entry (the single source of truth). The
+// prompt is the *filled* text captured in `llm_call.prompt` (Phase 8.3); for
+// historical runs that pre-date the capture, it falls back to the raw template
+// endpoint with a caveat. The response panel uses the audit entry's existence as
+// the completion signal, not the live SSE event.
 export function AgentCard({
   agent,
   label,
@@ -59,10 +64,13 @@ export function AgentCard({
   durationMs,
   summary,
   variant,
-  responsePayload,
+  auditEntry,
 }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const prompt = useAgentPrompt(agent, variant, expanded)
+  const filledPrompt = extractPrompt(auditEntry)
+  // Only fetch the raw template when the filled prompt isn't available — i.e. a
+  // historical entry, or an entry not yet written. Lazy on expand as before.
+  const prompt = useAgentPrompt(agent, variant, expanded && filledPrompt === null)
   const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
   const progress = useProgress(status === 'running', expectedMs)
 
@@ -109,26 +117,65 @@ export function AgentCard({
         <div className="space-y-3 border-t border-slate-200 px-3 py-3">
           <div>
             <Badge>prompt</Badge>
-            {prompt.isLoading && <Spinner label="Loading prompt…" />}
-            {prompt.data && (
+            {filledPrompt ? (
               <div className="mt-1 space-y-2">
-                <PromptText title="System" body={prompt.data.system} />
-                <PromptText title="User" body={prompt.data.user} />
+                <PromptText title="System" body={filledPrompt.system} />
+                <PromptText title="User" body={filledPrompt.user} />
               </div>
+            ) : (
+              <TemplateFallback prompt={prompt} />
             )}
           </div>
           <div>
             <Badge>response</Badge>
-            {responsePayload ? (
-              <JsonBlock value={responsePayload} />
-            ) : (
-              <p className="text-sm text-slate-500">Waiting for this agent to complete…</p>
-            )}
+            <ResponsePanel auditEntry={auditEntry} status={status} />
           </div>
         </div>
       )}
     </div>
   )
+}
+
+// The prompt panel's fallback for runs with no captured prompt: the raw template
+// (placeholders intact) plus a caveat so the viewer knows they are not seeing the
+// substituted text. Used for historical runs that pre-date the audit-prompt
+// capture, and transiently for an entry not yet written mid-run.
+function TemplateFallback({ prompt }: { prompt: ReturnType<typeof useAgentPrompt> }) {
+  if (prompt.isLoading) return <Spinner label="Loading prompt…" />
+  if (!prompt.data) return null
+  return (
+    <div className="mt-1 space-y-2">
+      <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
+        Showing the prompt template — this run pre-dates the audit-prompt-capture
+        change.
+      </p>
+      <PromptText title="System" body={prompt.data.system} />
+      <PromptText title="User" body={prompt.data.user} />
+    </div>
+  )
+}
+
+// The response panel reads the audit entry, not the SSE event. Three explicit
+// states: entry present → render its response block; entry absent but the agent
+// reports done → an audit-integrity error (a completed agent must have written an
+// entry); otherwise → still in flight.
+function ResponsePanel({
+  auditEntry,
+  status,
+}: {
+  auditEntry?: AuditEntry
+  status: AgentStatus
+}) {
+  if (auditEntry) return <JsonBlock value={extractResponseBlock(auditEntry)} />
+  if (status === 'done') {
+    return (
+      <p className="text-sm text-red-600">
+        Audit entry not found for this completed agent — this may indicate a write
+        failure.
+      </p>
+    )
+  }
+  return <p className="text-sm text-slate-500">Waiting for this agent to complete…</p>
 }
 
 function PromptText({ title, body }: { title: string; body: string }) {
@@ -140,4 +187,25 @@ function PromptText({ title, body }: { title: string; body: string }) {
       </pre>
     </div>
   )
+}
+
+// Read the literal prompt (Phase 8.3) from an audit entry's `llm_call.prompt`.
+// Returns null when the entry is absent, the call made no prompt (e.g. the
+// Adjuster demo fixture), or the run pre-dates the capture — the caller then
+// falls back to the raw template.
+function extractPrompt(entry?: AuditEntry): { system: string; user: string } | null {
+  const llmCall = entry?.payload.llm_call
+  if (typeof llmCall !== 'object' || llmCall === null) return null
+  const prompt = (llmCall as Record<string, unknown>).prompt
+  if (typeof prompt !== 'object' || prompt === null) return null
+  const { system, user } = prompt as Record<string, unknown>
+  if (typeof system === 'string' && typeof user === 'string') return { system, user }
+  return null
+}
+
+// The response block to display for an agent: its output (or the validator's
+// verdict) where present, else the whole payload. Mirrors the audit-step shapes.
+function extractResponseBlock(entry: AuditEntry): unknown {
+  const payload = entry.payload
+  return payload.output ?? payload.verdict ?? payload
 }

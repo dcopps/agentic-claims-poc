@@ -245,6 +245,41 @@ def test_evaluate_returns_typed_result(
     assert payload["error"] is None
 
 
+def test_evaluate_captures_prompt_with_substituted_chunks(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    stub_embedder: Callable[[str], np.ndarray],
+) -> None:
+    """Phase 8.3: the captured user prompt holds the retrieved chunks, substituted."""
+    claim_id = _insert_claim(
+        clean_db, narrative="Sprinkler discharge caused water damage at the facility."
+    )
+    chunk_ids = _seed_chunks(clean_db, stub_embedder)
+    mock_provider.response_text = _verdict_json(chunk_ids)
+    validator = _build_validator(
+        conn=clean_db,
+        provider=mock_provider,
+        embedder=stub_embedder,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    validator.evaluate(claim_id, uuid4())
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    prompt = row[0]["llm_call"]["prompt"]
+    assert isinstance(prompt["system"], str) and prompt["system"]
+    # Substitution proof: a retrieved chunk's content appears verbatim in the user
+    # prompt, and no template placeholder survives.
+    assert "Fire, lightning, windstorm, water damage." in prompt["user"]
+    assert "{retrieved_chunks}" not in prompt["user"]
+    assert prompt["user"] == mock_provider.calls[0].user
+
+
 # --------------------------------------------------------------------------- #
 # Defensive guards — each maps to one raise inside the validator pipeline.
 # --------------------------------------------------------------------------- #

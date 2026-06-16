@@ -40,7 +40,9 @@ from uuid import UUID
 import psycopg
 
 from backend.app.agents._shared import (
+    CapturedPrompt,
     ProbeMetadata,
+    attach_prompt,
     probe_metadata,
 )
 from backend.app.agents._shared import (
@@ -147,7 +149,9 @@ class DocParser:
         """
         with self._connection_factory() as conn:
             record = self._load_claim_record(conn, claim_id)
-            response, summary, error, latency_ms = self._invoke_llm(record.narrative)
+            response, summary, error, latency_ms, prompt = self._invoke_llm(
+                record.narrative
+            )
             # The structured fields always come from the record; only the
             # summary is model-derived, so the output exists iff the summary did.
             output = (
@@ -162,6 +166,7 @@ class DocParser:
                 output=output,
                 latency_ms=latency_ms,
                 error=error,
+                prompt=prompt,
             )
 
             if error is not None:
@@ -187,7 +192,7 @@ class DocParser:
         `provider.complete` emits. `evaluate` is the audit-writing, claim-bound
         counterpart; this reuses its core (`_invoke_llm`) so the two cannot drift.
         """
-        response, summary, error, latency_ms = self._invoke_llm(narrative)
+        response, summary, error, latency_ms, _prompt = self._invoke_llm(narrative)
         if error is not None:
             raise error
         assert response is not None and summary is not None
@@ -220,20 +225,26 @@ class DocParser:
 
     def _invoke_llm(
         self, narrative: str
-    ) -> tuple[ProviderResponse | None, str | None, BaseException | None, int]:
+    ) -> tuple[
+        ProviderResponse | None, str | None, BaseException | None, int, CapturedPrompt
+    ]:
         """
         Build the summary prompt, call the provider, validate the prose.
 
-        Returns `(response, summary, error, latency_ms)`. Either `summary` is a
-        validated string and `error` is None, or `error` is populated and
+        Returns `(response, summary, error, latency_ms, prompt)`. Either `summary`
+        is a validated string and `error` is None, or `error` is populated and
         `summary` is None. `latency_ms` is measured across the whole call so the
-        audit entry can report time-spent on the failure paths too.
+        audit entry can report time-spent on the failure paths too. `prompt` is the
+        literal text sent to the model; it is built before the call, so it is
+        returned on every path — including the provider-exception path — letting the
+        audit capture what was sent even when no response came back.
         """
         system_prompt = self._prompt_loader.system("doc_parser")
         user_prompt = self._prompt_loader.user(
             "doc_parser_template",
             claim_narrative=narrative,
         )
+        prompt = CapturedPrompt(system=system_prompt, user=user_prompt)
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
         try:
@@ -250,13 +261,13 @@ class DocParser:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, None, exc, int((time.perf_counter() - t0) * 1000)
+            return None, None, exc, int((time.perf_counter() - t0) * 1000), prompt
 
         try:
             summary = _validate_summary(response.text)
         except ValueError as exc:
-            return response, None, exc, int((time.perf_counter() - t0) * 1000)
-        return response, summary, None, int((time.perf_counter() - t0) * 1000)
+            return response, None, exc, int((time.perf_counter() - t0) * 1000), prompt
+        return response, summary, None, int((time.perf_counter() - t0) * 1000), prompt
 
     def _write_audit(
         self,
@@ -269,6 +280,7 @@ class DocParser:
         output: DocParserOutput | None,
         latency_ms: int,
         error: BaseException | None,
+        prompt: CapturedPrompt | None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -277,6 +289,7 @@ class DocParser:
             output=output,
             latency_ms=latency_ms,
             error=error,
+            prompt=prompt,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -371,13 +384,15 @@ def _build_audit_payload(
     output: DocParserOutput | None,
     latency_ms: int,
     error: BaseException | None,
+    prompt: CapturedPrompt | None,
 ) -> dict[str, Any]:
     """Assemble the locked doc-parser-step audit payload.
 
     `fields_source` is the Phase 8.2 additive field: it records that the
     structured fields came from the claim record, not from LLM extraction. The
     `output` block carries the full field set as before; the `llm_call` block now
-    reflects a call that produced only `narrative_summary`.
+    reflects a call that produced only `narrative_summary`, and (Phase 8.3) carries
+    the literal `prompt` that was sent.
     """
     payload: dict[str, Any] = {
         "input": {
@@ -387,7 +402,7 @@ def _build_audit_payload(
         # Honest provenance: the structured fields are sourced from the claim
         # record; only the summary is model-derived.
         "fields_source": _FIELDS_SOURCE,
-        "llm_call": (
+        "llm_call": attach_prompt(
             {
                 "provider": _PROVIDER_LABEL,
                 "model": response.model,
@@ -396,7 +411,8 @@ def _build_audit_payload(
                 "latency_ms": latency_ms,
             }
             if response is not None
-            else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}
+            else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms},
+            prompt,
         ),
         # `output.model_dump(mode="json")` returns `claimed_amount` as
         # a string, which keeps the canonical audit encoder happy

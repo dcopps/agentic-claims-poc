@@ -198,6 +198,41 @@ def test_clean_reasoning_passes(
     assert row[0]["llm_call"]["provider"] == "anthropic"
 
 
+def test_evaluate_captures_literal_prompt_in_audit(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Phase 8.3: the audit records the literal prompt under llm_call.prompt."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _llm_clean_response()
+    reasoning = "Mid-range water_damage settlement; damage scope supports the value."
+    guardrail = _build_guardrail(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    guardrail.evaluate(
+        claim_id,
+        uuid4(),
+        adjuster_result=_adjuster_result(reasoning),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    prompt = row[0]["llm_call"]["prompt"]
+    assert isinstance(prompt["system"], str) and prompt["system"]
+    # The adjuster's reasoning was substituted into the user prompt.
+    assert reasoning in prompt["user"]
+    assert "{adjuster_reasoning}" not in prompt["user"]
+    assert prompt["user"] == mock_provider.calls[0].user
+
+
 # --------------------------------------------------------------------------- #
 # Rule engine — each PII detector + the citation detector + the bias detector.
 # --------------------------------------------------------------------------- #

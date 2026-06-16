@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID, uuid4
 
 from backend.app.llm.provider import ProviderResponse
@@ -50,6 +51,44 @@ def probe_metadata(response: ProviderResponse, latency_ms: int) -> ProbeMetadata
         prompt_tokens=response.prompt_tokens,
         completion_tokens=response.completion_tokens,
     )
+
+
+@dataclass(frozen=True)
+class CapturedPrompt:
+    """
+    The literal system + user prompt an agent sent to the LLM for one call
+    (Phase 8.3 explainability capture).
+
+    Both fields are fully substituted strings — `PromptLoader.user(...)` after
+    placeholder fill and `PromptLoader.system(...)` — i.e. the exact text the model
+    received, not the raw template. An agent builds this *before* the provider call,
+    so it is available even on the provider-exception path; the audit log can then
+    record what was sent regardless of whether a response came back. The only path
+    that carries no `CapturedPrompt` is one that never calls the LLM at all (e.g. the
+    Adjuster's deterministic demo fixture).
+    """
+
+    system: str
+    user: str
+
+
+def attach_prompt(
+    llm_call: dict[str, Any], prompt: CapturedPrompt | None
+) -> dict[str, Any]:
+    """
+    Add the literal prompt to an audit `llm_call` block when one was sent.
+
+    Mutates and returns `llm_call`. When `prompt` is None — a path that issued no
+    LLM call at all (e.g. the Adjuster's deterministic demo fixture) — the block is
+    left untouched, so a *missing* `prompt` key truthfully signals "no prompt was
+    sent" rather than fabricating the text that would have been sent had the model
+    run. This is the additive Phase 8.3 audit extension; all existing keys are
+    untouched.
+    """
+    if prompt is not None:
+        llm_call["prompt"] = {"system": prompt.system, "user": prompt.user}
+    return llm_call
+
 
 # Regex that finds the outermost `{...}` block in a string. Used to
 # rescue a JSON payload from a model that wrapped its output in prose

@@ -2,8 +2,11 @@
 // library (D3). Components across the app compose these so the visual language
 // stays consistent.
 
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type ReactNode, useEffect, useState } from 'react'
 import { statusBadgeClass } from '../styles/tokens'
+
+// How long the "Copied" confirmation shows before reverting to the label.
+const COPY_FEEDBACK_MS = 1500
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
 
@@ -23,6 +26,30 @@ export function Button({ variant = 'primary', className = '', ...rest }: ButtonP
       className={`rounded px-3 py-1.5 text-sm disabled:opacity-50 ${BUTTON_VARIANT[variant]} ${className}`}
       {...rest}
     />
+  )
+}
+
+// Copy-to-clipboard button with a brief "Copied" confirmation. Used for sharing
+// the full correlation id from the run header. The revert timer lives in an
+// effect so it is cleared on unmount — no setState-after-unmount warning.
+export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const id = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
+    return () => clearTimeout(id)
+  }, [copied])
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value)
+        setCopied(true)
+      }}
+      className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+    >
+      {copied ? 'Copied' : label}
+    </button>
   )
 }
 

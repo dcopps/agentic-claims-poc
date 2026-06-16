@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { PipelineEvent } from '../api/types'
@@ -53,5 +53,42 @@ describe('RunDetailPage', () => {
     client.setQueryData(['runError', 'cid-1'], '502 Bad Gateway')
     renderWithProviders(<App />, { route: ROUTE, client })
     expect(screen.getByRole('alert')).toHaveTextContent(/could not start the run: 502/i)
+  })
+})
+
+// Fix C — the run header exposes the full correlation id for copy/share and a
+// one-click jump to the audit view of the same run.
+describe('RunDetailPage header (correlation id)', () => {
+  const FULL_CID = '0fa06cb9-1234-5678-9abc-def012345678'
+  const FULL_ROUTE = `/claims/c1/runs/${FULL_CID}`
+
+  beforeEach(() => {
+    streamState.events = []
+    stubFetch([])
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('renders the full correlation id, not a truncated prefix', () => {
+    renderWithProviders(<App />, { route: FULL_ROUTE })
+    expect(screen.getByText(FULL_CID)).toBeInTheDocument()
+  })
+
+  it('copies the full correlation id to the clipboard', () => {
+    // fireEvent (not userEvent) so userEvent's own clipboard stub does not
+    // shadow this spy — the component reads navigator.clipboard at click time.
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    renderWithProviders(<App />, { route: FULL_ROUTE })
+    fireEvent.click(screen.getByRole('button', { name: /copy/i }))
+    expect(writeText).toHaveBeenCalledWith(FULL_CID)
+  })
+
+  it('links to the audit view of this run with the correlation id pre-filled', () => {
+    renderWithProviders(<App />, { route: FULL_ROUTE })
+    const link = screen.getByRole('link', { name: /view audit log/i })
+    expect(link).toHaveAttribute('href', `/audit?correlation_id=${FULL_CID}`)
   })
 })

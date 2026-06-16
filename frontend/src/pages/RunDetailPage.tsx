@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import type { AuditEntry, PipelineEvent } from '../api/types'
 import { AgentCard, type AgentStatus } from '../components/AgentCard'
-import { Card, ErrorBanner, StatusBadge } from '../components/ui'
+import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
 import { useAuditEntries, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
 
@@ -40,16 +40,32 @@ export function RunDetailPage() {
   return (
     <div className="space-y-4">
       <Card title="Pipeline run">
-        <p className="text-sm text-slate-500">
-          variant: <span className="font-mono">{variant}</span> · run{' '}
-          <span className="font-mono">{correlationId.slice(0, 8)}</span>
-          {status && (
-            <>
-              {' · '}
-              <StatusBadge status={status} />
-            </>
-          )}
-        </p>
+        <div className="space-y-2 text-sm text-slate-500">
+          <p>
+            variant: <span className="font-mono">{variant}</span>
+            {status && (
+              <>
+                {' · '}
+                <StatusBadge status={status} />
+              </>
+            )}
+          </p>
+          {/* Full correlation id, copyable, with a one-click jump to the audit
+              view of this same run (filter pre-populated via the query param). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span>run</span>
+            <span className="break-all font-mono text-xs text-slate-700">
+              {correlationId}
+            </span>
+            <CopyButton value={correlationId} />
+            <Link
+              to={`/audit?correlation_id=${correlationId}`}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              View audit log
+            </Link>
+          </div>
+        </div>
       </Card>
 
       {runError && <ErrorBanner message={`Could not start the run: ${runError}`} />}
@@ -74,7 +90,7 @@ export function RunDetailPage() {
             status={_status(agent.key, events)}
             durationMs={_duration(agent.key, events)}
             summary={_summary(agent.key, events)}
-            responsePayload={_payload(agent.step, audit.data)}
+            auditEntry={_entry(agent.step, audit.data)}
           />
         ))}
       </div>
@@ -109,10 +125,9 @@ function _summary(key: string, events: PipelineEvent[]): Record<string, unknown>
   return _agentEvents(key, events).find((e) => e.event_type === 'agent_completed')?.summary
 }
 
-function _payload(step: string, audit?: AuditEntry[]): unknown {
-  const entry = audit?.find((e) => e.step === step)
-  if (!entry) return undefined
-  const payload = entry.payload as Record<string, unknown>
-  // Show the agent's output/verdict block where present, else the whole payload.
-  return payload.output ?? payload.verdict ?? payload
+// The audit entry for an agent's step, or undefined before it is written. The
+// card derives both its filled prompt and its response from this single entry, so
+// the audit log stays the one source of truth for what each agent did.
+function _entry(step: string, audit?: AuditEntry[]): AuditEntry | undefined {
+  return audit?.find((e) => e.step === step)
 }

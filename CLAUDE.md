@@ -127,9 +127,9 @@ Together these make the build reproducible end-to-end.
 
 ## Current Status
 
-- **Date:** 2026-06-15
-- **Phase:** Phase 8.2 complete; clone-and-run verification next.
-- **What works:** Doc-Parser now sources its structured fields (`loss_date`, `jurisdiction`, `claim_type`, `claimed_amount`, `claimant_identifier`) directly from the `claims` row — the system-of-record set at submission time — and calls Haiku only for `narrative_summary`. This removes the Phase-8 failure mode where Haiku defaulted the structured fields to placeholders that tripped Pydantic and aborted the pipeline (the Phase 8.1 prompt-engineering route didn't move the model). `DocParserOutput`'s shape is unchanged; the `doc_extract` audit payload gains an additive top-level `"fields_source": "claim_record"` so the trail records honestly where each field came from. All three demo scenarios reproduce cleanly live: scenario 1 settles (`claimed_amount=85000.00` from the record), scenario 2 escalates on threshold only, scenario 3 escalates on guardrail (via the unchanged Phase 7 fixture path). The live pipeline visualisation (Phase 8) is unchanged — agent cards still light up progressively. 327 backend + 30 frontend tests passing (7 skipped/gated); ruff and mypy clean; frontend tsc/eslint clean. `/health` reports `version=0.8.2`.
+- **Date:** 2026-06-16
+- **Phase:** Phase 8.3 complete; clone-and-run verification next.
+- **What works:** The agent expand panel now shows the *filled* prompt each model actually received (the substituted system + user text, captured in the audit payload's new `llm_call.prompt` block) instead of the raw template with `{placeholder}` tokens, and the response panel renders from the audit entry — "Waiting…" no longer leaks onto completed runs, and a completed agent with no audit entry surfaces an explicit audit-integrity error. The run header exposes the full correlation_id with a copy button and a one-click "View audit log" link that deep-links the audit view with the filter pre-populated. The `llm_call.prompt` field is additive across all four agents (`doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`); the Adjuster demo-fixture path emits no `prompt` key (no LLM call happened). Historical runs without the field fall back to the template endpoint with a caveat banner. No pipeline behavioural change — the three demo scenarios reproduce as designed. 331 backend + 36 frontend tests passing (7 skipped/gated); ruff and mypy clean; frontend tsc/eslint clean. `/health` reports `version=0.8.3` once redeployed.
 - **What's next:** Clone-and-run verification.
 
 ## Standing Instructions
@@ -192,6 +192,7 @@ decision. Any change to these is an interface-stability event.
 - **`claims.status` CHECK** extended to include `'aborted'` (terminal state for a human-rejected claim) — Phase 6 (migration 0002).
 - **Adjuster `settlement_estimate` audit** gains a top-level `demo_fixture: bool`; when `true` the `llm_call` block records no model call — Phase 7. The deterministic demo affordance is auditable, not hidden.
 - **Doc-Parser `doc_extract` audit** gains a top-level `"fields_source": "claim_record"` — Phase 8.2. Records that the structured fields were sourced from the claim record, not from LLM extraction (the LLM now produces only `narrative_summary`). Additive; the `output` block shape is unchanged.
+- **All four agents' audit payloads** (`doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`) gain `llm_call.prompt: { system: str, user: str }` — Phase 8.3. The literal, fully-substituted system + user prompt the model received (not the raw template), so the audit captures exactly what each agent sent. Additive; nested under the existing `llm_call` block, all existing keys unchanged. Present only when an LLM call actually happened: the Adjuster demo-fixture path (Phase 7) emits no `prompt` key because it sends no prompt.
 
 ## Repository Name
 

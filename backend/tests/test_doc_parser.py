@@ -173,6 +173,43 @@ def test_evaluate_sources_fields_from_record(
     assert payload["error"] is None
 
 
+def test_evaluate_captures_literal_prompt_in_audit(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Phase 8.3: the audit's `llm_call.prompt` is the literal text the model saw."""
+    claim_id = _insert_claim(
+        clean_db,
+        narrative="Burst supply line flooded the warehouse mezzanine.",
+    )
+    mock_provider.response_text = _summary_text()
+    parser = _build_doc_parser(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    parser.evaluate(claim_id, uuid4())
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    prompt = row[0]["llm_call"]["prompt"]
+    # Both halves are non-empty strings, and the captured text equals what the
+    # provider actually received — proving we record the sent prompt, not a template.
+    assert isinstance(prompt["system"], str) and prompt["system"]
+    assert isinstance(prompt["user"], str) and prompt["user"]
+    sent = mock_provider.calls[0]
+    assert prompt["system"] == sent.system
+    assert prompt["user"] == sent.user
+    # The narrative was substituted into the user prompt (no `{...}` placeholder).
+    assert "Burst supply line" in prompt["user"]
+    assert "{claim_narrative}" not in prompt["user"]
+
+
 # --------------------------------------------------------------------------- #
 # Defensive guards
 # --------------------------------------------------------------------------- #
