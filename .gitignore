@@ -2,6 +2,7 @@
 BUILD-PLAN.md
 HANDOFF.md
 Claude_Desktop_Orientation.md
+docs/learning/
 
 # Secrets and environment files.
 .env
