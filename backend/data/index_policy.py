@@ -285,8 +285,10 @@ def main(argv: list[str] | None = None) -> int:
     vectors = _embed_chunks(chunks, model, settings)
 
     with open_connection(settings) as conn:
+        # `_persist` wraps its delete+insert in `conn.transaction()`, which
+        # commits on exit — under the connection's autocommit contract no outer
+        # commit is needed here.
         _persist(conn, chunks, vectors, settings.embedding.model_name)
-        conn.commit()
 
     total_tokens = sum(c.token_count for c in chunks)
     print(

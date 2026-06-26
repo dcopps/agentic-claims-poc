@@ -619,3 +619,44 @@ The four-artefact set per phase (prompt + approved plan + report + build-log ent
 **Next:** Clone-and-run verification.
 
 ---
+
+## Phase 8.4 — Audit-write Transaction Fix
+
+**Date:** 2026-06-26
+
+**Phase / Prompt:** Phase 8.4 — [`docs/prompts/12-phase-8.4-audit-write-fix.md`](prompts/12-phase-8.4-audit-write-fix.md)
+**Plan (approved):** [`docs/prompts/12-phase-8.4-audit-write-fix-plan.md`](prompts/12-phase-8.4-audit-write-fix-plan.md) — approved with one amendment: the two trailing script `conn.commit()` calls folded into scope as a direct knock-on of the contract change.
+**Report:** [`docs/prompts/12-phase-8.4-audit-write-fix-report.md`](prompts/12-phase-8.4-audit-write-fix-report.md)
+
+**Prompt summary.** A production-only silent data-loss bug found during Phase 8.3 rehearsal: re-running a threshold-escalation scenario on deployed `0.8.3`, three of the four agents (`doc_parser`, `validator`, `adjuster`) showed ✓ completed in the UI but their audit-log rows were missing entirely; only `guardrail` and the orchestrator's rows persisted. This breaks the load-bearing property that *"the audit log alone is sufficient to reconstruct and explain any past decision."* All 331 tests passed throughout.
+
+**Root cause.** `backend/db/connection.py` opened connections with `autocommit=False`. Doc-Parser, Validator, and Adjuster each run a SELECT (claim record / pgvector retrieval / demo-fixture lookup) **before** `AuditWriter.append`. Under autocommit-off, that first SELECT opens an implicit transaction, which demotes `AuditWriter`'s `conn.transaction()` to a nested SAVEPOINT. The savepoint releases on `__exit__` but is durable only if the enclosing implicit transaction commits — and `open_connection` closes the connection with no outer commit, so Postgres rolls the implicit transaction (and the audit INSERT) back. Guardrail and the orchestrator survive because they run **no SQL before the audit write**, so their `conn.transaction()` is the top-level boundary on a clean connection.
+
+**What changed:**
+
+- `backend/db/connection.py` — `psycopg.connect(..., autocommit=False)` → `autocommit=True`; removed the now-redundant `conn.commit()` after `SET statement_timeout`; rewrote the docstring to state the new transaction contract (callers wrap atomic multi-statement work in `conn.transaction()`, which under autocommit emits a real top-level `BEGIN…COMMIT`) and the Phase 8.4 rationale.
+- `backend/data/seed_claims.py`, `backend/data/index_policy.py` — removed the trailing `conn.commit()` after the `conn.transaction()`-wrapped write; added a comment explaining no outer commit is needed. These were no-ops under autocommit but encoded the old contract; folded in as a direct knock-on so the source does not mislead the next reader.
+- `backend/tests/test_audit_persistence.py` — **new**, four regression tests (one per agent). Two-connection design: the agent writes through the unmodified production `open_connection`, then the test reads the audit row through a **separate** connection. This is the only shape that observes durability — the existing agent suites read through the same `clean_db` connection that wrote the row, so the rollback was invisible to all 331 tests.
+- `pyproject.toml` — version `0.8.3` → `0.8.4`. `/health` resolves from package metadata, so a successful redeploy reports `0.8.4`.
+
+**Caller sweep (no atomicity dependency broken).** Every `open_connection` call site was reviewed. All multi-statement writes (`AuditWriter.append`, `ClaimsRepository.insert`/`update_status`, the seed insert, the index persist) already wrap themselves in `conn.transaction()`, so each remains atomic under autocommit; reads become commit-free. `api/human.py` writes the audit row then the status as two separate `conn.transaction()` blocks — not atomic together today either, by design (audit authoritative, status best-effort); unchanged.
+
+**Interface stability:** none. No JSON schema, HTTP shape, SSE event, or column changed. All audit payload contracts (including the Phase 8.3 `llm_call.prompt` block) unchanged. Only intended observable changes: `/health` → `0.8.4`, and audit rows that previously vanished now persist.
+
+**Discriminator proof (local).** The new tests were run against three connection states to prove they catch the bug and are not vacuous:
+
+| Connection state | Result |
+| --- | --- |
+| Fixed (`autocommit=True`, no post-SET commit) | 4/4 pass |
+| True original bug (`autocommit=False` **with** post-SET commit) | 3 fail, 1 pass — reproduces the rehearsal exactly (Guardrail survives) |
+| `autocommit=False` **without** post-SET commit | 4/4 fail |
+
+The third row surfaced a design insight: the post-SET `conn.commit()` was **load-bearing** under autocommit-off — it closed the implicit transaction opened by the `SET statement_timeout` execute. Removing it *without* the autocommit flip would have broadened the bug to all four agents. The shipped change makes both edits together; documented so a future reader does not "tidy" the autocommit flip in isolation.
+
+**Tests:** 331 → **335 backend passing**, 7 skipped (the four new regression tests). `ruff` clean; `mypy` clean on the changed files. Frontend untouched.
+
+**Deployed verification (pending Render redeploy):** confirm `/health` reports `0.8.4`; re-run the threshold scenario; confirm all four agent panels show filled prompts and JSON responses with no "Audit entry not found" banners; confirm the audit log for that correlation_id holds seven entries (four agent steps + `pipeline_started`, `escalation_decision`, `pipeline_awaiting_human`).
+
+**Next:** Deploy to Render and run the deployed verification above.
+
+---

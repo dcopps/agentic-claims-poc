@@ -380,8 +380,10 @@ def main(argv: list[str] | None = None) -> int:
 
     claims = generate_claims()
     with open_connection() as conn:
+        # `insert_claims` wraps its work in `conn.transaction()`, which commits
+        # on exit — under the connection's autocommit contract no outer commit
+        # is needed here.
         inserted = insert_claims(conn, claims, truncate_first=args.allow_truncate)
-        conn.commit()
 
     print(f"Inserted {inserted} claims (3 scripted + 6 background).")
     return 0

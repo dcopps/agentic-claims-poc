@@ -31,15 +31,31 @@ def open_connection(settings: Settings | None = None) -> Iterator[psycopg.Connec
 
     Yields a connection with the pgvector type adapter registered and the
     session-level `statement_timeout` applied. The connection is closed on
-    context exit; transactions are the caller's responsibility (psycopg
-    autocommit is off by default — explicit `conn.commit()` or rollback).
+    context exit.
+
+    Transaction contract: the connection runs in **autocommit mode**. A bare
+    statement commits the moment it executes; callers that need several
+    statements to land atomically MUST wrap them in `conn.transaction()`,
+    which under autocommit emits a real top-level `BEGIN…COMMIT`. Every write
+    path in this codebase already does so (`AuditWriter`, `ClaimsRepository`,
+    the seed and index scripts).
+
+    Why autocommit (Phase 8.4): with autocommit *off*, the first SELECT on a
+    connection opened an implicit transaction, and a later `conn.transaction()`
+    block degraded to a SAVEPOINT nested inside it. The savepoint "committed"
+    on exit but was only durable if the enclosing implicit transaction
+    committed — which never happened, because this context manager closes the
+    connection without an outer commit. Postgres then rolled the implicit
+    transaction back, silently discarding audit-log INSERTs written through
+    that savepoint. Autocommit removes the implicit outer transaction, so every
+    `conn.transaction()` block is the top-level boundary and commits for real.
 
     `settings` is injectable so tests can pass an alternative configuration
     without monkey-patching the global Settings cache.
     """
     cfg = settings or Settings()
     url = cfg.database.url.get_secret_value()
-    conn = psycopg.connect(url, autocommit=False)
+    conn = psycopg.connect(url, autocommit=True)
 
     try:
         # Apply session-level statement timeout. Set as a server-side
@@ -57,9 +73,10 @@ def open_connection(settings: Settings | None = None) -> Iterator[psycopg.Connec
                 "statement_timeout_ms must be non-negative; "
                 f"got {timeout_ms}"
             )
+        # Under autocommit this SET applies and commits immediately — it is a
+        # session-level parameter, so no explicit commit is needed.
         with conn.cursor() as cur:
             cur.execute(f"SET statement_timeout = {timeout_ms}")
-        conn.commit()
 
         # Enable round-tripping of `vector` columns to Python lists /
         # numpy arrays. Must run after the extension exists in the DB,
