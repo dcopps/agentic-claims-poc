@@ -96,6 +96,27 @@ Open `http://localhost:5173/`. The Vite dev server proxies `/health` and `/api/*
 - **`DATABASE_URL`** supports either local Postgres (`postgresql://localhost/agentic_claims_dev`) or a **Neon dev branch** (paste the connection string; skip `setup-dev-db.sh`).
 - `.env` is gitignored. `ANTHROPIC_API_KEY` and `MISTRAL_API_KEY` are required for live agent runs (not for the test suite, which mocks the LLM boundary).
 
+### Local test database setup
+
+The backend test suite uses **its own database**, separate from the dev DB. The
+suite's fixtures TRUNCATE tables between tests, so it must never run against the
+deployed Neon database (or any `*.neon.tech` host) — the fixtures refuse to, and
+fail loudly if asked. Point the suite at a local test DB once:
+
+```bash
+# 1. Create the test database (reuses setup-dev-db.sh via DEV_DB_NAME)
+DEV_DB_NAME=agentic_claims_test ./scripts/setup-dev-db.sh
+
+# 2. Configure TEST_DATABASE_URL
+cp .env.test.example .env.test
+# edit .env.test → TEST_DATABASE_URL=postgresql://USER@localhost:5432/agentic_claims_test
+```
+
+The fixtures read `TEST_DATABASE_URL` (from `.env.test`) in preference to
+`DATABASE_URL`. They fall back to `DATABASE_URL` only when it is itself non-Neon —
+which is how CI works, with `DATABASE_URL` set to a localhost service container and
+no `TEST_DATABASE_URL`. `.env.test` is gitignored.
+
 ### Test, lint, type-check
 
 ```bash

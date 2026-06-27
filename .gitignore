@@ -8,6 +8,7 @@ docs/learning/
 .env
 .env.*
 !.env.example
+!.env.test.example
 !frontend/.env.example
 
 # Python.

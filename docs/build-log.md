@@ -660,3 +660,48 @@ The third row surfaced a design insight: the post-SET `conn.commit()` was **load
 **Next:** Deploy to Render and run the deployed verification above.
 
 ---
+
+## Phase 8.5 — Test-isolation Fix
+
+**Date:** 2026-06-27
+
+**Phase / Prompt:** Phase 8.5 — [`docs/prompts/13-phase-8.5-test-isolation-fix.md`](prompts/13-phase-8.5-test-isolation-fix.md)
+**Plan (approved):** [`docs/prompts/13-phase-8.5-test-isolation-fix-plan.md`](prompts/13-phase-8.5-test-isolation-fix-plan.md) — approved as written; verification mode "I run setup, you guide" (Dermot creates the local test DB; the suite is not run against it in-session).
+**Report:** [`docs/prompts/13-phase-8.5-test-isolation-fix-report.md`](prompts/13-phase-8.5-test-isolation-fix-report.md)
+
+**Prompt summary.** Phase 8.4 verification exposed a latent structural hazard present since Phase 1: `db_settings` is a bare `Settings()` that resolves `DATABASE_URL` from `.env`, the local `.env` points at deployed Neon, and the `clean_db` fixture runs `TRUNCATE TABLE policy_chunks, audit_log, claims RESTART IDENTITY CASCADE` and commits. So any `uv run pytest` on a laptop with a Neon-pointing `.env` wipes production — which is what depopulated the deployed DB during the Phase 8.4 test runs (subsequently repopulated via `index_policy` + `seed_claims`). CI was never at risk: it sets `DATABASE_URL` to a localhost service container.
+
+**Root cause.** No separation between the dev database and the test database, and no guard preventing destructive fixtures from running against a deployed (`*.neon.tech`) host. The bare `Settings()` in `db_settings` resolved to whatever `.env` said.
+
+**What changed (test layer only — no production code touched):**
+
+- `backend/tests/conftest.py` — new pure helper `_resolve_test_database_url(test_url, database_url)` implementing the decision tree: prefer `TEST_DATABASE_URL`; fall back to `DATABASE_URL` only when non-Neon (the CI path); **raise `RuntimeError` on any `*.neon.tech` host** (no env-var bypass); raise when both are unset. Each refusal names the offending host and points at the README. `db_settings` now reads `TEST_DATABASE_URL` (from `.env.test`) and `DATABASE_URL` (from `.env`) via a `_read_env_candidate` helper, resolves through the guard, and pins the session via `os.environ["DATABASE_URL"]` (the highest-precedence path `Settings` honours — so bare `open_connection()` calls are covered, not just explicit ones). `clean_db` gains a defence-in-depth Neon check before its TRUNCATE.
+- `backend/tests/test_db_isolation.py` — **new**, three discriminator tests against the pure resolver (no DB required, no side effects): guard fires on a Neon test URL (asserts host in message + case-insensitivity + README pointer); guard allows a localhost URL via both the explicit-override and CI-fallback paths; missing/Neon-only config raises with the README pointer.
+- `.env.test.example` — **new**, documents the `TEST_DATABASE_URL` convention and the one-time setup. `.gitignore` gains `!.env.test.example` (the `.env.*` pattern would otherwise swallow the template; `.env.test` itself stays correctly ignored).
+- `README.md` — new "Local test database setup" section.
+- `CLAUDE.md` — "Local dev environment" decision clarified (two databases: `agentic_claims_dev` for the app, `agentic_claims_test` for pytest); Current Status updated.
+- `pyproject.toml` — version `0.8.4` → `0.8.5`.
+
+**Design notes:**
+
+- **Why `os.environ` injection, not a `Settings(database=…)` kwarg:** `Settings` applies the named `DATABASE_URL` alias *last* (highest precedence, `settings.py:497`), so an init kwarg would be silently overridden by the `.env` Neon value. Setting `os.environ["DATABASE_URL"]` uses that same highest-precedence path and has the bonus of covering bare `Settings()`/`open_connection()` constructed anywhere in the session.
+- **Setup approach (Option A):** reuse `scripts/setup-dev-db.sh` unchanged via its existing `DEV_DB_NAME` parameter; no script change.
+- **No new dependency:** `python-dotenv` is already used by `settings.py`.
+
+**Interface stability:** none. Test-infrastructure only. `Settings` is read, not modified. No production code path, JSON schema, HTTP shape, SSE event, or DB column changed.
+
+**What would have broken without the fix:** every `pytest` invocation on a developer's (or Claude Code's) laptop with a Neon-pointing `.env` wipes `claims`, `audit_log`, and `policy_chunks` on the deployed database. The fix converts that silent wipe into a loud `RuntimeError` at fixture setup.
+
+**Verification performed (in-session, safe):**
+
+- Three discriminator tests pass (`uv run pytest backend/tests/test_db_isolation.py`) — no DB touched, 0.01s.
+- `ruff` and `mypy` clean on `conftest.py` and `test_db_isolation.py`.
+- **Guard fires end-to-end:** running `backend/tests/test_audit_persistence.py` with the current Neon `.env` and no `.env.test` now **errors at `db_settings` setup with the guard's `RuntimeError`** — it no longer reaches `clean_db`'s TRUNCATE. The deployed database is protected. (Error messages use only `urlparse(...).hostname`, never the full URL or password.)
+
+**Verification pending (needs the local test DB — Dermot's one-time setup):** the full backend suite passing at **338** against `agentic_claims_test`. Setup commands are in the report verbatim.
+
+**Tests:** 335 → **338 backend** (the three new discriminator tests; the existing 335 unchanged, and they will run against the local test DB once `TEST_DATABASE_URL` is set). Frontend unchanged (36). `/health` → `0.8.5` once redeployed.
+
+**Next:** Dermot runs the local test-DB setup and `uv run pytest` to confirm 338. Then the still-pending Phase 8.4 Render deploy + deployed audit-persistence verification (now also surfaces `/health=0.8.5`).
+
+---
