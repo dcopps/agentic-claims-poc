@@ -97,6 +97,7 @@ agentic-claims-poc/
 │   └── setup-dev-db.sh            # one-time local Postgres + pgvector setup
 ├── docs/
 │   ├── architecture-stack-reference.md
+│   ├── BACKLOG.md                 # pending + future work; completed work goes to build-log.md
 │   ├── change-governance.md       # Phase 7
 │   ├── dora-third-party-register.md  # Phase 7
 │   ├── design-decisions.md        # Phase 7
@@ -204,7 +205,7 @@ In the repo (publicly committable):
 
 - `README.md`, `CLAUDE.md`
 - `frontend/`, `backend/`, `infra/`, `scripts/`
-- `docs/architecture-stack-reference.md`, `docs/change-governance.md`, `docs/dora-third-party-register.md`, `docs/design-decisions.md`, `docs/build-log.md`, `docs/prompts/`
+- `docs/architecture-stack-reference.md`, `docs/BACKLOG.md`, `docs/change-governance.md`, `docs/dora-third-party-register.md`, `docs/design-decisions.md`, `docs/build-log.md`, `docs/prompts/`
 - `diagrams/*.mmd`
 - `.github/workflows/`, config files
 - Sample policy excerpt in `backend/data/sample_policy.txt`
