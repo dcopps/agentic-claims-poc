@@ -799,10 +799,66 @@ Frontend unchanged (36).
 
 **Verification (deployed): pending.** Awaiting Render redeploy. Dermot first confirms no `LLM__MISTRAL__*` env var is set on Render (it would outrank the pinned default). Then: `/health` → `0.8.5.2`; submit a fresh claim via the form's *Threshold escalation ($850k fire)* template (not the seeded Northwood row, touched by the failed run); Validator completes, pipeline reaches `awaiting_human`, four agent panels filled with no *Audit entry not found* banners; both `coverage_check` and `settlement_estimate` read `llm_call.model = "mistral-large-2512"`. Outcome to be appended here.
 
+**Deployed verification outcome (14 September 2026) — failed.** Step 0 cleared (Render env holds only `ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`); `/health` reported `0.8.5.2`. The verification run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073` aborted at the Validator with the identical `403 tier_not_allowed`. **`mistral-large-2512` is gated on the Free tier too.** The premise of this phase was wrong: the Mistral admin *Limits* page is a rate-limit table for models the organisation is configured for, not a catalogue of what the current tier may invoke — Mistral has withdrawn Mistral Large from the Free tier, alias and dated releases alike. The pin itself stays (a dated release remains the right policy); what must change is the tier. See [`docs/BACKLOG.md` → *Mistral tier decision*](BACKLOG.md#mistral-tier-decision--now-immediate-blocks-the-demo) for the corrected understanding and the open options.
+
+That the runtime was sending `2512` was established **by elimination** (pinned default deployed per `/health`; no `settings.yaml` on Render; no CLI flags in the start command; no `LLM__MISTRAL__*` env var), because the error-path `llm_call` block records no model — `model` is sourced from the response, and a 403 has none. Phase 8.5.3 adds `llm_call.requested_model` to close exactly that gap; conclusive audit-row evidence follows from its deployed verification.
+
 **Tests:** 338 passed / 7 skipped, unchanged. Frontend unchanged (36).
 
 **Backlog added:** *Mistral tier upgrade path*; *Startup model-access probe* (motivated by this incident — logged, not built).
 
 **Next:** Render redeploy and the combined deployed verification (closes Phase 8.4's carried-over item and Phase 8.5.2's deployed half).
+
+---
+
+## Phase 8.5.3 — Record `requested_model` in Agent Audit Payloads; Reset the Deployed DB (point release)
+
+**Date:** 2026-09-14
+
+**Phase / Prompt:** Phase 8.5.3 — [`docs/prompts/16-phase-8.5.3-requested-model-audit-and-db-reset.md`](prompts/16-phase-8.5.3-requested-model-audit-and-db-reset.md)
+**Plan:** [`docs/prompts/16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md`](prompts/16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md)
+**Report:** [`docs/prompts/16-phase-8.5.3-requested-model-audit-and-db-reset-report.md`](prompts/16-phase-8.5.3-requested-model-audit-and-db-reset-report.md)
+
+**How it surfaced.** Phase 8.5.2's deployed verification failed with the same `403 tier_not_allowed`, and the `coverage_check` audit row could not answer *which model string did the runtime send?* The error-path `llm_call` block carried only `provider`, `latency_ms` and `prompt`; Phase 5's truthful `model` is the *responding* model, absent when there is no response. The answer had to be reached by eliminating every other settings path — which the audit-log-as-trusted-record property is meant to make unnecessary.
+
+**What changed (Part A — code).** Every agent audit payload (`doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`) now carries `llm_call.requested_model: str` whenever a provider call was attempted — success, parse-failure and provider-exception paths alike — and omits it when none was (the Adjuster demo-fixture path).
+
+**Design — deliberately overrides the prompt's stated preference.** The prompt preferred threading `requested_model` as an explicit parameter alongside `prompt`. Instead the Phase 8.3 capture object was widened: `CapturedPrompt(system, user)` → **`CapturedRequest(system, user, model)`**, and `attach_prompt` → **`attach_request`**, which writes both `prompt` and `requested_model` or, given `None`, neither. Each `_invoke_llm` reads the settings model once into the request and calls `provider.complete(model=request.model)`. Approved by Dermot for two decisive reasons:
+
+- **Zero lines added to the oversized builders.** Three `_build_audit_payload` functions are already over the 50-line limit; the change inside them is a one-token rename. A parallel parameter would have added a parameter line and a key line to each.
+- **Single read by construction.** The provider call and the audit read the same field, so the recorded value *is* the sent value — not a second read of settings that is merely expected to agree. The omit-when-no-call rule is inherited from the existing `None` rather than enforced by two optionals that must happen to be `None` together.
+
+The rename is internal — the two names were used only in the five `backend/app/agents/` files. The *audit key* `prompt` is unchanged. Variant overrides work without touching `variant_factory.py`: the deep-copied Settings' `validator_model` is what lands in the request.
+
+**Interface stability.** Additive key under `llm_call` on all four agent payloads. Existing keys (`provider`, `model`, `prompt_tokens`, `completion_tokens`, `latency_ms`, `prompt`, fixture `note`), top-level shape, DB columns, HTTP responses and SSE events unchanged. Existing audit rows and the hash chain unaffected. New bullet in `CLAUDE.md` → *Locked interface extensions since Phase 4*. Frontend unchanged by decision: the Audit JSON viewer renders the key automatically; `AgentCard` reads only `llm_call.prompt`.
+
+**Tests.** Nine new, one extended:
+
+- Per agent (`test_doc_parser.py`, `test_validator.py`, `test_adjuster.py`, `test_guardrail.py`): `test_evaluate_records_requested_model_on_success` and `test_provider_error_audit_records_requested_model`. Success tests assert `requested_model` equals the settings field *and* the model the mock received *and* differs from the mock's responding model (`mock-model-latest`) — so a copy-from-response bug cannot pass. Error tests assert the row is written, `requested_model` is present, and `model` is absent.
+- `test_validator.py::test_haiku_variant_records_overridden_requested_model` — Validator built through the real `variant_factory._build_validator` for `v2_haiku_validator`; records `claude-haiku-4-5-20251001` while shared Settings keeps the Mistral default. Placed in `test_validator.py` rather than the DB-free `test_variants.py` because it needs a claim, chunks and a connection.
+- `test_demo_fixture.py` gains `assert "requested_model" not in llm_call` beside the Phase 8.3 `prompt` assertion.
+
+**Discriminator proof.** With the `requested_model` line temporarily removed from `attach_request`, all 9 new tests failed; restored, all pass.
+
+| | Before | After |
+| --- | --- | --- |
+| Collected | 345 | **354** |
+| Passed | 338 | **347** |
+| Failed | 0 | 0 |
+| Skipped | 7 | 7 |
+
+`ruff check .` clean; `mypy` clean (108 source files). Frontend unchanged (36).
+
+**Function size.** The four builders gained no lines. Each `_invoke_llm` gained four (the `CapturedRequest` constructor is now multi-line to carry `model` within the 100-column limit); the pre-existing overages are logged in the backlog (*Split the oversized audit-payload builders*), not fixed here.
+
+**Version.** `pyproject.toml` `0.8.5.2` → **`0.8.5.3`** (`uv.lock` project entry follows); installed package confirmed `0.8.5.3`.
+
+**Part B — deployed DB reset: pending.** Runs after commit, push and Render redeploy, immediately before the verification run, gated on a hostname-only `.neon.tech` check. See *Pending verifications* in `docs/BACKLOG.md`.
+
+**Verification (deployed): pending.** `/health` → `0.8.5.3`; reset → 9 claims; process seeded `threshold_escalation`; expected Validator abort; `coverage_check` `llm_call.requested_model = "mistral-large-2512"`; `doc_extract` `requested_model` = `model` = `claude-haiku-4-5-20251001`. Outcome to be appended here.
+
+**Backlog.** Removed *Record `requested_model` on the error-path `llm_call`* (built). Added *Split the oversized audit-payload builders* and *Record `requested_model` in `ProbeMetadata`* (logged, not built). Stale cross-references to the renamed *Mistral tier decision* section corrected.
+
+**Next:** deploy, Part B reset, deployed verification; then the Mistral tier decision.
 
 ---

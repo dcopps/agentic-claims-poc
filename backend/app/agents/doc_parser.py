@@ -40,9 +40,9 @@ from uuid import UUID
 import psycopg
 
 from backend.app.agents._shared import (
-    CapturedPrompt,
+    CapturedRequest,
     ProbeMetadata,
-    attach_prompt,
+    attach_request,
     probe_metadata,
 )
 from backend.app.agents._shared import (
@@ -149,7 +149,7 @@ class DocParser:
         """
         with self._connection_factory() as conn:
             record = self._load_claim_record(conn, claim_id)
-            response, summary, error, latency_ms, prompt = self._invoke_llm(
+            response, summary, error, latency_ms, request = self._invoke_llm(
                 record.narrative
             )
             # The structured fields always come from the record; only the
@@ -166,7 +166,7 @@ class DocParser:
                 output=output,
                 latency_ms=latency_ms,
                 error=error,
-                prompt=prompt,
+                request=request,
             )
 
             if error is not None:
@@ -192,7 +192,7 @@ class DocParser:
         `provider.complete` emits. `evaluate` is the audit-writing, claim-bound
         counterpart; this reuses its core (`_invoke_llm`) so the two cannot drift.
         """
-        response, summary, error, latency_ms, _prompt = self._invoke_llm(narrative)
+        response, summary, error, latency_ms, _request = self._invoke_llm(narrative)
         if error is not None:
             raise error
         assert response is not None and summary is not None
@@ -226,16 +226,16 @@ class DocParser:
     def _invoke_llm(
         self, narrative: str
     ) -> tuple[
-        ProviderResponse | None, str | None, BaseException | None, int, CapturedPrompt
+        ProviderResponse | None, str | None, BaseException | None, int, CapturedRequest
     ]:
         """
         Build the summary prompt, call the provider, validate the prose.
 
-        Returns `(response, summary, error, latency_ms, prompt)`. Either `summary`
+        Returns `(response, summary, error, latency_ms, request)`. Either `summary`
         is a validated string and `error` is None, or `error` is populated and
         `summary` is None. `latency_ms` is measured across the whole call so the
-        audit entry can report time-spent on the failure paths too. `prompt` is the
-        literal text sent to the model; it is built before the call, so it is
+        audit entry can report time-spent on the failure paths too. `request` is the
+        literal prompt and model sent; it is built before the call, so it is
         returned on every path — including the provider-exception path — letting the
         audit capture what was sent even when no response came back.
         """
@@ -244,14 +244,18 @@ class DocParser:
             "doc_parser_template",
             claim_narrative=narrative,
         )
-        prompt = CapturedPrompt(system=system_prompt, user=user_prompt)
+        request = CapturedRequest(
+            system=system_prompt,
+            user=user_prompt,
+            model=self._settings.llm.anthropic.doc_parser_model,
+        )
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
         try:
             response = self._provider.complete(
                 system=system_prompt,
                 user=user_prompt,
-                model=self._settings.llm.anthropic.doc_parser_model,
+                model=request.model,
                 max_tokens=self._settings.llm.doc_parser_max_tokens,
                 temperature=self._settings.llm.doc_parser_temperature,
                 correlation_id=correlation_id,
@@ -261,13 +265,13 @@ class DocParser:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, None, exc, int((time.perf_counter() - t0) * 1000), prompt
+            return None, None, exc, int((time.perf_counter() - t0) * 1000), request
 
         try:
             summary = _validate_summary(response.text)
         except ValueError as exc:
-            return response, None, exc, int((time.perf_counter() - t0) * 1000), prompt
-        return response, summary, None, int((time.perf_counter() - t0) * 1000), prompt
+            return response, None, exc, int((time.perf_counter() - t0) * 1000), request
+        return response, summary, None, int((time.perf_counter() - t0) * 1000), request
 
     def _write_audit(
         self,
@@ -280,7 +284,7 @@ class DocParser:
         output: DocParserOutput | None,
         latency_ms: int,
         error: BaseException | None,
-        prompt: CapturedPrompt | None,
+        request: CapturedRequest | None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -289,7 +293,7 @@ class DocParser:
             output=output,
             latency_ms=latency_ms,
             error=error,
-            prompt=prompt,
+            request=request,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -384,15 +388,15 @@ def _build_audit_payload(
     output: DocParserOutput | None,
     latency_ms: int,
     error: BaseException | None,
-    prompt: CapturedPrompt | None,
+    request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked doc-parser-step audit payload.
 
     `fields_source` is the Phase 8.2 additive field: it records that the
     structured fields came from the claim record, not from LLM extraction. The
     `output` block carries the full field set as before; the `llm_call` block now
-    reflects a call that produced only `narrative_summary`, and (Phase 8.3) carries
-    the literal `prompt` that was sent.
+    reflects a call that produced only `narrative_summary`, and carries the literal
+    `prompt` (Phase 8.3) and `requested_model` (Phase 8.5.3) that were sent.
     """
     payload: dict[str, Any] = {
         "input": {
@@ -402,7 +406,7 @@ def _build_audit_payload(
         # Honest provenance: the structured fields are sourced from the claim
         # record; only the summary is model-derived.
         "fields_source": _FIELDS_SOURCE,
-        "llm_call": attach_prompt(
+        "llm_call": attach_request(
             {
                 "provider": _PROVIDER_LABEL,
                 "model": response.model,
@@ -412,7 +416,7 @@ def _build_audit_payload(
             }
             if response is not None
             else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms},
-            prompt,
+            request,
         ),
         # `output.model_dump(mode="json")` returns `claimed_amount` as
         # a string, which keeps the canonical audit encoder happy

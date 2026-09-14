@@ -259,6 +259,45 @@ def test_evaluate_captures_literal_prompt_in_audit(
     assert prompt["user"] == mock_provider.calls[0].user
 
 
+def test_evaluate_records_requested_model_on_success(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    market_data_table: object,
+    parsed_claim: DocParserOutput,
+    validator_verdict: ValidatorVerdict,
+) -> None:
+    """Phase 8.5.3: the live path records the model the agent asked for."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _valid_output_json("85000.00")
+    adjuster = _build_adjuster(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+        market_data_table=market_data_table,
+    )
+    adjuster.evaluate(
+        claim_id,
+        uuid4(),
+        parsed_claim=parsed_claim,
+        validator_verdict=validator_verdict,
+    )
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    llm_call = row[0]["llm_call"]
+    assert llm_call["requested_model"] == db_settings.llm.mistral.adjuster_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
+    # The mock answers as a different model, so equality with `model` would mean the
+    # value was copied from the response rather than recorded from the request.
+    assert llm_call["model"] == mock_provider.response_model
+    assert llm_call["requested_model"] != llm_call["model"]
+
+
 # --------------------------------------------------------------------------- #
 # Range-enforcement guard — the headline Adjuster contract.
 # --------------------------------------------------------------------------- #
@@ -498,6 +537,44 @@ def test_provider_raises_writes_audit_and_propagates(
         row = cur.fetchone()
     assert row is not None
     assert row[0]["error"]["type"] == "LLMProviderError"
+
+
+def test_provider_error_audit_records_requested_model(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    market_data_table: object,
+    parsed_claim: DocParserOutput,
+    validator_verdict: ValidatorVerdict,
+) -> None:
+    """Phase 8.5.3: a failed call still records which model was requested."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.raise_on_call = LLMProviderError("MistralProvider: 403 tier_not_allowed")
+    adjuster = _build_adjuster(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+        market_data_table=market_data_table,
+    )
+    with pytest.raises(LLMProviderError):
+        adjuster.evaluate(
+            claim_id,
+            uuid4(),
+            parsed_claim=parsed_claim,
+            validator_verdict=validator_verdict,
+        )
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    llm_call = row[0]["llm_call"]
+    # No response came back, so there is no responding `model` — only the request.
+    assert "model" not in llm_call
+    assert llm_call["requested_model"] == db_settings.llm.mistral.adjuster_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 
 # --------------------------------------------------------------------------- #

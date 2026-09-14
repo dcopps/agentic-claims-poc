@@ -8,6 +8,16 @@ Ordered by priority: pending verifications first, then the next architectural ph
 
 ## Pending verifications (carried over from previous phases)
 
+### Deployed verification of Phase 8.5.3 (`requested_model` audit key) — with DB reset
+
+Narrower than the full seven-entry run below, and **expected to abort at the Validator** — the Mistral tier decision is still open. Its purpose is to prove from the audit row alone which model the runtime requests. Run as one operational sequence, after `0.8.5.3` is deployed:
+
+1. `/health` → `0.8.5.3`.
+2. **DB reset (Part B)** — pending. Hostname-only check that the resolved `DATABASE_URL` ends in `.neon.tech`; then `uv run python -m backend.data.seed_claims --allow-truncate`; confirm `SELECT COUNT(*) FROM claims` = 9 and the three scenario tags present with status `received`. `TRUNCATE … CASCADE` also clears `audit_log`, including runs `26a9bf4e-…` and `11f97ae8-…` cited in the Phase 8.5.2 build-log entry — a conscious choice; the build log keeps the finding. `policy_chunks` is untouched; do **not** re-run `index_policy`.
+3. Process the seeded `threshold_escalation` claim; it aborts at the Validator (`403 tier_not_allowed`).
+4. Audit log for that run: `coverage_check` `llm_call.requested_model = "mistral-large-2512"` (no `model` key); `doc_extract` `llm_call.requested_model` and `llm_call.model` both `claude-haiku-4-5-20251001`.
+5. Record the outcome in the Phase 8.5.3 build-log entry and report, and replace the elimination argument in the Phase 8.5.2 entry with the definitive statement.
+
 ### Deployed verification of Phase 8.4 (audit-write transaction fix) and Phase 8.5.2 (Mistral model pin)
 
 Deploy `0.8.5.2` to Render and confirm both the audit-write fix and the Mistral pin survive end-to-end in production. One run covers both. Steps:
@@ -19,13 +29,21 @@ Deploy `0.8.5.2` to Render and confirm both the audit-write fix and the Mistral 
 4. Open the audit log for the run's correlation_id. Confirm **seven** entries: `pipeline_started`, `doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`, `escalation_decision`, `pipeline_awaiting_human`. Confirm the *Verify chain (whole ledger)* badge reports the chain verified.
 5. Confirm **both** `coverage_check` and `settlement_estimate` read `llm_call.model = "mistral-large-2512"`. The threshold scenario calls the Adjuster live; the $1.4M guardrail scenario cannot prove the Adjuster pin because its Adjuster output is a demo fixture.
 
-This closes the last item carried over from Phase 8.4 and the deployed half of Phase 8.5.2. Cheap; only blocked by triggering a Render deploy.
+This closes the last item carried over from Phase 8.4 and the deployed half of Phase 8.5.2.
+
+**Attempted 14 September 2026 — failed, now blocked.** Step 0 cleared (Render env has only `ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`). Step 1 cleared (`/health` = `0.8.5.2`). Step 2 failed: run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073` aborted at the Validator with the identical `403 tier_not_allowed`. By elimination (pinned default deployed, no `settings.yaml`, no CLI flags, no env override) the runtime was sending `mistral-large-2512`, so **2512 is gated on the Free tier too**. The Phase 8.5.2 premise — that the Limits page listing 2512 meant Free could call it — was wrong; see *Mistral tier decision* below for the corrected understanding. This verification is blocked until the Mistral tier decision (payment method vs Claude default) is made and deployed.
+
+When re-run: before step 2, reset the deployed DB with `uv run python -m backend.data.seed_claims --allow-truncate` (against the Neon `DATABASE_URL` — safe; the Phase 8.5 guard is pytest-only). Today's failed submissions left four Northwood rows and several claims stuck in `extracted`.
 
 ---
 
 ## Next architectural phase — Phase 8.6: Demo UI polish
 
-The demo is showable as of `0.8.5.1`. Phase 8.6 exists to lift it from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs.
+The demo is **not currently showable** — the Validator 403s on every scenario until the Mistral tier decision lands (see *Pending verifications*). Once that is resolved, Phase 8.6 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
+
+### Deployment — highest priority in this phase (found 14 September 2026)
+
+- **SPA deep links 404 on hard load.** There is no `vercel.json`, so Vercel's edge has no rewrite sending non-root paths to `index.html`. Every deep URL — `/audit`, `/agents`, `/claims/:id/runs/:cid`, `/audit?correlation_id=…` — returns Vercel's own 404 (`NOT_FOUND`, `dub1::…` request id) on a hard load or refresh. Only `/` works. Client-side navigation (clicking links inside the app) works because it never touches the edge, which is why every deep link used in rehearsals so far appeared to work. **A page refresh mid-demo, or sharing a run URL with an interviewer, 404s.** Latent since Phase 6. Fix: add `frontend/vercel.json` with `{"rewrites": [{"source": "/(.*)", "destination": "/index.html"}]}` (standard Vite + React Router on Vercel). One file. Verify by hard-loading `/audit?correlation_id=<any>` after deploy.
 
 ### Claims page (surveyed 3 August 2026)
 
@@ -43,9 +61,14 @@ Six items surfaced during the sweep of the `/claims` route. All are frontend-onl
 
 - **JSON viewer overflows page width.** Expanding an audit-log entry shows the payload in a dark code block. Long string values — filled prompts, narrative text, multi-line user prompts — do not wrap; they extend horizontally past the right edge of the viewport, breaking the page layout and forcing horizontal scroll. Fix in the JSON viewer component: constrain container `max-width: 100%` with `overflow-x: auto` for internal scroll, or use `white-space: pre-wrap` / `word-break: break-word` for wrapping. Wrapping is more readable for prose-heavy fields like prompts and narratives.
 
+### Run Detail page (partially observed 14 September 2026 — abort path only)
+
+- **Agent card stuck at "running" after a pipeline abort.** When the Validator raised the Mistral 403, the run header correctly showed `aborted` and the `ErrorBanner` carried the exception — but the Validator card stayed at *"running"* with the Phase 8 progress bar animating (*"Retrieving policy clauses… ~9s"*), and Adjuster/Guardrail stayed `queued`. The two surfaces disagree: run says aborted, card says running. Phase 8's `ErrorBanner` design (D6) covered the run-level surface and left per-card state untouched. Fix: on `pipeline_aborted`, transition the aborting agent's card to a failed state (name the exception type) and the downstream cards to a skipped/cancelled state. Verify with any forced-abort path (the agent test bench, or a deliberately bad model id).
+- **Pipeline abort leaves the claim in `extracted`.** The orchestrator sets `claims.status = 'extracted'` after `doc_extract` succeeds; when a later agent aborts, the claim stays there. Truthful (extraction did happen) but it is a visible intermediate state in the Claims list with no explanation, and it is distinct from `aborted` (Phase 6 — a *human* rejection, terminal). Decision needed: should a *system* abort return the claim to `received` so it can be re-processed cleanly, or should there be a distinct non-terminal `failed` status? Either way the Claims list needs to explain it. Note the `claims.status` CHECK is a locked interface — adding a value is an interface-stability event.
+
 ### Routes still un-surveyed
 
-The Phase 6 SPA has six routes. Only *Claims* has been swept. Five remain:
+The Phase 6 SPA has six routes. Only *Claims* has been swept, and *Run Detail* only on its abort path. Five remain:
 
 - **Run Detail** (`/claims/:id/runs/:correlationId`) — the four-agent live pipeline visualisation
 - **Audit** (`/audit`) — the audit-log browser (has the known JSON-overflow item above; may have others)
@@ -66,21 +89,53 @@ Each should be visited before Phase 8.6 lands, and any items found folded into t
 
 ## Future work (queued, not next)
 
-### Mistral tier upgrade path
+### Mistral tier decision — **now immediate, blocks the demo**
 
-The pin to `mistral-large-2512` works today because that specific version is still on the Free tier's accessible list. Mistral will eventually deprecate 2512 (they've deprecated Large versions on ~12-month cycles historically). When that happens, the options are: (a) pin forward to whichever Mistral Large version is then on the Free tier — same fix pattern, low cost, but chasing a moving target; (b) add a payment method on Mistral and switch back to `mistral-large-latest` — small monthly cost, unlimited horizon; or (c) route Validator + Adjuster through Claude via the LLM Gateway variant mechanism — architecturally strongest (demonstrates DORA Article 28 substitutability in action), no Mistral dependency at all. Decide when the pin ages out, not before.
+*Originally logged at close of Phase 8.5.2 as "Mistral tier upgrade path", a future decision for when the 2512 pin aged out. Superseded the same day.*
 
-Logged at close of Phase 8.5.2.
+**Corrected understanding (14 September 2026).** The Phase 8.5.2 pin to `mistral-large-2512` also returns `403 tier_not_allowed` in production (run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073`). The plan's premise was that the Mistral admin *Limits* page (`admin.mistral.ai/limits`) listing 2512 with a 250k TPM rate limit meant the Free tier could call it. **It does not.** The Limits page is a rate-limit table for models the organisation is configured for; it is not a catalogue of what the current tier can invoke. Mistral has withdrawn Mistral Large from the Free tier entirely — alias and dated releases alike. Do not re-run the pin-to-another-version experiment against that page.
+
+The pin itself stays (dated release, not alias — the pin-by-policy comment in `settings.py` remains correct). What changes is the tier.
+
+**Options, decision pending with Dermot:**
+
+- **(1) Add a payment method on Mistral.** Keep the 2512 pin (paid tiers do not gate it). Restores the exact locked architecture — *"Mistral Large (Validator, Adjuster)"* — and keeps the two-vendor DORA Article 28 story live in the demo. Pay-as-you-go Mistral Large is roughly €2–6 per million tokens; a demo run is a few thousand tokens, so a few euros of credit covers months of rehearsals. Recommended.
+- **(3) Default Validator + Adjuster to Claude Haiku** via the LLM Gateway. Zero cost; the `v2_haiku_validator` variant from Phase 5 already does this for the Validator. But all four agents on one vendor hollows out `design-decisions.md` §3, and the *"Re-process with v2"* substitution demo cannot run either without a working Mistral. The substitution *capability* stays in the code; the *live proof* leaves the demo. If chosen, CLAUDE.md's locked *Models* decision needs an explicit note, and the demo script should say it out loud rather than hope nobody asks.
+- ~~(2) Pin to a smaller Free-tier Mistral model~~ — another guess against the same misleading Limits page, not "Mistral Large", and Small may not reliably return the structured coverage JSON. Not recommended.
+
+**Whichever is chosen:** append the deployed-verification outcome (failed — 2512 gated) and this corrected understanding to the Phase 8.5.2 build-log entry and report.
 
 ### Startup model-access probe
 
 At application startup, call each provider's models-list endpoint and confirm every configured model identifier (`llm.anthropic.*_model`, `llm.mistral.*_model`) is accessible to the account. A missing model fails startup — or at minimum turns `/health` unhealthy — with a config error naming the model, the agent role that uses it, and the provider.
 
-**Motivating incident.** On 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) the Validator aborted a production pipeline mid-run with `403 tier_not_allowed`: Mistral had re-pointed the `mistral-large-latest` alias at a paid-tier release. Nothing in the deployment had changed, so nothing surfaced the problem until a claim was already being processed. A startup probe would have reported it as a configuration error at deploy time, before any claim reached the pipeline. Phase 8.5.2 fixed the instance by pinning to `mistral-large-2512`; the probe is the long-term answer to the class, including the day the pin itself ages out (see *Mistral tier upgrade path*).
+**Motivating incident.** On 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) the Validator aborted a production pipeline mid-run with `403 tier_not_allowed`: Mistral had re-pointed the `mistral-large-latest` alias at a paid-tier release. Nothing in the deployment had changed, so nothing surfaced the problem until a claim was already being processed. A startup probe would have reported it as a configuration error at deploy time, before any claim reached the pipeline. Phase 8.5.2 fixed the instance by pinning to `mistral-large-2512`; the probe is the long-term answer to the class, including the day the pin itself ages out (see *Mistral tier decision*).
 
 **Design questions to settle when scoped:** fail startup vs degrade `/health` (a hard failure on Render means a crash loop rather than a visible error page); whether the probe's own API calls need audit or api-call logging; timeout and retry behaviour so a provider blip doesn't block a deploy; and whether variant-override models in `variants.yaml` are probed too.
 
 Suggested during Phase 8.5.2 planning by Claude Code; logged, deliberately not built.
+
+### Split the oversized audit-payload builders
+
+`Validator._build_audit_payload` (~67 lines), `Adjuster._build_audit_payload` (~72) and `Guardrail._build_audit_payload` (~74) are over the 50-line hard limit in `CLAUDE.md`, and `Adjuster.evaluate` is ~63 including its docstring. All pre-date Phase 8.5.3, which deliberately added no lines to any of them (the `CapturedRequest` design was chosen partly for that reason).
+
+**Change:** extract per-block helpers — `_input_block`, `_output_block`, `_error_block` — so each builder reads as a flat assembly of named parts and sits under 50 lines. The `error` block is **byte-identical across all four agents** (`{"type": type(error).__name__, "message": str(error)}` or `None`), so it belongs in `_shared.py` as `error_block(error)` rather than four private copies. Pure refactor: no payload key, value or ordering changes; the existing audit-payload tests are the regression net, and the canonical-JSON hash of a payload built before and after should be identical for the same inputs. A good small point release, or ride-along with any backend phase.
+
+Suggested in the Phase 8.5.3 plan by Claude Code; logged, not built.
+
+### Record `requested_model` in `ProbeMetadata` (agent test bench)
+
+The agent test bench (`POST /agents/test`, Phase 6) returns `ProbeMetadata` — the *responding* `model`, latency and token counts — built from the provider response. On a probe failure there is no response, so the bench has the same blind spot the audit log had before Phase 8.5.3: it cannot say which model was asked for. The probe paths already hold the `CapturedRequest` (discarded as `_request` in `parse` / `assess` / `estimate` / `check`), so the value is one field away.
+
+**Change:** add `requested_model: str` to `ProbeMetadata` and surface it in the bench's error and success responses. This is an **additive HTTP response-shape change** for `/agents/test`, so it needs its own interface-stability acknowledgement in the plan (and a frontend type update if the bench UI is to show it).
+
+Suggested in the Phase 8.5.3 plan by Claude Code; logged, not built.
+
+### Render environment-variable inventory in `render.yaml`
+
+Risk 1 of the Phase 8.5.2 plan (*"is there an `LLM__MISTRAL__*` override on Render?"*) needed a dashboard visit to answer. Render's Blueprint format supports an `envVars` block where `sync: false` declares a variable's *name* without its value, so the inventory of what the deployed backend expects (`ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`, and any future `LLM__*` overrides) can live in the repo with no secrets. Turns the check into a file read and documents the deployment contract. Would also have shortened the July CORS diagnosis.
+
+Suggested in the Phase 8.5.2 report by Claude Code; logged, not built.
 
 ### In-UI "How it works" info page
 

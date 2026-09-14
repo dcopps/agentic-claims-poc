@@ -20,6 +20,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -28,10 +30,21 @@ import pytest
 
 from backend.app.agents import Validator
 from backend.app.llm.provider import LLMProviderError
+from backend.app.orchestrator.variant_factory import (
+    _build_validator as build_variant_validator,
+)
+from backend.app.orchestrator.variant_factory import (
+    resolve_validator_config,
+)
+from backend.app.orchestrator.variant_registry import VariantRegistry
 from backend.app.prompts import PromptLoader
 from backend.settings import Settings
 
 from .conftest import MockProvider
+
+_VARIANTS_PATH = (
+    Path(__file__).resolve().parents[2] / "backend/app/orchestrator/variants.yaml"
+)
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -144,6 +157,16 @@ def _seed_chunks(
 def _conn_factory(conn: psycopg.Connection) -> Iterator[psycopg.Connection]:
     """Yield the test connection without closing it (clean_db owns it)."""
     yield conn
+
+
+def _audit_llm_call(conn: psycopg.Connection, claim_id: UUID) -> dict[str, Any]:
+    """Return the `llm_call` block of the claim's single coverage_check audit row."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    llm_call: dict[str, Any] = row[0]["llm_call"]
+    return llm_call
 
 
 def _build_validator(
@@ -278,6 +301,67 @@ def test_evaluate_captures_prompt_with_substituted_chunks(
     assert "Fire, lightning, windstorm, water damage." in prompt["user"]
     assert "{retrieved_chunks}" not in prompt["user"]
     assert prompt["user"] == mock_provider.calls[0].user
+
+
+def test_evaluate_records_requested_model_on_success(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    stub_embedder: Callable[[str], np.ndarray],
+) -> None:
+    """Phase 8.5.3: `llm_call.requested_model` is the model the agent asked for."""
+    claim_id = _insert_claim(clean_db, narrative="Sprinkler discharge caused water damage.")
+    chunk_ids = _seed_chunks(clean_db, stub_embedder)
+    mock_provider.response_text = _verdict_json(chunk_ids)
+    validator = _build_validator(
+        conn=clean_db,
+        provider=mock_provider,
+        embedder=stub_embedder,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    validator.evaluate(claim_id, uuid4())
+
+    llm_call = _audit_llm_call(clean_db, claim_id)
+    assert llm_call["requested_model"] == db_settings.llm.mistral.validator_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
+    # The mock answers as a different model, so equality with `model` would mean the
+    # value was copied from the response rather than recorded from the request.
+    assert llm_call["model"] == mock_provider.response_model
+    assert llm_call["requested_model"] != llm_call["model"]
+
+
+def test_haiku_variant_records_overridden_requested_model(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    mock_provider: MockProvider,
+    stub_embedder: Callable[[str], np.ndarray],
+) -> None:
+    """
+    Phase 8.5.3: a variant's model override is what the audit records.
+
+    Built through the real variant factory so the deep-copied, overridden Settings
+    is the one the agent reads at call time — not a hand-constructed Validator.
+    """
+    claim_id = _insert_claim(clean_db, narrative="Sprinkler discharge caused water damage.")
+    chunk_ids = _seed_chunks(clean_db, stub_embedder)
+    mock_provider.response_text = _verdict_json(chunk_ids)
+    registry = VariantRegistry.load_from_yaml(_VARIANTS_PATH)
+    validator = build_variant_validator(
+        config=resolve_validator_config(registry.resolve("v2_haiku_validator")),
+        settings=db_settings,
+        provider=mock_provider,
+        embedder=stub_embedder,
+        connection_factory=lambda: _conn_factory(clean_db),
+    )
+    validator.evaluate(claim_id, uuid4())
+
+    llm_call = _audit_llm_call(clean_db, claim_id)
+    assert llm_call["requested_model"] == "claude-haiku-4-5-20251001"
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
+    # The shared Settings still holds the Mistral default — the override is per-run.
+    assert db_settings.llm.mistral.validator_model != "claude-haiku-4-5-20251001"
 
 
 # --------------------------------------------------------------------------- #
@@ -490,6 +574,39 @@ def test_provider_raises_writes_audit_and_propagates(
     assert row is not None
     assert row[0]["error"]["type"] == "LLMProviderError"
     assert row[0]["verdict"] is None
+
+
+def test_provider_error_audit_records_requested_model(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    stub_embedder: Callable[[str], np.ndarray],
+) -> None:
+    """
+    Phase 8.5.3: a failed call still records which model was requested.
+
+    This is the production 403 shape from run `11f97ae8-…`: the Validator aborts
+    with no response, and the audit must still say what was asked for.
+    """
+    claim_id = _insert_claim(clean_db, narrative="X")
+    _seed_chunks(clean_db, stub_embedder)
+    mock_provider.raise_on_call = LLMProviderError("MistralProvider: 403 tier_not_allowed")
+    validator = _build_validator(
+        conn=clean_db,
+        provider=mock_provider,
+        embedder=stub_embedder,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    with pytest.raises(LLMProviderError):
+        validator.evaluate(claim_id, uuid4())
+
+    llm_call = _audit_llm_call(clean_db, claim_id)
+    # No response came back, so there is no responding `model` — only the request.
+    assert "model" not in llm_call
+    assert llm_call["requested_model"] == db_settings.llm.mistral.validator_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 
 # --------------------------------------------------------------------------- #

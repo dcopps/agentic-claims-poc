@@ -43,9 +43,9 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
-    CapturedPrompt,
+    CapturedRequest,
     ProbeMetadata,
-    attach_prompt,
+    attach_request,
     probe_metadata,
 )
 from backend.app.agents._shared import (
@@ -144,7 +144,7 @@ class Guardrail:
         """
         with self._connection_factory() as conn:
             rule_flags = self._run_rule_checks(adjuster_result, retrieved_chunks)
-            response, llm_flags, error, latency_ms, prompt = self._invoke_llm(
+            response, llm_flags, error, latency_ms, request = self._invoke_llm(
                 adjuster_result=adjuster_result,
                 retrieved_chunks=retrieved_chunks,
                 rule_flags=rule_flags,
@@ -165,7 +165,7 @@ class Guardrail:
                 output=output,
                 latency_ms=latency_ms,
                 error=error,
-                prompt=prompt,
+                request=request,
             )
 
             if error is not None:
@@ -208,7 +208,7 @@ class Guardrail:
             latency_ms=0,
         )
         rule_flags = self._run_rule_checks(synthetic, retrieved_chunks)
-        response, llm_flags, error, latency_ms, _prompt = self._invoke_llm(
+        response, llm_flags, error, latency_ms, _request = self._invoke_llm(
             adjuster_result=synthetic,
             retrieved_chunks=retrieved_chunks,
             rule_flags=rule_flags,
@@ -244,16 +244,16 @@ class Guardrail:
         list[GuardrailFlag],
         BaseException | None,
         int,
-        CapturedPrompt,
+        CapturedRequest,
     ]:
         """
         Build the prompt, call the provider, parse the LLM's flags.
 
-        Returns `(response, llm_flags, error, latency_ms, prompt)`. On
+        Returns `(response, llm_flags, error, latency_ms, request)`. On
         success `llm_flags` may be empty (clean scan); on failure
-        it is empty and `error` carries the cause. `prompt` is the literal text
-        sent — built before the call, so returned on every path including the
-        provider-exception path.
+        it is empty and `error` carries the cause. `request` is the literal prompt
+        and model sent — built before the call, so returned on every path including
+        the provider-exception path.
         """
         system_prompt = self._prompt_loader.system("guardrail")
         user_prompt = self._prompt_loader.user(
@@ -263,14 +263,18 @@ class Guardrail:
             retrieved_chunks=_format_chunks_for_prompt(retrieved_chunks),
             rule_flags_already_found=_format_rule_flags_for_prompt(rule_flags),
         )
-        prompt = CapturedPrompt(system=system_prompt, user=user_prompt)
+        request = CapturedRequest(
+            system=system_prompt,
+            user=user_prompt,
+            model=self._settings.llm.anthropic.guardrail_model,
+        )
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
         try:
             response = self._provider.complete(
                 system=system_prompt,
                 user=user_prompt,
-                model=self._settings.llm.anthropic.guardrail_model,
+                model=request.model,
                 max_tokens=self._settings.llm.guardrail_max_tokens,
                 temperature=self._settings.llm.guardrail_temperature,
                 correlation_id=correlation_id,
@@ -280,13 +284,13 @@ class Guardrail:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, [], exc, int((time.perf_counter() - t0) * 1000), prompt
+            return None, [], exc, int((time.perf_counter() - t0) * 1000), request
 
         try:
             llm_flags = _parse_llm_flags(response.text)
         except ValueError as exc:
-            return response, [], exc, int((time.perf_counter() - t0) * 1000), prompt
-        return response, llm_flags, None, int((time.perf_counter() - t0) * 1000), prompt
+            return response, [], exc, int((time.perf_counter() - t0) * 1000), request
+        return response, llm_flags, None, int((time.perf_counter() - t0) * 1000), request
 
     def _write_audit(
         self,
@@ -301,7 +305,7 @@ class Guardrail:
         output: GuardrailOutput | None,
         latency_ms: int,
         error: BaseException | None,
-        prompt: CapturedPrompt | None,
+        request: CapturedRequest | None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -312,7 +316,7 @@ class Guardrail:
             output=output,
             latency_ms=latency_ms,
             error=error,
-            prompt=prompt,
+            request=request,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -459,12 +463,12 @@ def _build_audit_payload(
     output: GuardrailOutput | None,
     latency_ms: int,
     error: BaseException | None,
-    prompt: CapturedPrompt | None,
+    request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked guardrail-step audit payload.
 
-    `prompt` (Phase 8.3) is the literal text sent to the model, attached to the
-    `llm_call` block when a call was made.
+    `request` carries the literal prompt (Phase 8.3) and requested model (Phase
+    8.5.3) sent to the model, attached to the `llm_call` block when a call was made.
     """
     payload: dict[str, Any] = {
         "input": {
@@ -494,7 +498,7 @@ def _build_audit_payload(
             "flag_count": len(rule_flags),
             "flags": [flag.model_dump(mode="json") for flag in rule_flags],
         },
-        "llm_call": attach_prompt(
+        "llm_call": attach_request(
             {
                 "provider": _PROVIDER_LABEL,
                 "model": response.model,
@@ -504,7 +508,7 @@ def _build_audit_payload(
             }
             if response is not None
             else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms},
-            prompt,
+            request,
         ),
         "output": (
             {

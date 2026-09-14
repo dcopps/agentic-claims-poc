@@ -172,3 +172,6 @@ def test_guardrail_escalation_reproduces_deterministically(
     # Phase 8.3: no prompt was sent on the fixture path, so the audit omits it —
     # truthful rather than synthesising the prompt the model would have received.
     assert "prompt" not in row[0]["llm_call"]
+    # Phase 8.5.3: likewise no model was requested, so `requested_model` is absent —
+    # a missing key means "no request was made", never "we forgot to record it".
+    assert "requested_model" not in row[0]["llm_call"]

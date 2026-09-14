@@ -210,6 +210,36 @@ def test_evaluate_captures_literal_prompt_in_audit(
     assert "{claim_narrative}" not in prompt["user"]
 
 
+def test_evaluate_records_requested_model_on_success(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Phase 8.5.3: `llm_call.requested_model` is the model the agent asked for."""
+    claim_id = _insert_claim(clean_db, narrative="Burst supply line flooded.")
+    mock_provider.response_text = _summary_text()
+    parser = _build_doc_parser(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    parser.evaluate(claim_id, uuid4())
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    llm_call = row[0]["llm_call"]
+    assert llm_call["requested_model"] == db_settings.llm.anthropic.doc_parser_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
+    # The mock answers as a different model, so equality with `model` would mean the
+    # value was copied from the response rather than recorded from the request.
+    assert llm_call["model"] == mock_provider.response_model
+    assert llm_call["requested_model"] != llm_call["model"]
+
+
 # --------------------------------------------------------------------------- #
 # Defensive guards
 # --------------------------------------------------------------------------- #
@@ -332,6 +362,35 @@ def test_provider_raises_writes_audit_and_propagates(
     assert row is not None
     assert row[0]["error"]["type"] == "LLMProviderError"
     assert row[0]["output"] is None
+
+
+def test_provider_error_audit_records_requested_model(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Phase 8.5.3: a failed call still records which model was requested."""
+    claim_id = _insert_claim(clean_db, narrative="Burst supply line flooded.")
+    mock_provider.raise_on_call = LLMProviderError("AnthropicProvider: 403 forbidden")
+    parser = _build_doc_parser(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=db_settings,
+        prompt_loader=prompt_loader,
+    )
+    with pytest.raises(LLMProviderError):
+        parser.evaluate(claim_id, uuid4())
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    llm_call = row[0]["llm_call"]
+    # No response came back, so there is no responding `model` — only the request.
+    assert "model" not in llm_call
+    assert llm_call["requested_model"] == db_settings.llm.anthropic.doc_parser_model
+    assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 
 def test_audit_payload_truncates_long_narrative(

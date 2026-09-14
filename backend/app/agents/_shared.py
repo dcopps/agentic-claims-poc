@@ -54,39 +54,48 @@ def probe_metadata(response: ProviderResponse, latency_ms: int) -> ProbeMetadata
 
 
 @dataclass(frozen=True)
-class CapturedPrompt:
+class CapturedRequest:
     """
-    The literal system + user prompt an agent sent to the LLM for one call
-    (Phase 8.3 explainability capture).
+    What an agent sent to the LLM provider for one call: the literal system + user
+    prompt (Phase 8.3) and the requested model identifier (Phase 8.5.3).
 
-    Both fields are fully substituted strings — `PromptLoader.user(...)` after
+    The prompt fields are fully substituted strings — `PromptLoader.user(...)` after
     placeholder fill and `PromptLoader.system(...)` — i.e. the exact text the model
-    received, not the raw template. An agent builds this *before* the provider call,
-    so it is available even on the provider-exception path; the audit log can then
-    record what was sent regardless of whether a response came back. The only path
-    that carries no `CapturedPrompt` is one that never calls the LLM at all (e.g. the
-    Adjuster's deterministic demo fixture).
+    received, not the raw template. `model` is the settings value resolved at call
+    time (including any variant override), and the agent passes *this field* to
+    `provider.complete(model=…)`, so the audited value is the sent value by
+    construction rather than a second read of settings that could drift.
+
+    An agent builds this *before* the provider call, so it is available even on the
+    provider-exception path, where no response exists to say which model was
+    involved. The only path that carries no `CapturedRequest` is one that never
+    calls the LLM at all (e.g. the Adjuster's deterministic demo fixture).
     """
 
     system: str
     user: str
+    model: str
 
 
-def attach_prompt(
-    llm_call: dict[str, Any], prompt: CapturedPrompt | None
+def attach_request(
+    llm_call: dict[str, Any], request: CapturedRequest | None
 ) -> dict[str, Any]:
     """
-    Add the literal prompt to an audit `llm_call` block when one was sent.
+    Add what was sent — the literal `prompt` and the `requested_model` — to an audit
+    `llm_call` block when a request was made.
 
-    Mutates and returns `llm_call`. When `prompt` is None — a path that issued no
+    Mutates and returns `llm_call`. When `request` is None — a path that issued no
     LLM call at all (e.g. the Adjuster's deterministic demo fixture) — the block is
-    left untouched, so a *missing* `prompt` key truthfully signals "no prompt was
-    sent" rather than fabricating the text that would have been sent had the model
-    run. This is the additive Phase 8.3 audit extension; all existing keys are
-    untouched.
+    left untouched, so *missing* `prompt` and `requested_model` keys truthfully
+    signal "no request was made" rather than fabricating what would have been sent
+    had the model run. Both are additive audit extensions (Phase 8.3 and 8.5.3);
+    existing keys are untouched. `requested_model` sits beside `model` (the
+    *responding* model, from the response) rather than replacing it: a mismatch
+    between the two on a success path is itself diagnostic.
     """
-    if prompt is not None:
-        llm_call["prompt"] = {"system": prompt.system, "user": prompt.user}
+    if request is not None:
+        llm_call["prompt"] = {"system": request.system, "user": request.user}
+        llm_call["requested_model"] = request.model
     return llm_call
 
 

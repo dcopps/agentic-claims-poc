@@ -41,9 +41,9 @@ import psycopg
 from pydantic import ValidationError as PydanticValidationError
 
 from backend.app.agents._shared import (
-    CapturedPrompt,
+    CapturedRequest,
     ProbeMetadata,
-    attach_prompt,
+    attach_request,
     probe_metadata,
 )
 from backend.app.agents._shared import (
@@ -143,7 +143,7 @@ class Validator:
             narrative = self._load_narrative(conn, claim_id)
             query_vector = self._embed_narrative(narrative)
             retrieved = self._retrieve_top_chunks(conn, query_vector)
-            response, verdict, error, latency_ms, prompt = self._invoke_llm(
+            response, verdict, error, latency_ms, request = self._invoke_llm(
                 narrative=narrative,
                 retrieved=retrieved,
             )
@@ -157,7 +157,7 @@ class Validator:
                 verdict=verdict,
                 latency_ms=latency_ms,
                 error=error,
-                prompt=prompt,
+                request=request,
             )
 
             if error is not None:
@@ -189,7 +189,7 @@ class Validator:
         with self._connection_factory() as conn:
             query_vector = self._embed_narrative(narrative)
             retrieved = self._retrieve_top_chunks(conn, query_vector)
-        response, verdict, error, latency_ms, _prompt = self._invoke_llm(
+        response, verdict, error, latency_ms, _request = self._invoke_llm(
             narrative=narrative, retrieved=retrieved
         )
         if error is not None:
@@ -288,18 +288,18 @@ class Validator:
         ValidatorVerdict | None,
         BaseException | None,
         int,
-        CapturedPrompt,
+        CapturedRequest,
     ]:
         """
         Build the prompt, call the provider, parse the verdict.
 
-        Returns `(response, verdict, error, latency_ms, prompt)`. Either
+        Returns `(response, verdict, error, latency_ms, request)`. Either
         `verdict` is populated and `error` is None, or `error` is
         populated and `verdict` is None. `latency_ms` is measured
         across the whole step so an audit entry can report time-spent
-        even when the call failed. `prompt` is the literal text sent —
-        built before the call, so returned on every path including the
-        provider-exception path.
+        even when the call failed. `request` is the literal prompt and
+        model sent — built before the call, so returned on every path
+        including the provider-exception path.
         """
         system_prompt = self._prompt_loader.system("validator")
         user_prompt = self._prompt_loader.user(
@@ -307,7 +307,11 @@ class Validator:
             claim_narrative=narrative,
             retrieved_chunks=_format_chunks_for_prompt(retrieved),
         )
-        prompt = CapturedPrompt(system=system_prompt, user=user_prompt)
+        request = CapturedRequest(
+            system=system_prompt,
+            user=user_prompt,
+            model=self._settings.llm.mistral.validator_model,
+        )
         # Synthesise a correlation id slice for the APILogger. The
         # caller's correlation id is the canonical one; passing it
         # through here keeps a single ID across audit + log.
@@ -317,7 +321,7 @@ class Validator:
             response = self._provider.complete(
                 system=system_prompt,
                 user=user_prompt,
-                model=self._settings.llm.mistral.validator_model,
+                model=request.model,
                 max_tokens=self._settings.llm.validator_max_tokens,
                 temperature=self._settings.llm.validator_temperature,
                 correlation_id=correlation_id,
@@ -327,13 +331,13 @@ class Validator:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, None, exc, int((time.perf_counter() - t0) * 1000), prompt
+            return None, None, exc, int((time.perf_counter() - t0) * 1000), request
 
         try:
             verdict = _parse_verdict(response.text, retrieved)
         except ValueError as exc:
-            return response, None, exc, int((time.perf_counter() - t0) * 1000), prompt
-        return response, verdict, None, int((time.perf_counter() - t0) * 1000), prompt
+            return response, None, exc, int((time.perf_counter() - t0) * 1000), request
+        return response, verdict, None, int((time.perf_counter() - t0) * 1000), request
 
     def _write_audit(
         self,
@@ -347,7 +351,7 @@ class Validator:
         verdict: ValidatorVerdict | None,
         latency_ms: int,
         error: BaseException | None,
-        prompt: CapturedPrompt | None,
+        request: CapturedRequest | None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
@@ -358,7 +362,7 @@ class Validator:
             latency_ms=latency_ms,
             error=error,
             provider_label=self._provider.vendor,
-            prompt=prompt,
+            request=request,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -463,7 +467,7 @@ def _build_audit_payload(
     latency_ms: int,
     error: BaseException | None,
     provider_label: str,
-    prompt: CapturedPrompt | None,
+    request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked validator-step audit payload.
 
@@ -474,10 +478,10 @@ def _build_audit_payload(
     audit entry that misreported the provider would undermine the provider-
     substitutability evidence the audit log exists to furnish.
 
-    `prompt` (Phase 8.3) is the literal system + user text sent to the model,
-    attached to the `llm_call` block. With the retrieved chunks substituted inline,
-    this is the single largest contributor to the audit row — still well within
-    JSONB at prototype scale.
+    `request` carries the literal system + user text (Phase 8.3) and the requested
+    model (Phase 8.5.3) sent to the model, attached to the `llm_call` block. With
+    the retrieved chunks substituted inline, the prompt is the single largest
+    contributor to the audit row — still well within JSONB at prototype scale.
     """
     payload: dict[str, Any] = {
         "input": {
@@ -498,7 +502,7 @@ def _build_audit_payload(
                 for chunk in retrieved
             ],
         },
-        "llm_call": attach_prompt(
+        "llm_call": attach_request(
             {
                 "provider": provider_label,
                 "model": response.model,
@@ -508,7 +512,7 @@ def _build_audit_payload(
             }
             if response is not None
             else {"provider": provider_label, "latency_ms": latency_ms},
-            prompt,
+            request,
         ),
         "verdict": (
             verdict.model_dump(mode="json") if verdict is not None else None
