@@ -114,8 +114,26 @@ def test_downgrade_constraint_rejects_existing_human_rows(
     # six-value CHECK must fail rather than silently dropping audit rows.
     claim_id = _insert_claim(clean_db)
     _write_human_entry(clean_db, claim_id)
-    with pytest.raises(psycopg.errors.CheckViolation), clean_db.cursor() as cur:
+    # The DDL surgery MUST be wrapped in an explicit transaction. Connections run
+    # in autocommit mode (Phase 8.4), so a bare DROP commits the instant it
+    # executes — the failed re-add would then leave the shared test schema
+    # permanently without its agent CHECK, and `clean_db` only TRUNCATEs rows, so
+    # nothing would ever restore it. Under autocommit `conn.transaction()` emits a
+    # real top-level BEGIN…COMMIT, and its __exit__ rolls back before the
+    # CheckViolation reaches the enclosing `pytest.raises`.
+    with (
+        pytest.raises(psycopg.errors.CheckViolation),
+        clean_db.transaction(),
+        clean_db.cursor() as cur,
+    ):
         cur.execute("ALTER TABLE audit_log DROP CONSTRAINT audit_log_agent_check")
         cur.execute(_SIX_VALUE_CHECK)
-    # Roll back the aborted DDL transaction so the seven-value constraint stands.
-    clean_db.rollback()
+    # Asserting the rollback actually happened is what makes this test a
+    # discriminator against a DDL leak, not just against the re-add being refused.
+    # Without it the test passes identically whether the DROP was rolled back or
+    # committed — which is exactly how the autocommit regression stayed invisible.
+    with clean_db.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM pg_constraint WHERE conname = 'audit_log_agent_check'"
+        )
+        assert cur.fetchone() is not None

@@ -705,3 +705,56 @@ The third row surfaced a design insight: the post-SET `conn.commit()` was **load
 **Next:** Dermot runs the local test-DB setup and `uv run pytest` to confirm 338. Then the still-pending Phase 8.4 Render deploy + deployed audit-persistence verification (now also surfaces `/health=0.8.5`).
 
 ---
+
+## Phase 8.5.1 — Migration-test Autocommit Fix (point release)
+
+**Date:** 2026-09-14
+
+**Phase / Prompt:** Phase 8.5.1 — [`docs/prompts/14-phase-8.5.1-migration-test-autocommit-fix.md`](prompts/14-phase-8.5.1-migration-test-autocommit-fix.md) (prompt + diagnostic + plan combined; this hotfix arose from an investigation, not a pre-written phase prompt)
+**Report:** [`docs/prompts/14-phase-8.5.1-migration-test-autocommit-fix-report.md`](prompts/14-phase-8.5.1-migration-test-autocommit-fix-report.md)
+
+**How it surfaced.** Phase 8.5's one pending item was for Dermot to create the local test DB and confirm the suite. That setup was already done — `agentic_claims_test` exists, migrated to `0002_audit_human_agent`, `vector` enabled, `.env.test` → `localhost:5432/agentic_claims_test`. Running `uv run pytest` gave **336 passed, 2 failed, 7 skipped**, both failures in `backend/tests/test_migration_0002.py`.
+
+**Root cause.** `test_downgrade_constraint_rejects_existing_human_rows` proves the documented downgrade hazard by dropping `audit_log_agent_check` and re-adding the narrower six-value version, expecting `CheckViolation`. It relied on both statements sharing one implicit transaction, so the failed re-add would abort the transaction and undo the `DROP`. **Phase 8.4 abolished that implicit transaction** — `backend/db/connection.py:59` now opens every connection `autocommit=True`, and the docstring states the contract: callers needing multi-statement atomicity MUST use `conn.transaction()`. This test was the one caller never updated. Under autocommit the `DROP` committed immediately, the re-add failed as expected (so `pytest.raises` was satisfied and the test *passed*), and the trailing `clean_db.rollback()` was a no-op with no transaction open. The constraint was permanently stripped from the test database on first run; every run thereafter failed here and at `test_agent_check_constraint_includes_human`. Phase 8.5 did not cause this — it created the first conditions under which it is observable, namely a *persistent* test database.
+
+**Why CI missed it.** CI provisions a fresh localhost Postgres service container per run. On a virgin schema all four tests pass — the poisoning test runs last in the file — and the container is discarded. CI was green throughout and would have stayed green indefinitely.
+
+**Why this stayed invisible — the three load-bearing lessons.** Recorded verbatim for whoever hits the next test-suite regression:
+
+> **It is invisible in CI, permanently.** CI provisions a fresh localhost Postgres service container per run. On a virgin schema all four tests pass — the poisoning test runs *last* in the file — and the container is then discarded. The damage only manifests on a *persistent* test database, which is exactly what Phase 8.5 just introduced. Phase 8.5 didn't cause the bug; it created the first conditions under which the bug is observable.
+>
+> **The test passes while doing the damage.** `pytest.raises(CheckViolation)` is satisfied by the *new* wrong behaviour just as well as by the old right one, so the assertion can't distinguish "constraint correctly refused" from "constraint destroyed, then refused". Green on the run that breaks things, red on every innocent run afterwards — the blame lands on whoever runs next.
+>
+> **`TRUNCATE` cleanup doesn't cover DDL.** `clean_db` resets *rows*, not *schema*. A test that mutates schema is outside the fixture's isolation contract entirely, and nothing in the harness notices.
+
+**The two-piece fix:**
+
+1. **Repair the test database** — `ALTER TABLE audit_log ADD CONSTRAINT audit_log_agent_check CHECK (agent IN (…seven values…))`, restoring what migration 0002 intends. One statement, no code, safe because every existing `agent` value already satisfies it. (Local DB only; not version-controlled.)
+2. **Fix the test** — `backend/tests/test_migration_0002.py` only. The DDL surgery is now wrapped in `clean_db.transaction()`, which under autocommit emits a real top-level `BEGIN…COMMIT` and rolls back on the way out. The three context managers exit in reverse order — cursor closes, transaction rolls back, then `CheckViolation` reaches the enclosing `pytest.raises` — so `pytest.raises` must stay outermost. They are combined into one parenthesised `with` rather than nested because ruff SIM117 flags the nested form. The no-op `clean_db.rollback()` was **removed rather than left in place**: it encoded a transaction contract Phase 8.4 abolished, and leaving it would misdescribe the code.
+
+**The self-checking assertion.** A post-assertion (`SELECT 1 FROM pg_constraint WHERE conname = 'audit_log_agent_check'` → `assert cur.fetchone() is not None`) now verifies the rollback actually happened. This is what converts the test from a discriminator against *constraint-refuses-to-re-add* into a discriminator against *DDL-leaking-out-of-transaction*. Without it the test passes identically whether the `DROP` was rolled back or committed — which is precisely how the regression hid.
+
+**Discriminator proof (not taken on trust).** The pre-fix form was deliberately reinstated with the new assertion kept, and the test re-run: it **failed** at `assert cur.fetchone() is not None` (`assert None is not None`). The code that previously passed while destroying the schema now fails. The fix was then restored, the constraint repaired (the deliberate break had dropped it again), and the full suite re-run green.
+
+**Version.** `pyproject.toml` `0.8.5` → **`0.8.5.1`** — the first point release, establishing the naming pattern for small hotfixes and making the deployed state distinguishable from raw Phase 8.5. `/health` needed no code change: it resolves the version through `importlib.metadata` (`backend/app/api/health.py:42-45`), so the `pyproject.toml` bump propagates on its own. No version literals exist anywhere in code or tests — `test_health.py` deliberately asserts only that the string is non-empty.
+
+**Interface stability:** none. Test-layer only. No production code, migration, JSON schema, HTTP shape, SSE event, or DB column changed. The `/health` response *shape* is unchanged; only the value of its existing `version` field moves, which is its documented purpose.
+
+**Verification:** full suite **338 passed, 0 failed, 7 skipped** (exit 0); `test_migration_0002.py` run twice consecutively passes 4/4 both times, proving no DDL leak between runs; `audit_log_agent_check` confirmed present in `pg_constraint` afterwards; `ruff check .` clean repo-wide; `mypy` clean on the changed file; resolved package version `0.8.5.1`.
+
+**Tests — count reconciliation.** `CLAUDE.md` claimed 338 backend tests while the suite collects 345. The difference is exactly the 7 skipped: **338 is the non-skipped count**. Both figures are stated here so the discrepancy does not resurface.
+
+| | Before | After |
+| --- | --- | --- |
+| Collected | 345 | 345 |
+| Passed | 336 | **338** |
+| Failed | 2 | **0** |
+| Skipped | 7 | 7 |
+
+Frontend unchanged (36).
+
+**Suggestions (not actioned):** a session-scoped fixture that snapshots `pg_constraint` before and after the run and fails on a diff would catch *any* future schema leak, not just this one. Separately, `agentic_claims_dev` is empty (no tables, no `alembic_version`) — the app has been running against Neon rather than local dev; logged as a future item, deliberately out of scope here.
+
+**Next:** the still-pending Phase 8.4 item — deploy to Render and run the deployed audit-persistence verification, which now also surfaces `/health = 0.8.5.1`.
+
+---
