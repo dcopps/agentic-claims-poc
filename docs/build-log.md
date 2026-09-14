@@ -801,7 +801,9 @@ Frontend unchanged (36).
 
 **Deployed verification outcome (14 September 2026) — failed.** Step 0 cleared (Render env holds only `ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`); `/health` reported `0.8.5.2`. The verification run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073` aborted at the Validator with the identical `403 tier_not_allowed`. **`mistral-large-2512` is gated on the Free tier too.** The premise of this phase was wrong: the Mistral admin *Limits* page is a rate-limit table for models the organisation is configured for, not a catalogue of what the current tier may invoke — Mistral has withdrawn Mistral Large from the Free tier, alias and dated releases alike. The pin itself stays (a dated release remains the right policy); what must change is the tier. See [`docs/BACKLOG.md` → *Mistral tier decision*](BACKLOG.md#mistral-tier-decision--now-immediate-blocks-the-demo) for the corrected understanding and the open options.
 
-That the runtime was sending `2512` was established **by elimination** (pinned default deployed per `/health`; no `settings.yaml` on Render; no CLI flags in the start command; no `LLM__MISTRAL__*` env var), because the error-path `llm_call` block records no model — `model` is sourced from the response, and a 403 has none. Phase 8.5.3 adds `llm_call.requested_model` to close exactly that gap; conclusive audit-row evidence follows from its deployed verification.
+That the runtime was sending `2512` was established **by elimination** (pinned default deployed per `/health`; no `settings.yaml` on Render; no CLI flags in the start command; no `LLM__MISTRAL__*` env var), because the error-path `llm_call` block records no model — `model` is sourced from the response, and a 403 has none. Phase 8.5.3 adds `llm_call.requested_model` to close exactly that gap.
+
+**Definitive (Phase 8.5.3 deployed verification, run `56a0d5b2-a90d-43f3-866b-b5d35bd7f900`):** the `coverage_check` audit row reads `llm_call.requested_model = "mistral-large-2512"` alongside the `403 tier_not_allowed` error. The runtime sends the pinned release, and the Free tier refuses it — now established from the audit log alone, not by elimination.
 
 **Tests:** 338 passed / 7 skipped, unchanged. Frontend unchanged (36).
 
@@ -853,9 +855,15 @@ The rename is internal — the two names were used only in the five `backend/app
 
 **Version.** `pyproject.toml` `0.8.5.2` → **`0.8.5.3`** (`uv.lock` project entry follows); installed package confirmed `0.8.5.3`.
 
-**Part B — deployed DB reset: pending.** Runs after commit, push and Render redeploy, immediately before the verification run, gated on a hostname-only `.neon.tech` check. See *Pending verifications* in `docs/BACKLOG.md`.
+**Deployed verification (14 September 2026) — passed.** Run as one sequence after commit `fcfaeef` was pushed:
 
-**Verification (deployed): pending.** `/health` → `0.8.5.3`; reset → 9 claims; process seeded `threshold_escalation`; expected Validator abort; `coverage_check` `llm_call.requested_model = "mistral-large-2512"`; `doc_extract` `requested_model` = `model` = `claude-haiku-4-5-20251001`. Outcome to be appended here.
+1. `/health` → `{"status":"ok","version":"0.8.5.3"}`.
+2. **Part B — reset.** Gate: `DATABASE_URL` resolved through `Settings` (as `seed_claims` does) and printed hostname-only — a `.neon.tech` host in `eu-central-1`; passed. Pre-reset counts recorded: `claims` 14 (1 `awaiting_human`, 4 `extracted`, 9 `received`), `audit_log` 53, `policy_chunks` 12. `uv run python -m backend.data.seed_claims --allow-truncate` → *Inserted 9 claims*. Post-reset: `claims` **9**, all `received`, with `auto_approve` (Harborline, $85k), `threshold_escalation` (Northwood, $850k) and `guardrail_escalation` (Coral Bay, $1.4M) present; `audit_log` 0; `policy_chunks` 12 (untouched; `index_policy` not re-run). The CASCADE deliberately cleared the audit rows of runs `26a9bf4e-…` and `11f97ae8-…`; the Phase 8.5.2 entry keeps the finding.
+3. Dermot processed the seeded Northwood claim from the deployed frontend — run **`56a0d5b2-a90d-43f3-866b-b5d35bd7f900`**, aborted at the Validator as expected.
+4. Audit rows, read directly from Neon: four entries — `pipeline_started`, `doc_extract`, `coverage_check`, `pipeline_aborted`.
+   - `coverage_check` `llm_call` = `{provider: "mistral", latency_ms: 323, requested_model: "mistral-large-2512", prompt: {…}}` — **no `model` key**; `error` = `LLMProviderError … Status 403 … "tier_not_allowed"`. **The conclusive evidence Phase 8.5.2 could not produce.**
+   - `doc_extract` `llm_call` = `{provider: "anthropic", model: "claude-haiku-4-5-20251001", requested_model: "claude-haiku-4-5-20251001", prompt_tokens: 224, completion_tokens: 57, latency_ms: 1128, prompt: {…}}` — requested and responding models match.
+5. The claim is left at `extracted` (the known abort-path behaviour logged in the backlog under Phase 8.6 *Run Detail*).
 
 **Backlog.** Removed *Record `requested_model` on the error-path `llm_call`* (built). Added *Split the oversized audit-payload builders* and *Record `requested_model` in `ProbeMetadata`* (logged, not built). Stale cross-references to the renamed *Mistral tier decision* section corrected.
 

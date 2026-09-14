@@ -8,15 +8,9 @@ Ordered by priority: pending verifications first, then the next architectural ph
 
 ## Pending verifications (carried over from previous phases)
 
-### Deployed verification of Phase 8.5.3 (`requested_model` audit key) — with DB reset
+### Deployed verification of Phase 8.5.3 (`requested_model` audit key) — with DB reset — **done 14 September 2026**
 
-Narrower than the full seven-entry run below, and **expected to abort at the Validator** — the Mistral tier decision is still open. Its purpose is to prove from the audit row alone which model the runtime requests. Run as one operational sequence, after `0.8.5.3` is deployed:
-
-1. `/health` → `0.8.5.3`.
-2. **DB reset (Part B)** — pending. Hostname-only check that the resolved `DATABASE_URL` ends in `.neon.tech`; then `uv run python -m backend.data.seed_claims --allow-truncate`; confirm `SELECT COUNT(*) FROM claims` = 9 and the three scenario tags present with status `received`. `TRUNCATE … CASCADE` also clears `audit_log`, including runs `26a9bf4e-…` and `11f97ae8-…` cited in the Phase 8.5.2 build-log entry — a conscious choice; the build log keeps the finding. `policy_chunks` is untouched; do **not** re-run `index_policy`.
-3. Process the seeded `threshold_escalation` claim; it aborts at the Validator (`403 tier_not_allowed`).
-4. Audit log for that run: `coverage_check` `llm_call.requested_model = "mistral-large-2512"` (no `model` key); `doc_extract` `llm_call.requested_model` and `llm_call.model` both `claude-haiku-4-5-20251001`.
-5. Record the outcome in the Phase 8.5.3 build-log entry and report, and replace the elimination argument in the Phase 8.5.2 entry with the definitive statement.
+`/health` = `0.8.5.3`. **DB reset done**: hostname gate passed (`.neon.tech`), `seed_claims --allow-truncate` → 9 claims at `received`, `audit_log` cleared, `policy_chunks` (12) untouched. Run `56a0d5b2-a90d-43f3-866b-b5d35bd7f900` aborted at the Validator as expected; `coverage_check` reads `llm_call.requested_model = "mistral-large-2512"` with the 403, and `doc_extract` reads `requested_model` = `model` = `claude-haiku-4-5-20251001`. Details in the Phase 8.5.3 build-log entry. Kept here only until the next backlog tidy; the item below remains open.
 
 ### Deployed verification of Phase 8.4 (audit-write transaction fix) and Phase 8.5.2 (Mistral model pin)
 
@@ -33,7 +27,7 @@ This closes the last item carried over from Phase 8.4 and the deployed half of P
 
 **Attempted 14 September 2026 — failed, now blocked.** Step 0 cleared (Render env has only `ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`). Step 1 cleared (`/health` = `0.8.5.2`). Step 2 failed: run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073` aborted at the Validator with the identical `403 tier_not_allowed`. By elimination (pinned default deployed, no `settings.yaml`, no CLI flags, no env override) the runtime was sending `mistral-large-2512`, so **2512 is gated on the Free tier too**. The Phase 8.5.2 premise — that the Limits page listing 2512 meant Free could call it — was wrong; see *Mistral tier decision* below for the corrected understanding. This verification is blocked until the Mistral tier decision (payment method vs Claude default) is made and deployed.
 
-When re-run: before step 2, reset the deployed DB with `uv run python -m backend.data.seed_claims --allow-truncate` (against the Neon `DATABASE_URL` — safe; the Phase 8.5 guard is pytest-only). Today's failed submissions left four Northwood rows and several claims stuck in `extracted`.
+When re-run: before step 2, reset the deployed DB with `uv run python -m backend.data.seed_claims --allow-truncate` (against the Neon `DATABASE_URL` — hostname gate first; the Phase 8.5 guard is pytest-only). The DB was reset on 14 September for Phase 8.5.3, but that phase's verification run left the seeded Northwood claim at `extracted`, so reset again. **The runtime model is now proven from the audit row** (Phase 8.5.3 run `56a0d5b2-…`: `requested_model = "mistral-large-2512"` on the 403) — the elimination argument above is confirmed.
 
 ---
 

@@ -6,9 +6,9 @@ Date: 2026-09-14. Version: `0.8.5.2 → 0.8.5.3`.
 
 ## Status
 
-- **Part A (code): complete.** Committed and pushed.
-- **Part B (deployed DB reset): pending** — runs after the Render redeploy, immediately before the verification run.
-- **Deployed verification: pending** — outcome to be appended below in a follow-up commit.
+- **Part A (code): complete.** Committed and pushed (`fcfaeef`).
+- **Part B (deployed DB reset): complete.** Neon reset to 9 claims.
+- **Deployed verification: passed.** Run `56a0d5b2-a90d-43f3-866b-b5d35bd7f900` — `coverage_check` records `requested_model = "mistral-large-2512"` on the 403.
 
 ## Design decision — the prompt's preference was overridden deliberately
 
@@ -132,7 +132,7 @@ is unchanged; nothing in `frontend/src` reads `llm_call.model`.
 - **Added** *Record `requested_model` in `ProbeMetadata`*, flagged as an additive
   HTTP response-shape change for `/agents/test`.
 - **Added** a *Pending verifications* entry for this phase, with the Part B reset
-  marked pending.
+  marked pending; marked done in the follow-up commit once verification passed.
 - **Corrected** two cross-references that still pointed at the old section name
   *Mistral tier upgrade path* (renamed to *Mistral tier decision* in the
   uncommitted backlog edits that ride along in this commit).
@@ -140,7 +140,24 @@ is unchanged; nothing in `frontend/src` reads `llm_call.model`.
 
 ## Part B and deployed verification
 
-*Pending — to be appended after the Render redeploy.*
+Run 14 September 2026 as one sequence, in the order the prompt required.
+
+1. **Deploy.** `/health` polled until `{"status":"ok","version":"0.8.5.3"}`.
+2. **Hostname gate (first action of Part B).** `DATABASE_URL` resolved through `Settings`, exactly as `seed_claims` → `open_connection` resolves it; only `urlparse(...).hostname` printed. It ends in `.neon.tech` (`eu-central-1`). Gate passed. The URL itself was never printed or logged.
+3. **Acknowledged scope, recorded before truncating.** Pre-reset: `claims` 14 (1 `awaiting_human`, 4 `extracted`, 9 `received`), `audit_log` 53, `policy_chunks` 12. The TRUNCATE CASCADE clearing `audit_log` — including runs `26a9bf4e-…` and `11f97ae8-…` cited in the Phase 8.5.2 build-log entry — was a conscious, pre-approved choice. Those correlation ids now reference rows that no longer exist; the build log retains the finding.
+4. **Reset.** `uv run python -m backend.data.seed_claims --allow-truncate` → *Inserted 9 claims (3 scripted + 6 background).*
+5. **Count check.** `claims` = **9**, all `received`; `auto_approve`, `threshold_escalation`, `guardrail_escalation` present. `audit_log` = 0. `policy_chunks` = 12, unchanged; `index_policy` not re-run.
+6. **Verification run.** Dermot processed the seeded Northwood ($850k) claim → run `56a0d5b2-a90d-43f3-866b-b5d35bd7f900`, aborted at the Validator (expected — tier decision not made).
+7. **Audit evidence** (read from Neon): entries `pipeline_started`, `doc_extract`, `coverage_check`, `pipeline_aborted`.
+
+| Step | `provider` | `model` | `requested_model` | Outcome |
+|---|---|---|---|---|
+| `doc_extract` | `anthropic` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` | success; 224 / 57 tokens, 1128 ms |
+| `coverage_check` | `mistral` | *(absent)* | **`mistral-large-2512`** | `LLMProviderError` — 403 `tier_not_allowed`, 323 ms |
+
+**Conclusion.** The deployed runtime sends `mistral-large-2512`, and the Mistral Free tier refuses it. Phase 8.5.2's elimination argument is now confirmed from the audit row alone, and the Phase 8.5.2 build-log entry has been amended with the definitive statement. `doc_extract` shows the success-path pair matching, as expected for a dated Anthropic id.
+
+The claim is left at `extracted` (known abort-path behaviour, already in the backlog). Remaining demo blocker: the **Mistral tier decision**.
 
 ## Suggestions for follow-on work
 
