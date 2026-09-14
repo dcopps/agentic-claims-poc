@@ -208,8 +208,15 @@ class MistralProviderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: SecretStr | None = None
-    validator_model: str = "mistral-large-latest"
-    adjuster_model: str = "mistral-large-latest"
+    # Pinned to a dated release, never the `-latest` alias. Mistral re-points
+    # aliases server-side without notice: in Phase 8.5.2 `mistral-large-latest`
+    # moved to a paid-tier release and every Validator call failed with a 403
+    # `tier_not_allowed`. A pinned version also keeps the audit log's
+    # `llm_call.model` truthful — an alias never records which model answered.
+    # Move the pin forward deliberately (see docs/BACKLOG.md, "Mistral tier
+    # upgrade path"); do not revert it to an alias.
+    validator_model: str = "mistral-large-2512"
+    adjuster_model: str = "mistral-large-2512"
 
 
 class LLMSettings(BaseModel):

@@ -758,3 +758,51 @@ Frontend unchanged (36).
 **Next:** the still-pending Phase 8.4 item — deploy to Render and run the deployed audit-persistence verification, which now also surfaces `/health = 0.8.5.1`.
 
 ---
+
+## Phase 8.5.2 — Pin Mistral Model to `mistral-large-2512` (point release)
+
+**Date:** 2026-09-14
+
+**Phase / Prompt:** Phase 8.5.2 — [`docs/prompts/15-phase-8.5.2-pin-mistral-model.md`](prompts/15-phase-8.5.2-pin-mistral-model.md)
+**Plan:** [`docs/prompts/15-phase-8.5.2-pin-mistral-model-plan.md`](prompts/15-phase-8.5.2-pin-mistral-model-plan.md)
+**Report:** [`docs/prompts/15-phase-8.5.2-pin-mistral-model-report.md`](prompts/15-phase-8.5.2-pin-mistral-model-report.md)
+
+**How it surfaced.** The Validator aborted a production pipeline on 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) with `LLMProviderError — MistralProvider: SDKError … Status 403 … "This model is not available in your subscription tier", "type":"tier_not_allowed"`.
+
+**Root cause.** The Mistral account is on the Free tier (no payment method, €0.00 credits). Settings sent `mistral-large-latest`, a moving alias Mistral resolves server-side. When the key was confirmed in May 2026 the alias resolved to `mistral-large-2512` (`docs/prompts/03-phase-2-llm-gateway-and-validator.md:35`); since then Mistral has re-pointed it at a newer Large release gated to a paid tier. Nothing in the deployment changed — the alias's meaning changed underneath it. The 403 `tier_not_allowed` (not 401 `unauthorized`) shows the key is valid and the failure is at the model-access gate. `mistral-large-2512` remains on the account's accessible-models list (`admin.mistral.ai/limits`: 250,000 tokens/min, 1.00 req/s).
+
+**Fix.** Pin `validator_model` and `adjuster_model` from `mistral-large-latest` to `mistral-large-2512`, in `backend/settings.py` and `backend/settings.yaml.template`. This restores exactly the model the prototype was built, tuned and demoed against in May. Chosen over adding a Mistral payment method or routing both agents through Claude via the variant mechanism as the cheapest fix; both alternatives are preserved in the *Mistral tier upgrade path* backlog item. At Dermot's direction a pin-by-policy comment was added to `MistralProviderSettings` stating the now-true contract (dated release, never an alias, and why), so a future session does not "tidy" the pins back to `-latest` — the same reasoning as the Phase 8.4 stale-contract cleanup.
+
+**Caller sweep.** `grep -rn "mistral-large"` across the repo. No occurrences in `frontend/`, `README.md`, `diagrams/`, or the architecture reference.
+
+| Location | Verdict | Reason |
+| --- | --- | --- |
+| `backend/settings.py:211-212` | **Updated** | Runtime defaults — the fix itself. |
+| `backend/settings.yaml.template:62-63` | **Updated** | Must mirror `settings.py`; a copied template would otherwise reinstate the alias with higher precedence. |
+| `backend/settings.yaml.template:92` (commented pricing example) | **Updated** | Not in the prompt's starting list. Pricing is looked up by exact model string (`api_logger.py:202`); a copied `-latest` key would silently yield `cost_usd: null` for every pinned call. |
+| `backend/tests/test_settings_phase1.py:53-54` | **Updated** | Asserts the default. |
+| `backend/tests/test_settings_phase2.py:115,118` | **Updated** | Prompt criterion met (runtime lookup by model ID exists). The test itself is string-agnostic — it reads back its own key — so this is alignment, not a behavioural coupling. |
+| `backend/tests/test_api_logger.py:34` | Stays | Record-builder input; no assertion on it; sibling tests use `"anything"` / `"m"`. |
+| `backend/tests/test_llm_provider_mistral.py:82,120,148,174` | Stays | `model=` input to a monkeypatched client that ignores it; nothing asserts on it. |
+| `backend/tests/test_llm_provider_mistral.py:27` | Stays | Already `mistral-large-2512` (fake response model). |
+| `backend/tests/test_variants.py:159,170` | Stays | No literal — captures the default dynamically. |
+| `docs/prompts/02-…-plan.md:37`, `03-….md:35`, `03-…-plan.md:136` | Stays | Archived historical record; rewriting would falsify the build history. |
+| `docs/change-governance.md:60` | Stays | `mistral-large-ft-claims-v3` — a hypothetical LoRA fine-tune, not the alias. |
+
+**Interface stability.** Value change only. Newly written `coverage_check` and `settlement_estimate` audit rows carry `llm_call.model = "mistral-large-2512"` instead of `"mistral-large-latest"`; API-call log `model` values move the same way. JSON shape, field names, DB columns, HTTP and SSE shapes are unchanged; existing audit rows and the hash chain are untouched. The difference is observable when diffing pre-pin against post-pin runs — deliberately so, as it is the deployed proof the pin reached the runtime path. No consumer should pattern-match on `mistral-large-latest`; the alias's meaning had already changed server-side with no change on our side, which is itself why such matching would be a consumer bug. The pin strengthens the audit-as-trusted-record property: an alias never recorded which model actually answered.
+
+**Operational, not architectural.** The locked decision *"Mistral Large (Validator, Adjuster)"* stays true — `mistral-large-2512` is a Mistral Large release. Only the release selector changed. No edit to *Architectural Decisions (Locked)*.
+
+**Version.** `pyproject.toml` `0.8.5.1` → **`0.8.5.2`** (`uv.lock` project entry follows). `/health` resolves via `importlib.metadata`; installed package confirmed at `0.8.5.2`.
+
+**Verification (local):** full suite **338 passed, 0 failed, 7 skipped** (345 collected) against `agentic_claims_test` — identical to the Phase 8.5.1 baseline; `ruff check .` clean; `mypy` clean (108 source files).
+
+**Verification (deployed): pending.** Awaiting Render redeploy. Dermot first confirms no `LLM__MISTRAL__*` env var is set on Render (it would outrank the pinned default). Then: `/health` → `0.8.5.2`; submit a fresh claim via the form's *Threshold escalation ($850k fire)* template (not the seeded Northwood row, touched by the failed run); Validator completes, pipeline reaches `awaiting_human`, four agent panels filled with no *Audit entry not found* banners; both `coverage_check` and `settlement_estimate` read `llm_call.model = "mistral-large-2512"`. Outcome to be appended here.
+
+**Tests:** 338 passed / 7 skipped, unchanged. Frontend unchanged (36).
+
+**Backlog added:** *Mistral tier upgrade path*; *Startup model-access probe* (motivated by this incident — logged, not built).
+
+**Next:** Render redeploy and the combined deployed verification (closes Phase 8.4's carried-over item and Phase 8.5.2's deployed half).
+
+---

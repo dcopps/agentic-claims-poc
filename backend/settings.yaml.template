@@ -59,8 +59,10 @@ llm:
     guardrail_model: claude-haiku-4-5-20251001
   mistral:
     # api_key: loaded from MISTRAL_API_KEY — do not put values here
-    validator_model: mistral-large-latest
-    adjuster_model: mistral-large-latest
+    # Pinned dated release, not the `-latest` alias — see the comment on
+    # MistralProviderSettings in settings.py for why.
+    validator_model: mistral-large-2512
+    adjuster_model: mistral-large-2512
 
   # Per-call defaults. The Gateway hands these to every provider unless
   # a caller overrides them. Bounds in settings.py reject obviously
@@ -89,7 +91,7 @@ llm:
   # silently fabricating numbers from stale rates. Example shape:
   #
   # pricing:
-  #   "mistral-large-latest": ["2.00", "6.00"]
+  #   "mistral-large-2512": ["2.00", "6.00"]
   #   "claude-haiku-4-5-20251001": ["1.00", "5.00"]
   pricing: {}
 

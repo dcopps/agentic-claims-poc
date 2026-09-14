@@ -50,8 +50,8 @@ def test_llm_settings_defaults_match_locked_models() -> None:
     assert settings.llm.anthropic.orchestrator_model == "claude-sonnet-4-6"
     assert settings.llm.anthropic.doc_parser_model == "claude-haiku-4-5-20251001"
     assert settings.llm.anthropic.guardrail_model == "claude-haiku-4-5-20251001"
-    assert settings.llm.mistral.validator_model == "mistral-large-latest"
-    assert settings.llm.mistral.adjuster_model == "mistral-large-latest"
+    assert settings.llm.mistral.validator_model == "mistral-large-2512"
+    assert settings.llm.mistral.adjuster_model == "mistral-large-2512"
 
 
 def test_embedding_dimension_is_locked_to_384() -> None:

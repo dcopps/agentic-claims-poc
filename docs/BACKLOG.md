@@ -8,16 +8,18 @@ Ordered by priority: pending verifications first, then the next architectural ph
 
 ## Pending verifications (carried over from previous phases)
 
-### Deployed verification of Phase 8.4 (audit-write transaction fix)
+### Deployed verification of Phase 8.4 (audit-write transaction fix) and Phase 8.5.2 (Mistral model pin)
 
-Deploy `0.8.5.1` to Render and confirm the audit-write fix survives end-to-end in production. Steps:
+Deploy `0.8.5.2` to Render and confirm both the audit-write fix and the Mistral pin survive end-to-end in production. One run covers both. Steps:
 
-1. `curl https://agentic-claims-poc-backend.onrender.com/health` — expect `{"status":"ok","version":"0.8.5.1"}`. If it reports an earlier version, Render has not redeployed; check the dashboard.
-2. Re-run the threshold-escalation scenario from the deployed frontend. Click *Process* on the seeded Northwood row (or a re-seeded equivalent if the deployed DB has drifted).
-3. Confirm all four agent expand panels show filled prompts and JSON responses with **no** "Audit entry not found" red banners and **no** yellow "pre-dates the audit-prompt-capture change" fallback banners.
+0. Before or alongside the redeploy, Dermot confirms no `LLM__MISTRAL__*` environment variable is set on Render — one would outrank the pinned default and the pin would silently not take effect.
+1. `curl https://agentic-claims-poc-backend.onrender.com/health` — expect `{"status":"ok","version":"0.8.5.2"}`. If it reports an earlier version, Render has not redeployed; check the dashboard.
+2. Submit a **fresh** threshold-escalation claim from the deployed frontend using the form's *Threshold escalation ($850k fire)* template button, then *Process* it. Do not reuse the seeded Northwood row — it was already touched by the failed 14 September run (`26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`).
+3. Confirm the Validator completes (no 403), the pipeline reaches `awaiting_human`, and all four agent expand panels show filled prompts and JSON responses with **no** "Audit entry not found" red banners and **no** yellow "pre-dates the audit-prompt-capture change" fallback banners.
 4. Open the audit log for the run's correlation_id. Confirm **seven** entries: `pipeline_started`, `doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`, `escalation_decision`, `pipeline_awaiting_human`. Confirm the *Verify chain (whole ledger)* badge reports the chain verified.
+5. Confirm **both** `coverage_check` and `settlement_estimate` read `llm_call.model = "mistral-large-2512"`. The threshold scenario calls the Adjuster live; the $1.4M guardrail scenario cannot prove the Adjuster pin because its Adjuster output is a demo fixture.
 
-This closes the last item carried over from Phase 8.4. Cheap; only blocked by triggering a Render deploy.
+This closes the last item carried over from Phase 8.4 and the deployed half of Phase 8.5.2. Cheap; only blocked by triggering a Render deploy.
 
 ---
 
@@ -58,11 +60,27 @@ Each should be visited before Phase 8.6 lands, and any items found folded into t
 - Bundle **everything** in this section into one phase pass. Fixing three items now and three items later burns Claude Code's phase overhead twice.
 - Include a *walk through all six routes and flag any additional polish items before the phase closes* step in the QA section. Any new items surface during rehearsal and are folded into the plan before code lands.
 - Interface stability: none expected. All items are presentation-layer only. No JSON schema, HTTP shape, SSE event, or DB column changes.
-- Version bump: `0.8.5.1 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
+- Version bump: `0.8.5.2 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
 
 ---
 
 ## Future work (queued, not next)
+
+### Mistral tier upgrade path
+
+The pin to `mistral-large-2512` works today because that specific version is still on the Free tier's accessible list. Mistral will eventually deprecate 2512 (they've deprecated Large versions on ~12-month cycles historically). When that happens, the options are: (a) pin forward to whichever Mistral Large version is then on the Free tier — same fix pattern, low cost, but chasing a moving target; (b) add a payment method on Mistral and switch back to `mistral-large-latest` — small monthly cost, unlimited horizon; or (c) route Validator + Adjuster through Claude via the LLM Gateway variant mechanism — architecturally strongest (demonstrates DORA Article 28 substitutability in action), no Mistral dependency at all. Decide when the pin ages out, not before.
+
+Logged at close of Phase 8.5.2.
+
+### Startup model-access probe
+
+At application startup, call each provider's models-list endpoint and confirm every configured model identifier (`llm.anthropic.*_model`, `llm.mistral.*_model`) is accessible to the account. A missing model fails startup — or at minimum turns `/health` unhealthy — with a config error naming the model, the agent role that uses it, and the provider.
+
+**Motivating incident.** On 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) the Validator aborted a production pipeline mid-run with `403 tier_not_allowed`: Mistral had re-pointed the `mistral-large-latest` alias at a paid-tier release. Nothing in the deployment had changed, so nothing surfaced the problem until a claim was already being processed. A startup probe would have reported it as a configuration error at deploy time, before any claim reached the pipeline. Phase 8.5.2 fixed the instance by pinning to `mistral-large-2512`; the probe is the long-term answer to the class, including the day the pin itself ages out (see *Mistral tier upgrade path*).
+
+**Design questions to settle when scoped:** fail startup vs degrade `/health` (a hard failure on Render means a crash loop rather than a visible error page); whether the probe's own API calls need audit or api-call logging; timeout and retry behaviour so a provider blip doesn't block a deploy; and whether variant-override models in `variants.yaml` are probed too.
+
+Suggested during Phase 8.5.2 planning by Claude Code; logged, deliberately not built.
 
 ### In-UI "How it works" info page
 

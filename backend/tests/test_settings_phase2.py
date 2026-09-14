@@ -112,8 +112,8 @@ def test_llm_settings_rejects_timeout_below_one_second() -> None:
 def test_llm_settings_accepts_pricing_table() -> None:
     cfg = LLMSettings(
         pricing={
-            "mistral-large-latest": (Decimal("2.00"), Decimal("6.00")),
+            "mistral-large-2512": (Decimal("2.00"), Decimal("6.00")),
         }
     )
-    rate = cfg.pricing["mistral-large-latest"]
+    rate = cfg.pricing["mistral-large-2512"]
     assert rate == (Decimal("2.00"), Decimal("6.00"))
