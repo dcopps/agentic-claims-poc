@@ -16,7 +16,7 @@ Each agent's provider is now a settings selector, so switching back is configura
 
 **Suite: 366 passed, 0 failed, 7 skipped (373 collected)**, up from 347 / 0 / 7 (354). `ruff` and `mypy` are clean.
 
-**The deployed verification is pending.** This report is completed with its outcome in the follow-up commit.
+**Deployed verification: halted at step 3.** Auto-approve ended `awaiting_human` because of a false positive in the Guardrail rule engine's citation regex, not a prompt issue. The threshold and guardrail scenarios passed. See *Deployed verification* below.
 
 ## Decisions (Dermot, 15 September 2026)
 
