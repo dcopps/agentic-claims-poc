@@ -39,14 +39,15 @@ from backend.app.llm import get_provider
 from backend.app.llm.provider import LLMProvider
 from backend.app.orchestrator.variant_factory import (
     _build_validator,
-    resolve_validator_config,
+    resolve_validator_template,
+    resolve_variant_settings,
 )
 from backend.app.orchestrator.variant_registry import (
     UnknownVariantError,
     VariantRegistry,
 )
 from backend.app.prompts import PromptLoader
-from backend.settings import Settings
+from backend.settings import AgentRole, Settings
 
 agents_test_router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -152,8 +153,8 @@ def test_doc_parser(
     settings: Settings = Depends(get_settings),
     registry: VariantRegistry = Depends(get_variant_registry),
 ) -> DocParserTestResult:
-    _require_variant(registry, variant)
-    agent = DocParser.with_defaults(settings, provider=_provider(settings, "anthropic"))
+    cfg = _variant_settings(settings, registry, variant)  # raises 404 on bad variant
+    agent = DocParser.with_defaults(cfg, provider=_provider(settings, cfg, "doc_parser"))
     output, meta = agent.parse(body.narrative)
     return DocParserTestResult(output=output, meta=_meta(meta))
 
@@ -177,8 +178,8 @@ def test_adjuster(
     settings: Settings = Depends(get_settings),
     registry: VariantRegistry = Depends(get_variant_registry),
 ) -> AdjusterTestResult:
-    _require_variant(registry, variant)
-    agent = Adjuster.with_defaults(settings, provider=_provider(settings, "mistral"))
+    cfg = _variant_settings(settings, registry, variant)  # raises 404 on bad variant
+    agent = Adjuster.with_defaults(cfg, provider=_provider(settings, cfg, "adjuster"))
     output, meta = agent.estimate(body.doc_parser_output, body.validator_verdict)
     return AdjusterTestResult(output=output, meta=_meta(meta))
 
@@ -190,8 +191,8 @@ def test_guardrail(
     settings: Settings = Depends(get_settings),
     registry: VariantRegistry = Depends(get_variant_registry),
 ) -> GuardrailTestResult:
-    _require_variant(registry, variant)
-    agent = Guardrail.with_defaults(settings, provider=_provider(settings, "anthropic"))
+    cfg = _variant_settings(settings, registry, variant)  # raises 404 on bad variant
+    agent = Guardrail.with_defaults(cfg, provider=_provider(settings, cfg, "guardrail"))
     output, meta = agent.check(body.adjuster_output, body.retrieved_chunks)
     return GuardrailTestResult(output=output, meta=_meta(meta))
 
@@ -231,30 +232,37 @@ def _require_variant(registry: VariantRegistry, variant: str) -> None:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-def _provider(settings: Settings, vendor: str) -> LLMProvider:
-    # vendor is a fixed literal at each call site; cast through the factory.
-    return get_provider(settings, vendor)  # type: ignore[arg-type]
+def _variant_settings(
+    settings: Settings, registry: VariantRegistry, variant: str
+) -> Settings:
+    """Settings with the variant's provider/model overrides applied; 404 if unknown."""
+    _require_variant(registry, variant)
+    return resolve_variant_settings(settings, registry.resolve(variant))
+
+
+def _provider(settings: Settings, cfg: Settings, agent: AgentRole) -> LLMProvider:
+    # The selector is read from the variant-resolved copy; the provider is cached
+    # on the shared settings (see `build_variant_orchestrator` for why).
+    return get_provider(settings, cfg.llm.provider_for(agent))
 
 
 def _validator_for(
     settings: Settings, registry: VariantRegistry, variant: str
 ) -> Validator:
-    try:
-        spec = registry.resolve(variant)
-    except UnknownVariantError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    config = resolve_validator_config(spec)
-    provider = _provider(settings, config.provider_name)
+    cfg = _variant_settings(settings, registry, variant)
     embedder: Callable[[str], np.ndarray] = default_embedder(settings)
     return _build_validator(
-        config=config, settings=settings, provider=provider, embedder=embedder
+        settings=cfg,
+        user_template_name=resolve_validator_template(registry.resolve(variant)),
+        provider=_provider(settings, cfg, "validator"),
+        embedder=embedder,
     )
 
 
 def _user_template_for(
     agent: str, default_template: str, registry: VariantRegistry, variant: str
 ) -> str:
-    # Only the validator's user template changes by variant in Phase 5/6.
+    # Only the validator's user template changes by variant.
     if agent == "validator":
-        return resolve_validator_config(registry.resolve(variant)).user_template_name
+        return resolve_validator_template(registry.resolve(variant))
     return default_template

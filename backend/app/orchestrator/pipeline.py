@@ -214,14 +214,29 @@ class PipelineOrchestrator:
         policy: EscalationPolicy,
         status_writer: StatusWriter | None = None,
     ) -> PipelineOrchestrator:
-        """Wire the production agent graph from settings and the shared policy."""
-        anthropic = get_provider(settings, "anthropic")
-        mistral = get_provider(settings, "mistral")
+        """
+        Wire the production agent graph from settings and the shared policy.
+
+        Each agent's provider comes from its settings selector
+        (`llm.<agent>_provider`), and the agent resolves its model through the
+        same settings, so provider and model agree by construction. Only the
+        providers some selector names are built: on the all-Anthropic default no
+        Mistral provider exists, so `MISTRAL_API_KEY` is not required.
+        """
+        llm = settings.llm
         return cls(
-            doc_parser=DocParser.with_defaults(settings, provider=anthropic),
-            validator=Validator.with_defaults(settings, provider=mistral),
-            adjuster=Adjuster.with_defaults(settings, provider=mistral),
-            guardrail=Guardrail.with_defaults(settings, provider=anthropic),
+            doc_parser=DocParser.with_defaults(
+                settings, provider=get_provider(settings, llm.provider_for("doc_parser"))
+            ),
+            validator=Validator.with_defaults(
+                settings, provider=get_provider(settings, llm.provider_for("validator"))
+            ),
+            adjuster=Adjuster.with_defaults(
+                settings, provider=get_provider(settings, llm.provider_for("adjuster"))
+            ),
+            guardrail=Guardrail.with_defaults(
+                settings, provider=get_provider(settings, llm.provider_for("guardrail"))
+            ),
             policy=policy,
             settings=settings,
             status_writer=status_writer,

@@ -14,9 +14,10 @@ Step-for-step:
      via the injected `ClaimsRepository`. The orchestrator (Phase 4) is
      the canonical caller; isolation tests pass a stub connection factory.
   2. Build the summary prompt via `PromptLoader` — no inline f-strings.
-  3. Call Claude Haiku through the LLM Gateway with system/user
-     separation, asking only for a one-paragraph `narrative_summary`.
-     The model returns plain prose; a length/content guard bounds it.
+  3. Call the model its settings select (Claude Haiku by default)
+     through the LLM Gateway with system/user separation, asking only
+     for a one-paragraph `narrative_summary`. The model returns plain
+     prose; a length/content guard bounds it.
   4. Assemble `DocParserOutput` from the record's structured columns plus
      the model-generated summary. The shape is the locked Phase 3 contract.
   5. Write a complete audit-log entry under the supplied correlation id,
@@ -74,10 +75,6 @@ _NARRATIVE_AUDIT_EXCERPT_CHARS = 1000
 
 # Locked audit step identifier. Stable for downstream queries.
 _AUDIT_STEP_NAME = "doc_extract"
-
-# Doc-Parser routes through Anthropic Haiku, locked by the project's
-# architectural decisions in CLAUDE.md.
-_PROVIDER_LABEL = "anthropic"
 
 # Additive audit field (Phase 8.2): records that the structured fields were
 # sourced from the claim record, not from LLM extraction. Joins the Phase 5/6/7
@@ -247,7 +244,7 @@ class DocParser:
         request = CapturedRequest(
             system=system_prompt,
             user=user_prompt,
-            model=self._settings.llm.anthropic.doc_parser_model,
+            model=self._settings.llm.model_for("doc_parser"),
         )
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
@@ -293,6 +290,7 @@ class DocParser:
             output=output,
             latency_ms=latency_ms,
             error=error,
+            provider_label=self._provider.vendor,
             request=request,
         )
         event = AuditEvent(
@@ -318,7 +316,7 @@ class DocParser:
 
 def _validate_summary(response_text: str) -> str:
     """
-    Validate Haiku's plain-prose summary. Sanitise → validate → abort → return.
+    Validate the model's plain-prose summary. Sanitise → validate → abort → return.
 
     The model now returns prose, not JSON, so there is nothing to parse — only to
     bound. Both failure modes raise `ValueError` with the offending text:
@@ -388,9 +386,14 @@ def _build_audit_payload(
     output: DocParserOutput | None,
     latency_ms: int,
     error: BaseException | None,
+    provider_label: str,
     request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked doc-parser-step audit payload.
+
+    `provider_label` is the provider the agent actually holds
+    (`self._provider.vendor`), per the Phase 5 truthful-provider rule extended to
+    every agent in Phase 8.6 — the Doc-Parser's provider is a settings choice.
 
     `fields_source` is the Phase 8.2 additive field: it records that the
     structured fields came from the claim record, not from LLM extraction. The
@@ -408,14 +411,14 @@ def _build_audit_payload(
         "fields_source": _FIELDS_SOURCE,
         "llm_call": attach_request(
             {
-                "provider": _PROVIDER_LABEL,
+                "provider": provider_label,
                 "model": response.model,
                 "prompt_tokens": response.prompt_tokens,
                 "completion_tokens": response.completion_tokens,
                 "latency_ms": latency_ms,
             }
             if response is not None
-            else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms},
+            else {"provider": provider_label, "latency_ms": latency_ms},
             request,
         ),
         # `output.model_dump(mode="json")` returns `claimed_amount` as

@@ -35,27 +35,41 @@ class UnknownVariantError(ValueError):
     """Raised when a variant name is not registered. The API maps this to 404."""
 
 
-class AgentOverride(BaseModel):
-    """Per-agent override. Any subset of model / provider / prompt_template."""
+class ProviderOverride(BaseModel):
+    """Per-agent provider/model override. Either or both of provider / model.
+
+    A `model` without a `provider` replaces the model within whichever provider
+    the agent's settings selector already names.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     model: str | None = None
     provider: ProviderName | None = None
+
+
+class AgentOverride(ProviderOverride):
+    """Validator override: provider / model plus an alternative user template."""
+
     prompt_template: str | None = None
 
 
 class VariantSpec(BaseModel):
-    """One variant: a description plus an optional Validator override.
+    """One variant: a description plus optional Validator and Adjuster overrides.
 
-    Phase 5 supports overriding the Validator only; other agents' override slots
-    are intentionally absent (adding them is a future, additive change).
+    The Adjuster slot (Phase 8.6) takes a `ProviderOverride`, not an
+    `AgentOverride`: the Adjuster has no user-template hook, so a
+    `prompt_template` under `adjuster:` must fail at load rather than be silently
+    ignored. Doc-Parser and Guardrail slots are intentionally absent — routing
+    those agents elsewhere is unverified (adding slots is a future, additive
+    change).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     description: str
     validator: AgentOverride | None = None
+    adjuster: ProviderOverride | None = None
 
 
 class VariantDocument(BaseModel):

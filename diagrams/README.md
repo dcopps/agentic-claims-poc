@@ -19,6 +19,8 @@
   pre.mermaid svg { max-height: 65vh; max-width: 100%; height: auto; }
 </style>
 
+> **Prototype default vs target (15 September 2026, Phase 8.6).** These diagrams describe the target architecture, in which the Validator and Adjuster run on Mistral Large (the Adjuster with a LoRA adapter). The deployed prototype currently defaults those two agents to Claude Haiku, because Mistral withdrew Mistral Large from its Free tier; the `v1_mistral` replay variant restores the Mistral wiring. The diagrams are intentionally unchanged.
+
 ## Architecture diagram (interactive)
 
 The centrepiece of the design is the interactive **[Architecture Diagram](Architecture_Diagram.html)** — view it via GitHub Pages to render it in the browser. From the GitHub repo view this link shows HTML source only; the Pages-served version is what's meant for reading.

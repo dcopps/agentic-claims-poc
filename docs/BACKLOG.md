@@ -8,32 +8,23 @@ Ordered by priority: pending verifications first, then the next architectural ph
 
 ## Pending verifications (carried over from previous phases)
 
-### Deployed verification of Phase 8.5.3 (`requested_model` audit key) — with DB reset — **done 14 September 2026**
+### Deployed verification of Phase 8.6 (Validator + Adjuster on Claude Haiku) — discharges the Phase 8.4 / 8.5.2 check
 
-`/health` = `0.8.5.3`. **DB reset done**: hostname gate passed (`.neon.tech`), `seed_claims --allow-truncate` → 9 claims at `received`, `audit_log` cleared, `policy_chunks` (12) untouched. Run `56a0d5b2-a90d-43f3-866b-b5d35bd7f900` aborted at the Validator as expected; `coverage_check` reads `llm_call.requested_model = "mistral-large-2512"` with the 403, and `doc_extract` reads `requested_model` = `model` = `claude-haiku-4-5-20251001`. Details in the Phase 8.5.3 build-log entry. Kept here only until the next backlog tidy; the item below remains open.
+Phase 8.6 moved the Validator and Adjuster defaults to Claude Haiku (the Mistral tier decision, option 3, chosen 14 September 2026). One verification sequence closes Phase 8.6 **and** the Phase 8.4 (audit-write fix) / Phase 8.5.2 (model pin) seven-entry check that could not run while Mistral refused every call. Full field list in [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md) §5 and §10.
 
-### Deployed verification of Phase 8.4 (audit-write transaction fix) and Phase 8.5.2 (Mistral model pin)
-
-Deploy `0.8.5.2` to Render and confirm both the audit-write fix and the Mistral pin survive end-to-end in production. One run covers both. Steps:
-
-0. Before or alongside the redeploy, Dermot confirms no `LLM__MISTRAL__*` environment variable is set on Render — one would outrank the pinned default and the pin would silently not take effect.
-1. `curl https://agentic-claims-poc-backend.onrender.com/health` — expect `{"status":"ok","version":"0.8.5.2"}`. If it reports an earlier version, Render has not redeployed; check the dashboard.
-2. Submit a **fresh** threshold-escalation claim from the deployed frontend using the form's *Threshold escalation ($850k fire)* template button, then *Process* it. Do not reuse the seeded Northwood row — it was already touched by the failed 14 September run (`26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`).
-3. Confirm the Validator completes (no 403), the pipeline reaches `awaiting_human`, and all four agent expand panels show filled prompts and JSON responses with **no** "Audit entry not found" red banners and **no** yellow "pre-dates the audit-prompt-capture change" fallback banners.
-4. Open the audit log for the run's correlation_id. Confirm **seven** entries: `pipeline_started`, `doc_extract`, `coverage_check`, `settlement_estimate`, `output_check`, `escalation_decision`, `pipeline_awaiting_human`. Confirm the *Verify chain (whole ledger)* badge reports the chain verified.
-5. Confirm **both** `coverage_check` and `settlement_estimate` read `llm_call.model = "mistral-large-2512"`. The threshold scenario calls the Adjuster live; the $1.4M guardrail scenario cannot prove the Adjuster pin because its Adjuster output is a demo fixture.
-
-This closes the last item carried over from Phase 8.4 and the deployed half of Phase 8.5.2.
-
-**Attempted 14 September 2026 — failed, now blocked.** Step 0 cleared (Render env has only `ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`). Step 1 cleared (`/health` = `0.8.5.2`). Step 2 failed: run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073` aborted at the Validator with the identical `403 tier_not_allowed`. By elimination (pinned default deployed, no `settings.yaml`, no CLI flags, no env override) the runtime was sending `mistral-large-2512`, so **2512 is gated on the Free tier too**. The Phase 8.5.2 premise — that the Limits page listing 2512 meant Free could call it — was wrong; see *Mistral tier decision* below for the corrected understanding. This verification is blocked until the Mistral tier decision (payment method vs Claude default) is made and deployed.
-
-When re-run: before step 2, reset the deployed DB with `uv run python -m backend.data.seed_claims --allow-truncate` (against the Neon `DATABASE_URL` — hostname gate first; the Phase 8.5 guard is pytest-only). The DB was reset on 14 September for Phase 8.5.3, but that phase's verification run left the seeded Northwood claim at `extracted`, so reset again. **The runtime model is now proven from the audit row** (Phase 8.5.3 run `56a0d5b2-…`: `requested_model = "mistral-large-2512"` on the 403) — the elimination argument above is confirmed.
+0. Dermot confirms on Render: no `LLM__*` env vars (in particular no `LLM__VALIDATOR_PROVIDER` / `LLM__ADJUSTER_PROVIDER`); `MISTRAL_API_KEY` stays set so `v1_mistral` is reachable.
+1. `/health` → `version = 0.8.6`.
+2. Reset Neon: hostname gate (`.neon.tech`), then `uv run python -m backend.data.seed_claims --allow-truncate` → 9 claims at `received`, `audit_log` empty, `policy_chunks` (12) untouched. Do **not** re-run `index_policy`.
+3. Process the three seeded scenario claims from the Claims page. Each: expected terminal status (`settled` / `awaiting_human` / `awaiting_human`) and fired rule (none / `settlement_over_ceiling` / `guardrail_failed`); four agent panels filled, no *Audit entry not found*; **seven** audit entries (the orchestrator always writes `escalation_decision` + a terminal step); chain verified; `coverage_check` and `settlement_estimate` `llm_call.provider = "anthropic"`, `requested_model` = `model` = `claude-haiku-4-5-20251001` (guardrail scenario: `settlement_estimate` has `demo_fixture: true` and no `prompt` / `requested_model`). **A wrong terminal state halts the phase — no prompt or token retuning.**
+4. Mistral-variant proof on a non-scenario seeded claim: run it on `default`, then `POST /api/pipeline/replay/{claim_id}?variant=v1_mistral` (the *Re-process* button is hardcoded to `v2_strict_validator`). Expect `aborted` at the Validator, `403 tier_not_allowed`, `coverage_check.llm_call.provider = "mistral"`, `requested_model = "mistral-large-2512"`.
+5. One live `v2_strict_validator` replay of the auto-approve claim, **after** the scenario table is recorded — evidences that the UI's *Re-process* works on the Haiku default.
+6. Record in the Phase 8.6 build-log entry and report; clear *Demo status* in `CLAUDE.md`; remove this item.
 
 ---
 
-## Next architectural phase — Phase 8.6: Demo UI polish
+## Next architectural phase — Phase 8.7: Demo UI polish
 
-The demo is **not currently showable** — the Validator 403s on every scenario until the Mistral tier decision lands (see *Pending verifications*). Once that is resolved, Phase 8.6 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
+The demo is expected to be showable again once the Phase 8.6 deployed verification passes (see *Pending verifications*). Phase 8.7 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
 
 ### Deployment — highest priority in this phase (found 14 September 2026)
 
@@ -70,40 +61,36 @@ The Phase 6 SPA has six routes. Only *Claims* has been swept, and *Run Detail* o
 - **Human Review** (`/human-review` or similar) — the escalation approval/reject panel; critical for the demo's headline story
 - Sixth route (need to confirm from Phase 6 report)
 
-Each should be visited before Phase 8.6 lands, and any items found folded into the phase's scope. Human Review is the highest-priority of these because it is the visible surface for the escalation demo — if it is polish-deficient, it undermines the whole tamper-evident-audit + human-in-the-loop narrative.
+Each should be visited before Phase 8.7 lands, and any items found folded into the phase's scope. Human Review is the highest-priority of these because it is the visible surface for the escalation demo — if it is polish-deficient, it undermines the whole tamper-evident-audit + human-in-the-loop narrative.
 
-### Phase 8.6 scoping notes
+### Phase 8.7 scoping notes
 
 - Bundle **everything** in this section into one phase pass. Fixing three items now and three items later burns Claude Code's phase overhead twice.
 - Include a *walk through all six routes and flag any additional polish items before the phase closes* step in the QA section. Any new items surface during rehearsal and are folded into the plan before code lands.
 - Interface stability: none expected. All items are presentation-layer only. No JSON schema, HTTP shape, SSE event, or DB column changes.
-- Version bump: `0.8.5.2 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
+- Version bump: `0.8.6 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
 
 ---
 
 ## Future work (queued, not next)
 
-### Mistral tier decision — **now immediate, blocks the demo**
+### Re-enable Mistral as default
 
-*Originally logged at close of Phase 8.5.2 as "Mistral tier upgrade path", a future decision for when the 2512 pin aged out. Superseded the same day.*
+*Replaces the resolved "Mistral tier decision" (option 3 chosen 14 September 2026, built in Phase 8.6; the decision and its reasoning live in the Phase 8.6 build-log entry).*
 
-**Corrected understanding (14 September 2026).** The Phase 8.5.2 pin to `mistral-large-2512` also returns `403 tier_not_allowed` in production (run `11f97ae8-7dc6-4b41-9b8e-16c85d4bd073`). The plan's premise was that the Mistral admin *Limits* page (`admin.mistral.ai/limits`) listing 2512 with a 250k TPM rate limit meant the Free tier could call it. **It does not.** The Limits page is a rate-limit table for models the organisation is configured for; it is not a catalogue of what the current tier can invoke. Mistral has withdrawn Mistral Large from the Free tier entirely — alias and dated releases alike. Do not re-run the pin-to-another-version experiment against that page.
+The locked production target is still Mistral Large for the Validator and Adjuster. Once a Mistral payment method exists (Mistral Large is not callable on the Free tier — alias or dated release), restoring the two-vendor default is configuration, not code:
 
-The pin itself stays (dated release, not alias — the pin-by-policy comment in `settings.py` remains correct). What changes is the tier.
+- **Without a code change:** set `LLM__VALIDATOR_PROVIDER=mistral` and `LLM__ADJUSTER_PROVIDER=mistral` on Render (two env vars; Render restarts the service). The model ids come from the pinned `llm.mistral.validator_model` / `adjuster_model` defaults (`mistral-large-2512`) — no model env var needed. `MISTRAL_API_KEY` must be set.
+- **As the committed default:** flip the two selector defaults in `backend/settings.py` and `settings.yaml.template` to `mistral`, and update the `v1_mistral` variant (it would then equal the default — retire it or invert it into a Haiku variant). Revert the Phase 8.6 prototype-default notes in `CLAUDE.md` *Models*, `README.md`, `docs/design-decisions.md` §3, `docs/dora-third-party-register.md`, `docs/architecture-stack-reference.md`, `diagrams/README.md` and `docs/walkthrough.md`.
+- **Verify first:** replay one claim with `v1_mistral` and confirm the Validator completes (no 403) before flipping the default. Check the pin is still a current dated release; move it forward deliberately if not (never back to `-latest`).
 
-**Options, decision pending with Dermot:**
-
-- **(1) Add a payment method on Mistral.** Keep the 2512 pin (paid tiers do not gate it). Restores the exact locked architecture — *"Mistral Large (Validator, Adjuster)"* — and keeps the two-vendor DORA Article 28 story live in the demo. Pay-as-you-go Mistral Large is roughly €2–6 per million tokens; a demo run is a few thousand tokens, so a few euros of credit covers months of rehearsals. Recommended.
-- **(3) Default Validator + Adjuster to Claude Haiku** via the LLM Gateway. Zero cost; the `v2_haiku_validator` variant from Phase 5 already does this for the Validator. But all four agents on one vendor hollows out `design-decisions.md` §3, and the *"Re-process with v2"* substitution demo cannot run either without a working Mistral. The substitution *capability* stays in the code; the *live proof* leaves the demo. If chosen, CLAUDE.md's locked *Models* decision needs an explicit note, and the demo script should say it out loud rather than hope nobody asks.
-- ~~(2) Pin to a smaller Free-tier Mistral model~~ — another guess against the same misleading Limits page, not "Mistral Large", and Small may not reliably return the structured coverage JSON. Not recommended.
-
-**Whichever is chosen:** append the deployed-verification outcome (failed — 2512 gated) and this corrected understanding to the Phase 8.5.2 build-log entry and report.
+Doc-Parser or Guardrail on Mistral is structurally possible via the same selectors but was never verified — out of scope for this item.
 
 ### Startup model-access probe
 
 At application startup, call each provider's models-list endpoint and confirm every configured model identifier (`llm.anthropic.*_model`, `llm.mistral.*_model`) is accessible to the account. A missing model fails startup — or at minimum turns `/health` unhealthy — with a config error naming the model, the agent role that uses it, and the provider.
 
-**Motivating incident.** On 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) the Validator aborted a production pipeline mid-run with `403 tier_not_allowed`: Mistral had re-pointed the `mistral-large-latest` alias at a paid-tier release. Nothing in the deployment had changed, so nothing surfaced the problem until a claim was already being processed. A startup probe would have reported it as a configuration error at deploy time, before any claim reached the pipeline. Phase 8.5.2 fixed the instance by pinning to `mistral-large-2512`; the probe is the long-term answer to the class, including the day the pin itself ages out (see *Mistral tier decision*).
+**Motivating incident.** On 14 September 2026 (run `26a9bf4e-44ce-49c9-bc99-aeaed33c9f8f`) the Validator aborted a production pipeline mid-run with `403 tier_not_allowed`: Mistral had re-pointed the `mistral-large-latest` alias at a paid-tier release. Nothing in the deployment had changed, so nothing surfaced the problem until a claim was already being processed. A startup probe would have reported it as a configuration error at deploy time, before any claim reached the pipeline. Phase 8.5.2 fixed the instance by pinning to `mistral-large-2512`; the probe is the long-term answer to the class, including the day the pin itself ages out (see *Re-enable Mistral as default*). The probe would check the model each agent's selector resolves to (`LLMSettings.model_for`), not every configured id.
 
 **Design questions to settle when scoped:** fail startup vs degrade `/health` (a hard failure on Render means a crash loop rather than a visible error page); whether the probe's own API calls need audit or api-call logging; timeout and retry behaviour so a provider blip doesn't block a deploy; and whether variant-override models in `variants.yaml` are probed too.
 
@@ -206,7 +193,7 @@ Recent phases have used two patterns:
 - **Sub-phases** for scoped follow-ons: Phases 8.2, 8.3, 8.4, 8.5 (each addressing a distinct issue discovered during rehearsal of the previous phase). Bumps the third version segment (`0.8.0 → 0.8.5`).
 - **Minor phases** for larger passes: Phase 8 (demo polish fixes pack). Would bump the second segment for a substantial polish pass (`0.8.5.1 → 0.9.0`).
 
-Rough rule of thumb: point-release for a single-file hotfix; sub-phase for a focused multi-file change; minor-phase for a scope that touches multiple routes or modules. Phase 8.6 (UI polish) fits *minor phase* on this scale.
+Rough rule of thumb: point-release for a single-file hotfix; sub-phase for a focused multi-file change; minor-phase for a scope that touches multiple routes or modules. Phase 8.6 (Validator + Adjuster default to Claude Haiku — a locked-decision change across settings, wiring, variants and docs) was numbered a *sub-phase* (`0.8.5.3 → 0.8.6`) rather than an 8.5.x point release, because it is a design change, not an incident fix. Phase 8.7 (UI polish) fits *minor phase* on this scale.
 
 ---
 

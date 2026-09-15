@@ -6,23 +6,28 @@
 # the same claim, re-processed under a different configuration, produces a second
 # run recorded side-by-side in the audit vault.
 #
-# Phase 5 supports per-agent overrides for the Validator only (the agent both
-# shipped variants target). Each override may set `model`, `provider`, and/or
-# `prompt_template` (a file under prompts/user/). An unknown variant name, an
-# unknown agent key, or an unknown provider is a load/resolve-time error.
+# A variant is an overlay on the settings: `default` runs every agent on the
+# provider its `llm.<agent>_provider` selector names (all Anthropic since Phase
+# 8.6). Overrides are supported for the Validator (`model`, `provider`,
+# `prompt_template` — a file under prompts/user/) and the Adjuster (`model`,
+# `provider`). A variant that names a provider but no model uses that provider's
+# model id from settings (e.g. the pinned `llm.mistral.*` ids). An unknown
+# variant name, an unknown agent key, or an unknown provider is a
+# load/resolve-time error.
 
 version: 1
 variants:
   default:
-    description: "Baseline configuration matching Phase 4 — agents as constructed."
+    description: "Baseline — each agent on the provider and model its settings select (all Anthropic by default)."
+
+  v1_mistral:
+    description: "Validator and Adjuster on Mistral Large — the pre-Phase-8.6 default wiring."
+    validator:
+      provider: "mistral"
+    adjuster:
+      provider: "mistral"
 
   v2_strict_validator:
     description: "Validator uses the strict prompt template; same model and provider."
     validator:
       prompt_template: "validator_strict.md"
-
-  v2_haiku_validator:
-    description: "Validator runs on Claude Haiku (Anthropic) instead of Mistral."
-    validator:
-      model: "claude-haiku-4-5-20251001"
-      provider: "anthropic"

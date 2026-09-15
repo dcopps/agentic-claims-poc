@@ -147,6 +147,14 @@ _NAMED_ENV_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("MISTRAL_API_KEY", ("llm", "mistral", "api_key")),
 )
 
+# The LLM vendors an agent can be routed to, and the four agents that sit behind
+# the LLM Gateway. Declared here rather than imported from `backend/app` because
+# the dependency runs the other way — application code imports settings.
+LLMProviderName = Literal["anthropic", "mistral"]
+_LLM_PROVIDER_NAMES: tuple[LLMProviderName, ...] = ("anthropic", "mistral")
+AgentRole = Literal["doc_parser", "validator", "adjuster", "guardrail"]
+_AGENT_ROLES: tuple[AgentRole, ...] = ("doc_parser", "validator", "adjuster", "guardrail")
+
 
 # --------------------------------------------------------------------------- #
 # Sub-models
@@ -188,10 +196,16 @@ class DatabaseSettings(BaseModel):
 
 class AnthropicSettings(BaseModel):
     """
-    Anthropic provider configuration.
+    Anthropic provider configuration — the model each agent requests when its
+    provider selector (`LLMSettings.<agent>_provider`) is `anthropic`.
 
-    `api_key` is optional in Phase 1 because no LLM calls happen yet.
-    Phase 2 wires the LLM Gateway and re-asserts presence at the call site.
+    `api_key` is optional here; the provider factory re-asserts presence when
+    an Anthropic provider is actually constructed.
+
+    Phase 8.6: the Validator and Adjuster default to Claude Haiku, because
+    Mistral withdrew Mistral Large from its Free tier. The production target
+    (Mistral Large, LoRA adapter for the Adjuster) is unchanged; the Mistral ids
+    remain in `MistralProviderSettings` for the `v1_mistral` variant.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -199,22 +213,34 @@ class AnthropicSettings(BaseModel):
     api_key: SecretStr | None = None
     orchestrator_model: str = "claude-sonnet-4-6"
     doc_parser_model: str = "claude-haiku-4-5-20251001"
+    validator_model: str = "claude-haiku-4-5-20251001"
+    adjuster_model: str = "claude-haiku-4-5-20251001"
     guardrail_model: str = "claude-haiku-4-5-20251001"
 
 
 class MistralProviderSettings(BaseModel):
-    """Mistral provider configuration. See `AnthropicSettings`."""
+    """
+    Mistral provider configuration — the model each agent requests when its
+    provider selector is `mistral`. See `AnthropicSettings`.
+
+    `doc_parser_model` and `guardrail_model` have no default: routing those
+    agents to Mistral is structurally possible but unverified, so a deployment
+    must name the model explicitly. `LLMSettings` refuses a `mistral` selector
+    whose model is unset rather than guessing one.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     api_key: SecretStr | None = None
+    doc_parser_model: str | None = None
+    guardrail_model: str | None = None
     # Pinned to a dated release, never the `-latest` alias. Mistral re-points
     # aliases server-side without notice: in Phase 8.5.2 `mistral-large-latest`
     # moved to a paid-tier release and every Validator call failed with a 403
     # `tier_not_allowed`. A pinned version also keeps the audit log's
     # `llm_call.model` truthful — an alias never records which model answered.
-    # Move the pin forward deliberately (see docs/BACKLOG.md, "Mistral tier
-    # upgrade path"); do not revert it to an alias.
+    # Move the pin forward deliberately (see docs/BACKLOG.md, "Re-enable
+    # Mistral as default"); do not revert it to an alias.
     validator_model: str = "mistral-large-2512"
     adjuster_model: str = "mistral-large-2512"
 
@@ -236,6 +262,17 @@ class LLMSettings(BaseModel):
 
     anthropic: AnthropicSettings = Field(default_factory=AnthropicSettings)
     mistral: MistralProviderSettings = Field(default_factory=MistralProviderSettings)
+
+    # Per-agent provider selectors (Phase 8.6). Every agent sits behind the same
+    # LLM Gateway, so every agent gets a selector — including the two whose
+    # default never changed. The selected provider block supplies the model id
+    # (`model_for`). Only two combinations are verified: all-Anthropic (the
+    # default) and Validator + Adjuster on Mistral (the `v1_mistral` variant).
+    # An unknown value is rejected by the Literal at load time — no fallback.
+    doc_parser_provider: LLMProviderName = "anthropic"
+    validator_provider: LLMProviderName = "anthropic"
+    adjuster_provider: LLMProviderName = "anthropic"
+    guardrail_provider: LLMProviderName = "anthropic"
 
     # Per-call defaults. The Gateway hands these to every provider unless
     # a caller overrides them. Bounds are tight enough that a typo
@@ -263,6 +300,75 @@ class LLMSettings(BaseModel):
     # Optional pricing table. Decimal so float drift on six-figure
     # token counts can't silently corrupt the cost field. Default empty.
     pricing: dict[str, tuple[Decimal, Decimal]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _require_model_for_every_selected_provider(self) -> LLMSettings:
+        # Refuse at startup, not at the first pipeline run: a selector pointing
+        # at a provider block with no model for that agent can never make a
+        # valid call, so the misconfiguration must surface before serving.
+        for agent in _AGENT_ROLES:
+            self.model_for(agent)
+        return self
+
+    def provider_for(self, agent: AgentRole) -> LLMProviderName:
+        """The provider the given agent is routed to, per its selector."""
+        provider = self._selectors()[_require_known_agent(agent)]
+        # The Literal guards load time only; a variant mutates a deep copy
+        # without validation, so re-assert rather than let an unknown value
+        # silently resolve against the Mistral block.
+        if provider not in _LLM_PROVIDER_NAMES:
+            raise ValueError(
+                f"LLMSettings: llm.{agent}_provider must be one of "
+                f"{list(_LLM_PROVIDER_NAMES)}; got {provider!r}"
+            )
+        return provider
+
+    def model_for(self, agent: AgentRole) -> str:
+        """
+        The model id the given agent requests: the selected provider block's
+        model for that agent.
+
+        The agent and the provider wiring both resolve through this settings
+        object, so the provider an agent holds and the model it requests agree
+        by construction. Re-checked on every call, not only at load: a variant's
+        deep copy is mutated without re-running validation.
+        """
+        provider = self.provider_for(agent)
+        model = self._models_in_block(provider)[agent]
+        if model is None or not model.strip():
+            raise ValueError(
+                f"LLMSettings: llm.{agent}_provider is {provider!r} but "
+                f"llm.{provider}.{agent}_model is not set (got {model!r}); "
+                f"set the model explicitly or select a different provider"
+            )
+        return model
+
+    def _selectors(self) -> dict[AgentRole, LLMProviderName]:
+        return {
+            "doc_parser": self.doc_parser_provider,
+            "validator": self.validator_provider,
+            "adjuster": self.adjuster_provider,
+            "guardrail": self.guardrail_provider,
+        }
+
+    def _models_in_block(self, provider: LLMProviderName) -> dict[AgentRole, str | None]:
+        # Explicit per-block mapping rather than getattr string-building, so a
+        # renamed field is a type error instead of a runtime AttributeError.
+        if provider == "anthropic":
+            anthropic = self.anthropic
+            return {
+                "doc_parser": anthropic.doc_parser_model,
+                "validator": anthropic.validator_model,
+                "adjuster": anthropic.adjuster_model,
+                "guardrail": anthropic.guardrail_model,
+            }
+        mistral = self.mistral
+        return {
+            "doc_parser": mistral.doc_parser_model,
+            "validator": mistral.validator_model,
+            "adjuster": mistral.adjuster_model,
+            "guardrail": mistral.guardrail_model,
+        }
 
 
 class LoggingSettings(BaseModel):
@@ -618,6 +724,16 @@ def _collect_named_env_aliases() -> dict[str, Any]:
             continue
         _set_nested(overlay, dotted_path, value)
     return overlay
+
+
+def _require_known_agent(agent: str) -> AgentRole:
+    """Refuse an agent name outside the four Gateway agents — a caller bug."""
+    for role in _AGENT_ROLES:
+        if agent == role:
+            return role
+    raise ValueError(
+        f"LLMSettings: agent must be one of {list(_AGENT_ROLES)}; got {agent!r}"
+    )
 
 
 def _set_nested(target: dict[str, Any], path: tuple[str, ...], value: Any) -> None:

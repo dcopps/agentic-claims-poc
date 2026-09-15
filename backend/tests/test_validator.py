@@ -34,7 +34,8 @@ from backend.app.orchestrator.variant_factory import (
     _build_validator as build_variant_validator,
 )
 from backend.app.orchestrator.variant_factory import (
-    resolve_validator_config,
+    resolve_validator_template,
+    resolve_variant_settings,
 )
 from backend.app.orchestrator.variant_registry import VariantRegistry
 from backend.app.prompts import PromptLoader
@@ -324,7 +325,7 @@ def test_evaluate_records_requested_model_on_success(
     validator.evaluate(claim_id, uuid4())
 
     llm_call = _audit_llm_call(clean_db, claim_id)
-    assert llm_call["requested_model"] == db_settings.llm.mistral.validator_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("validator")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
     # The mock answers as a different model, so equality with `model` would mean the
     # value was copied from the response rather than recorded from the request.
@@ -332,25 +333,26 @@ def test_evaluate_records_requested_model_on_success(
     assert llm_call["requested_model"] != llm_call["model"]
 
 
-def test_haiku_variant_records_overridden_requested_model(
+def test_v1_mistral_variant_records_mistral_requested_model(
     clean_db: psycopg.Connection,
     db_settings: Settings,
     mock_provider: MockProvider,
     stub_embedder: Callable[[str], np.ndarray],
 ) -> None:
     """
-    Phase 8.5.3: a variant's model override is what the audit records.
+    Phase 8.5.3 / 8.6: a variant's provider override is what the audit records.
 
-    Built through the real variant factory so the deep-copied, overridden Settings
-    is the one the agent reads at call time — not a hand-constructed Validator.
+    Built through the real variant resolution so the deep-copied, overridden Settings
+    is the one the agent reads at call time — not a hand-constructed Validator. The
+    variant names only a provider, so the model comes from the pinned Mistral block.
     """
     claim_id = _insert_claim(clean_db, narrative="Sprinkler discharge caused water damage.")
     chunk_ids = _seed_chunks(clean_db, stub_embedder)
     mock_provider.response_text = _verdict_json(chunk_ids)
-    registry = VariantRegistry.load_from_yaml(_VARIANTS_PATH)
+    spec = VariantRegistry.load_from_yaml(_VARIANTS_PATH).resolve("v1_mistral")
     validator = build_variant_validator(
-        config=resolve_validator_config(registry.resolve("v2_haiku_validator")),
-        settings=db_settings,
+        settings=resolve_variant_settings(db_settings, spec),
+        user_template_name=resolve_validator_template(spec),
         provider=mock_provider,
         embedder=stub_embedder,
         connection_factory=lambda: _conn_factory(clean_db),
@@ -358,10 +360,10 @@ def test_haiku_variant_records_overridden_requested_model(
     validator.evaluate(claim_id, uuid4())
 
     llm_call = _audit_llm_call(clean_db, claim_id)
-    assert llm_call["requested_model"] == "claude-haiku-4-5-20251001"
+    assert llm_call["requested_model"] == "mistral-large-2512"
     assert llm_call["requested_model"] == mock_provider.calls[0].model
-    # The shared Settings still holds the Mistral default — the override is per-run.
-    assert db_settings.llm.mistral.validator_model != "claude-haiku-4-5-20251001"
+    # The shared Settings still resolves the Haiku default — the override is per-run.
+    assert db_settings.llm.model_for("validator") == "claude-haiku-4-5-20251001"
 
 
 # --------------------------------------------------------------------------- #
@@ -605,7 +607,7 @@ def test_provider_error_audit_records_requested_model(
     llm_call = _audit_llm_call(clean_db, claim_id)
     # No response came back, so there is no responding `model` — only the request.
     assert "model" not in llm_call
-    assert llm_call["requested_model"] == db_settings.llm.mistral.validator_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("validator")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 

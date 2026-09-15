@@ -47,18 +47,35 @@ database:
 # --- llm -------------------------------------------------------------------
 
 # LLM provider configuration. API keys load from ANTHROPIC_API_KEY and
-# MISTRAL_API_KEY (named aliases) — DO NOT put values here. Model
-# identifiers per agent role are pinned to the locked architectural
-# decisions (Sonnet for orchestrator; Haiku for doc-parser and guardrail;
-# Mistral Large for validator and adjuster).
+# MISTRAL_API_KEY (named aliases) — DO NOT put values here.
+#
+# Each agent has a provider selector; the selected provider block supplies the
+# model id for that agent. Prototype default (Phase 8.6): all four agents on
+# Anthropic — Sonnet for the orchestrator, Haiku for every agent — because
+# Mistral Large was withdrawn from Mistral's Free tier. The production target
+# (Mistral Large for validator and adjuster) is unchanged, and the `v1_mistral`
+# replay variant routes those two agents back to Mistral. To make Mistral the
+# default again, set validator_provider and adjuster_provider to mistral (or the
+# LLM__VALIDATOR_PROVIDER / LLM__ADJUSTER_PROVIDER env vars).
+#
+# Verified combinations: all-anthropic, and validator + adjuster on mistral.
+# Doc-parser or guardrail on mistral is structurally possible but untested, and
+# requires llm.mistral.<agent>_model to be set — startup refuses it otherwise.
 llm:
+  doc_parser_provider: anthropic
+  validator_provider: anthropic
+  adjuster_provider: anthropic
+  guardrail_provider: anthropic
   anthropic:
     # api_key: loaded from ANTHROPIC_API_KEY — do not put values here
     orchestrator_model: claude-sonnet-4-6
     doc_parser_model: claude-haiku-4-5-20251001
+    validator_model: claude-haiku-4-5-20251001
+    adjuster_model: claude-haiku-4-5-20251001
     guardrail_model: claude-haiku-4-5-20251001
   mistral:
     # api_key: loaded from MISTRAL_API_KEY — do not put values here
+    # doc_parser_model / guardrail_model: unset by default (unverified routes)
     # Pinned dated release, not the `-latest` alias — see the comment on
     # MistralProviderSettings in settings.py for why.
     validator_model: mistral-large-2512

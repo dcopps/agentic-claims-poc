@@ -9,8 +9,9 @@ The agent implements `diagrams/2-rag-zoom.mmd` step-for-step:
      pgvector cosine distance, scoped to the indexed policy file.
   3. Build the augmented prompt via `PromptLoader`. No inline
      f-string prompts anywhere.
-  4. Call Mistral Large through the LLM Gateway with system / user
-     separation. JSON-mode requested; the system prompt locks the
+  4. Call the model its settings select (Claude Haiku by default; Mistral
+     Large under the `v1_mistral` variant) through the LLM Gateway with
+     system / user separation. JSON-mode requested; the system prompt locks the
      output schema.
   5. Parse the response into `ValidatorVerdict` and cross-check that
      every cited chunk id appears in the retrieved set. A citation
@@ -310,11 +311,11 @@ class Validator:
         request = CapturedRequest(
             system=system_prompt,
             user=user_prompt,
-            model=self._settings.llm.mistral.validator_model,
+            model=self._settings.llm.model_for("validator"),
         )
-        # Synthesise a correlation id slice for the APILogger. The
-        # caller's correlation id is the canonical one; passing it
-        # through here keeps a single ID across audit + log.
+        # The APILogger record gets its own UUID, deliberately distinct from the
+        # caller's correlation id (which links the audit entries of one run), so
+        # future retry support can tell attempts within one agent run apart.
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
         try:
@@ -473,10 +474,10 @@ def _build_audit_payload(
 
     `provider_label` is the *actual* provider the call ran against
     (`self._provider.vendor`), not a hardcoded vendor. This keeps the audit
-    truthful when a replay variant substitutes the provider — e.g. running the
-    Validator on Anthropic Haiku instead of Mistral records `"anthropic"`. An
-    audit entry that misreported the provider would undermine the provider-
-    substitutability evidence the audit log exists to furnish.
+    truthful when the provider is substituted — the default runs the Validator on
+    Anthropic Haiku and records `"anthropic"`; the `v1_mistral` variant records
+    `"mistral"`. An audit entry that misreported the provider would undermine the
+    provider-substitutability evidence the audit log exists to furnish.
 
     `request` carries the literal system + user text (Phase 8.3) and the requested
     model (Phase 8.5.3) sent to the model, attached to the `llm_call` block. With

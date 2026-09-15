@@ -169,7 +169,8 @@ def test_evaluate_sources_fields_from_record(
     assert payload["fields_source"] == "claim_record"
     assert payload["output"]["claim_type"] == _CLAIM_TYPE
     assert payload["output"]["claimed_amount"] == "85000.00"
-    assert payload["llm_call"]["provider"] == "anthropic"
+    # Truthful provider (Phase 8.6): the provider the agent holds, not a constant.
+    assert payload["llm_call"]["provider"] == mock_provider.vendor == "mock"
     assert payload["error"] is None
 
 
@@ -232,7 +233,7 @@ def test_evaluate_records_requested_model_on_success(
         row = cur.fetchone()
     assert row is not None
     llm_call = row[0]["llm_call"]
-    assert llm_call["requested_model"] == db_settings.llm.anthropic.doc_parser_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("doc_parser")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
     # The mock answers as a different model, so equality with `model` would mean the
     # value was copied from the response rather than recorded from the request.
@@ -389,7 +390,7 @@ def test_provider_error_audit_records_requested_model(
     llm_call = row[0]["llm_call"]
     # No response came back, so there is no responding `model` — only the request.
     assert "model" not in llm_call
-    assert llm_call["requested_model"] == db_settings.llm.anthropic.doc_parser_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("doc_parser")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 

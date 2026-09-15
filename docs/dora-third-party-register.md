@@ -6,8 +6,13 @@ prototype**, and the regulatory rationale under **DORA Article 28** (management 
 ICT third-party risk — concentration risk, exit strategy, substitutability).
 
 The honest summary up front: the **LLM Gateway substitution has been exercised**
-across Anthropic and Mistral (the `v2_haiku_validator` variant swaps the Validator's
-provider at run time, and the audit log records the actual provider). Every other
+across Anthropic and Mistral. The Validator and Adjuster ran on Mistral Large until
+Phase 8.6 and have defaulted to Claude Haiku since (15 September 2026, after Mistral
+withdrew Mistral Large from its Free tier) — a settings change, not a code change.
+The `v1_mistral` replay variant routes both agents back to Mistral, and every
+agent's audit entry records the actual provider. **The default deployment now
+exercises one model provider (Anthropic)**; Mistral remains registered because its
+path is retained and reachable. Every other
 substitution is **design-level** in the prototype — the path is defined and the
 production target named, but not exercised against a running alternative.
 
@@ -19,16 +24,16 @@ production target named, but not exercised against a running alternative.
 |---|---|
 | **Role** | Frontier orchestration reasoning (Sonnet); fast extraction and the output guardrail (Haiku). |
 | **Substitution path** | Reached only through the `LLMProvider` Gateway. Swap to a different vendor by changing the provider/model in settings or a variant — no agent code change. Production target: the same Claude models via **Azure AI Foundry** private endpoints. |
-| **Exercised in prototype?** | **Yes (partial).** The `v2_haiku_validator` variant routes the Validator to Claude Haiku; the audit `llm_call.provider` records `anthropic` truthfully. Cross-vendor swap of the orchestrator/guardrail is config-level, not exercised. |
-| **DORA Art. 28 rationale** | The Gateway is the documented exit/substitution seam. Concentration on one frontier vendor is mitigated by provider diversity (Mistral on the PII-sensitive path) and by the swap being a configuration change. |
+| **Exercised in prototype?** | **Yes (partial).** Since Phase 8.6 all four agents run on Anthropic by default; the Validator and Adjuster reached Haiku by a settings change, and the audit `llm_call.provider` records `anthropic` truthfully. Moving the Doc-Parser or Guardrail off Anthropic is config-level but unverified. |
+| **DORA Art. 28 rationale** | The Gateway is the documented exit/substitution seam. In the production target, concentration on one frontier vendor is mitigated by provider diversity (Mistral on the PII-sensitive path) and by the swap being a configuration change. **Prototype note:** the default deployment currently concentrates on Anthropic; the retained `v1_mistral` path is the mitigation. |
 
 ### Mistral — Mistral Large (Validator, Adjuster)
 
 | | |
 |---|---|
 | **Role** | Open-weight reasoning for the PII-sensitive coverage and settlement decisions; the Adjuster is the fine-tune target. |
-| **Substitution path** | Via the Gateway. The `v2_haiku_validator` variant demonstrates swapping *off* Mistral for the Validator. Production: Mistral Large via Azure AI Foundry; the Adjuster gains a **LoRA adapter** trained on redacted historical claims, versioned in Blob Storage with blue/green deploy. |
-| **Exercised in prototype?** | **Yes (partial).** The provider-swap variant proves the Validator can run off Mistral; the truthful provider audit is the evidence. |
+| **Substitution path** | Via the Gateway. Phase 8.6 swapped the Validator and Adjuster *off* Mistral by configuration; the `v1_mistral` variant swaps them back. Production: Mistral Large via Azure AI Foundry; the Adjuster gains a **LoRA adapter** trained on redacted historical claims, versioned in Blob Storage with blue/green deploy. |
+| **Exercised in prototype?** | **Yes.** The Validator and Adjuster ran on Mistral through Phase 8.5 and run off Mistral by default since Phase 8.6; the truthful provider audit is the evidence. The Mistral path stays reachable via `v1_mistral` — currently refused by Mistral's Free tier (`403 tier_not_allowed`), which the audit also records. |
 | **DORA Art. 28 rationale** | Open-weight + tenant-hostable is the strongest substitutability posture — the model can be self-hosted if the vendor relationship ends. Fine-tuning keeps the differentiated capability inside the tenant. |
 
 ## Infrastructure providers
@@ -64,7 +69,7 @@ production target named, but not exercised against a running alternative.
 
 | Provider | Concentration risk | Primary mitigation |
 |---|---|---|
-| Anthropic | Frontier orchestration | Provider diversity (Mistral) + Gateway swap |
+| Anthropic | Frontier orchestration; **all four agents in the prototype default (Phase 8.6)** | Provider diversity (Mistral, retained as `v1_mistral`) + Gateway swap |
 | Mistral | PII-sensitive reasoning | Open-weight, tenant-hostable, fine-tunable |
 | Neon | All persistent state | Portable Postgres + Alembic; SQL MI target |
 | Render / Vercel | Hosting | Stateless; tenant-Azure target |

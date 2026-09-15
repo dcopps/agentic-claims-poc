@@ -34,6 +34,8 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 | Small LLM (Doc-Parser, Guardrail) | Claude Haiku via public Anthropic API | Claude Haiku via Azure AI Foundry private endpoint |
 | Open-weight LLM (Validator) | Mistral Large via public Mistral API | Mistral Large via Azure AI Foundry private endpoint |
 | Open-weight LLM with fine-tune (Adjuster) | Mistral Large via public Mistral API (no fine-tune in prototype) | Mistral Large with LoRA adapter, trained on redacted historical claims |
+
+> **Note (15 September 2026, Phase 8.6).** The deployed prototype's Validator and Adjuster currently **default to Claude Haiku via the public Anthropic API**, because Mistral withdrew Mistral Large from its Free tier. The Mistral rows above remain the prototype's retained path — reachable through the `v1_mistral` replay variant or by setting `llm.validator_provider` / `llm.adjuster_provider` to `mistral` — and the production column is unchanged.
 | Document extraction (known templates) | Not present (Haiku handles all input) | Azure AI Document Intelligence (deterministic OCR) before Haiku |
 | LLM Gateway | Thin Python wrapper class (same interface as production) | Tenant-owned Container Apps service: routing, failover, prompt logging, cost attribution, PII redaction |
 | LLM observability | Langfuse (self-hosted on Render or free cloud tier) | Langfuse self-hosted on Azure Container Apps |
@@ -91,7 +93,7 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 
 **Claude Haiku via the public Anthropic API.** The Doc-Parser (extracts structured fields from claim narratives and document images using Haiku's vision capability) and the Guardrail (checks the Adjuster's output for PII leakage, bias, and hallucinated policy citations).
 
-**Mistral Large via the public Mistral API.** The Validator (RAG-based coverage decision) and the Adjuster (settlement estimation). The Adjuster does not have a fine-tuned LoRA adapter in the prototype; the production architecture document describes how this would be trained and deployed.
+**Mistral Large via the public Mistral API.** The Validator (RAG-based coverage decision) and the Adjuster (settlement estimation). The Adjuster does not have a fine-tuned LoRA adapter in the prototype; the production architecture document describes how this would be trained and deployed. *(Note, 15 September 2026: since Phase 8.6 the deployed default runs these two agents on Claude Haiku; Mistral Large is reachable via the `v1_mistral` variant. See the note under the stack table.)*
 
 **bge-small-en-v1.5 embedding model.** Loaded into the FastAPI process via the `sentence-transformers` library. Runs on CPU; produces 384-dimensional vectors. Used both for indexing the policy chunks and for embedding the claim narrative at query time.
 

@@ -870,3 +870,46 @@ The rename is internal — the two names were used only in the five `backend/app
 **Next:** deploy, Part B reset, deployed verification; then the Mistral tier decision.
 
 ---
+
+## Phase 8.6 — Validator and Adjuster Default to Claude Haiku; Mistral Path Retained as a Variant
+
+**Date:** 2026-09-15
+
+**Phase / Prompt:** Phase 8.6 — [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku.md)
+**Plan:** [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md)
+**Report:** [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-report.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-report.md)
+
+**The decision (resolves the backlog's *Mistral tier decision*).** Phase 8.5.2's deployed verification (run `11f97ae8-…`) and Phase 8.5.3's audit row (run `56a0d5b2-…`, `requested_model = "mistral-large-2512"` on a `403 tier_not_allowed`) established that Mistral has withdrawn Mistral Large from its Free tier entirely — alias and dated releases alike; the admin *Limits* page is a rate-limit table, not a catalogue of tier-callable models. Options were (1) add a Mistral payment method, keeping the exact locked architecture and the live two-vendor story, or (3) default the Validator and Adjuster to Claude Haiku at zero cost, keeping the Mistral path in code. (2), a smaller Free-tier Mistral model, was rejected as another guess against the same page and not "Mistral Large". **Dermot chose option 3 on 14 September 2026.** This changes the *prototype default* of a locked decision; the *production target* (Mistral Large, LoRA for the Adjuster) is unchanged, and CLAUDE.md → *Models* now records both layers explicitly.
+
+**Plan decisions (approved 15 September 2026).** Retire `v2_haiku_validator`; name the Mistral variant `v1_mistral`; truthful provider for all four agents as a locked-interface extension; version `0.8.6` with UI polish renumbered 8.7; a dated note (not a table edit) in `architecture-stack-reference.md`. Folded into scope: the stale `0.7.0` in `walkthrough.md`, one live `v2_strict_validator` replay during verification, and the stale correlation-id comment in `Validator._invoke_llm` flagged by the 8.5.3 report.
+
+**What changed — code.**
+
+- **Settings (`backend/settings.py`, `settings.yaml.template`).** Per-agent provider selectors `llm.{doc_parser,validator,adjuster,guardrail}_provider: anthropic | mistral` (default `anthropic`) — uniform across all four agents because all four sit behind the same Gateway. New `llm.anthropic.validator_model` / `adjuster_model` (Haiku); new optional `llm.mistral.doc_parser_model` / `guardrail_model` (no default — unverified routes carry no guessed id). `LLMSettings.model_for(agent)` / `provider_for(agent)` resolve through an explicit per-block mapping. An `after` validator refuses any selector whose block has no model for that agent; both methods re-check at call time because variants mutate a deep copy without validation. The `mistral-large-2512` pin and its pin-by-policy comment stay on `MistralProviderSettings` (only the comment's backlog pointer moved to *Re-enable Mistral as default*).
+- **Agents.** All four resolve their model via `settings.llm.model_for(...)`. **Finding F1:** the Adjuster's audit hardcoded `_PROVIDER_LABEL = "mistral"` (Doc-Parser and Guardrail hardcoded `"anthropic"`) — only the Validator had Phase 5's truthful-provider fix. Swapping the wiring alone would have recorded `provider: "mistral"` on every Haiku settlement. All three now take `provider_label=self._provider.vendor`, matching the Validator. Docstrings no longer name a fixed vendor. `Validator._invoke_llm`'s comment claiming the per-call correlation id "keeps a single ID across audit + log" (contradicting `_shared.new_correlation_id`) was rewritten to state the real intent.
+- **Wiring.** `PipelineOrchestrator.with_defaults` builds each agent's provider from its selector — on defaults no `MistralProvider` is constructed and `MISTRAL_API_KEY` is not required. `variant_factory.py` now treats a variant as a settings overlay: `resolve_variant_settings(settings, spec)` (pure deep copy + overrides) and `resolve_validator_template(spec)` replace `resolve_validator_config` / `ResolvedValidatorConfig` and its hardcoded `"mistral"` default. Providers are looked up on the *shared* `Settings`, never the per-run copy — the factory cache keys on `id(settings)`, so keying on copies would grow the cache per replay and risk a recycled id returning a stale provider. The agent test bench (`api/agents_test.py`) resolves all four agents' providers from the variant (the Adjuster previously ignored `?variant=` and was pinned to Mistral).
+- **Variants.** `VariantSpec` gains `adjuster: ProviderOverride` (model/provider only — `prompt_template` under `adjuster:` fails at load, since the Adjuster has no template hook); `AgentOverride` extends `ProviderOverride` for the Validator slot. `variants.yaml`: `default`, **`v1_mistral`** (Validator + Adjuster `provider: mistral`, no model — uses the pin), `v2_strict_validator`. `v2_haiku_validator` retired.
+- **Version** `0.8.5.3` → **`0.8.6`** (`uv.lock` follows); installed package confirmed `0.8.6`.
+
+**Interface stability.** Audit payload shapes unchanged. Values: `coverage_check` / `settlement_estimate` carry `provider = "anthropic"` and the Haiku id; `llm_call.provider` is truthful for all four agents (new bullet in CLAUDE.md → *Locked interface extensions*). Settings additions are additive; `LLM__MISTRAL__VALIDATOR_MODEL` now takes effect only when the selector is `mistral`. `variants.yaml` schema gains an additive slot; registered names changed. `pipeline_started.variant` stays `"default"`. HTTP shapes unchanged. No DB, SSE or frontend change.
+
+**Tests.**
+
+- Updated: provider-label assertions in `test_adjuster.py` (was `== "mistral"` — passed only because of the hardcode), `test_doc_parser.py`, `test_guardrail.py` now assert `mock_provider.vendor`; `requested_model` assertions resolve via `model_for`; `test_variants.py` resolution tests for the new variant set, and the model-override test moved to a synthetic `tmp_path` registry (no shipped variant sets `model` now); the 8.5.3 Haiku-variant `requested_model` test rewritten for `v1_mistral`; the gated live scenario E2E wired from the selectors.
+- New (19): `test_settings_providers.py` (11 — defaults, resolution, unknown selector, selector without model, unknown agent, two mutated-copy re-checks, nested env var flips an agent); `test_agent_wiring.py` (4 — default all-Anthropic/Haiku, default builds with no Mistral key, `v1_mistral` → `MistralProvider` + pin with shared settings unmutated, strict variant on Haiku); `test_variants.py` (+3 — `prompt_template` under `adjuster` refused, and the two `_set_provider` / `_set_model` agent guards); `test_adjuster.py` (+1 — `v1_mistral` records `requested_model = "mistral-large-2512"`).
+- **Wiring discriminator:** `test_agent_wiring.py::test_default_wiring_builds_without_a_mistral_key`. With the default Validator temporarily re-wired to `get_provider(settings, "mistral")` it failed (`ValueError: get_provider: MISTRAL_API_KEY is not set`), as did the all-Anthropic assertion test; restored, both pass.
+
+| | Before | After |
+| --- | --- | --- |
+| Collected | 354 | **373** |
+| Passed | 347 | **366** |
+| Failed | 0 | 0 |
+| Skipped | 7 | 7 |
+
+`ruff check .` clean; `mypy` clean (110 source files). Frontend unchanged.
+
+**Documentation sweep** (per-occurrence verdicts in the plan §6): CLAUDE.md *Models* rewritten (production target vs prototype default, dated, variant named, verified-combinations caveat); README (headline diagram labels, pitch bullets, key requirements, prototype LLM row — with "Same models" in the production column reworded to "Anthropic + Mistral models" so it does not now read as Haiku-only); `design-decisions.md` §2 evidence updated and §3 dated note appended (argument untouched); DORA register (Mistral stays registered; default exercises one provider; concentration note); `architecture-stack-reference.md` dated notes only; `diagrams/README.md` note (`.mmd` content untouched); `walkthrough.md` demo-script sentences and `0.7.0` → `0.8.6`. Historical (`build-log`, `docs/prompts`, `docs/learning`) and production-target text left.
+
+**Backlog.** *Mistral tier decision* removed (this entry records it); the Phase 8.4/8.5.2 pending verification replaced by the Phase 8.6 verification that discharges it; UI polish renumbered **8.7** (`0.8.6 → 0.9.0`); added *Re-enable Mistral as default*; *Split the oversized builders* carried unchanged.
+
+**Deployed verification.** Pending at the time of the code commit — outcome recorded below in a follow-up commit.

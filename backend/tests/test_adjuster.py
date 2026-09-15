@@ -4,7 +4,8 @@ Tests for `backend.app.agents.adjuster.Adjuster`.
 Strategy: real Postgres (`clean_db`) for the audit-write integration,
 mocked LLM provider, the committed `backend/data/market_data.yaml`
 for the lookup table. The gated `RUN_LLM_E2E_TESTS=1` test exercises
-the live Mistral endpoint with the range-enforcement guard active.
+the live Mistral endpoint with the range-enforcement guard active
+(the Mistral provider is retained for the `v1_mistral` variant).
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ from backend.app.agents import (
     ValidatorVerdict,
 )
 from backend.app.llm.provider import LLMProviderError
+from backend.app.orchestrator.variant_factory import resolve_variant_settings
+from backend.app.orchestrator.variant_registry import VariantRegistry
 from backend.app.prompts import PromptLoader
 from backend.data.market_data import (
     MarketRange,
@@ -39,6 +42,10 @@ from backend.data.market_data import (
 from backend.settings import Settings
 
 from .conftest import MockProvider
+
+_VARIANTS_PATH = (
+    Path(__file__).resolve().parents[2] / "backend/app/orchestrator/variants.yaml"
+)
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -214,7 +221,9 @@ def test_evaluate_returns_typed_result_inside_range(
     assert payload["market_data"]["floor"] == "50000"
     assert payload["market_data"]["ceiling"] == "200000"
     assert payload["output"]["recommended_settlement"] == "85000.00"
-    assert payload["llm_call"]["provider"] == "mistral"
+    # Truthful provider (Phase 8.6): before, a hardcoded "mistral" label made this
+    # pass regardless of the provider the agent held.
+    assert payload["llm_call"]["provider"] == mock_provider.vendor == "mock"
     # The audit carries the full reasoning (Phase 5 runs reconstruction reads it).
     # For a short demo reasoning it equals the excerpt — i.e. nothing truncated.
     assert payload["output"]["reasoning"] == payload["output"]["reasoning_excerpt"]
@@ -290,7 +299,7 @@ def test_evaluate_records_requested_model_on_success(
         row = cur.fetchone()
     assert row is not None
     llm_call = row[0]["llm_call"]
-    assert llm_call["requested_model"] == db_settings.llm.mistral.adjuster_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("adjuster")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
     # The mock answers as a different model, so equality with `model` would mean the
     # value was copied from the response rather than recorded from the request.
@@ -301,6 +310,44 @@ def test_evaluate_records_requested_model_on_success(
 # --------------------------------------------------------------------------- #
 # Range-enforcement guard — the headline Adjuster contract.
 # --------------------------------------------------------------------------- #
+
+
+def test_v1_mistral_variant_records_mistral_requested_model(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+    market_data_table: object,
+    parsed_claim: DocParserOutput,
+    validator_verdict: ValidatorVerdict,
+) -> None:
+    """
+    Phase 8.6: the `v1_mistral` variant routes the Adjuster to the pinned Mistral
+    model, and the audit records that request. Companion to the Validator test —
+    the Adjuster gained a variant slot in this phase.
+    """
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _valid_output_json("85000.00")
+    spec = VariantRegistry.load_from_yaml(_VARIANTS_PATH).resolve("v1_mistral")
+    adjuster = _build_adjuster(
+        conn=clean_db,
+        provider=mock_provider,
+        db_settings=resolve_variant_settings(db_settings, spec),
+        prompt_loader=prompt_loader,
+        market_data_table=market_data_table,
+    )
+    adjuster.evaluate(
+        claim_id, uuid4(), parsed_claim=parsed_claim, validator_verdict=validator_verdict
+    )
+
+    with clean_db.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0]["llm_call"]["requested_model"] == "mistral-large-2512"
+    assert mock_provider.calls[0].model == "mistral-large-2512"
+    # The shared Settings still resolves the Haiku default — the override is per-run.
+    assert db_settings.llm.model_for("adjuster") == "claude-haiku-4-5-20251001"
 
 
 def test_out_of_range_value_above_ceiling_raises_and_audits(
@@ -573,7 +620,7 @@ def test_provider_error_audit_records_requested_model(
     llm_call = row[0]["llm_call"]
     # No response came back, so there is no responding `model` — only the request.
     assert "model" not in llm_call
-    assert llm_call["requested_model"] == db_settings.llm.mistral.adjuster_model
+    assert llm_call["requested_model"] == db_settings.llm.model_for("adjuster")
     assert llm_call["requested_model"] == mock_provider.calls[0].model
 
 

@@ -395,16 +395,15 @@ def test_scenario_guardrail_escalation(
 
 @pytest.mark.skipif(
     os.environ.get("RUN_LLM_E2E_TESTS") != "1"
-    or not os.environ.get("ANTHROPIC_API_KEY")
-    or not os.environ.get("MISTRAL_API_KEY"),
-    reason="Set RUN_LLM_E2E_TESTS=1 with both API keys to exercise the live pipeline.",
+    or not os.environ.get("ANTHROPIC_API_KEY"),
+    reason="Set RUN_LLM_E2E_TESTS=1 with ANTHROPIC_API_KEY to exercise the live pipeline.",
 )
 def test_scenario_auto_approve_real_call(
     clean_db: psycopg.Connection,
     db_settings: Settings,
     prompt_loader: PromptLoader,
 ) -> None:
-    """End-to-end against live Anthropic + Mistral endpoints. Opt-in."""
+    """End-to-end against the live providers the default settings select. Opt-in."""
     from backend.app.agents.validator import default_embedder
     from backend.app.llm import get_provider
     from backend.app.llm.factory import clear_provider_cache
@@ -424,25 +423,29 @@ def test_scenario_auto_approve_real_call(
     )
     # Wire real providers + embedder, but pin every collaborator to the test
     # connection so the run reads the seeded claim and writes to the same DB.
+    # Providers follow the settings selectors so this tracks the real default.
     factory = lambda: _conn_factory(clean_db)  # noqa: E731
-    anthropic = get_provider(db_settings, "anthropic")
-    mistral = get_provider(db_settings, "mistral")
+    llm = db_settings.llm
     orch = PipelineOrchestrator(
         doc_parser=DocParser(
-            provider=anthropic, prompt_loader=prompt_loader,
+            provider=get_provider(db_settings, llm.provider_for("doc_parser")),
+            prompt_loader=prompt_loader,
             settings=db_settings, connection_factory=factory,
         ),
         validator=Validator(
-            provider=mistral, prompt_loader=prompt_loader, embedder=real_embedder,
+            provider=get_provider(db_settings, llm.provider_for("validator")),
+            prompt_loader=prompt_loader, embedder=real_embedder,
             settings=db_settings, connection_factory=factory,
         ),
         adjuster=Adjuster(
-            provider=mistral, prompt_loader=prompt_loader,
+            provider=get_provider(db_settings, llm.provider_for("adjuster")),
+            prompt_loader=prompt_loader,
             market_data=load_market_data(db_settings.adjuster.market_data_path),
             settings=db_settings, connection_factory=factory,
         ),
         guardrail=Guardrail(
-            provider=anthropic, prompt_loader=prompt_loader,
+            provider=get_provider(db_settings, llm.provider_for("guardrail")),
+            prompt_loader=prompt_loader,
             settings=db_settings, connection_factory=factory,
         ),
         policy=POLICY,

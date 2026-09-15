@@ -6,7 +6,7 @@ are approximate; the whole path is ~3 minutes. The recorded video is kept outsid
 the repo (link shared for the interview).
 
 **Before recording:** the deployed backend has been seeded and indexed; `/health`
-reports `version=0.7.0`. Open the live Vercel URL.
+reports `version=0.8.6`. Open the live Vercel URL.
 
 ---
 
@@ -48,7 +48,12 @@ Auto-approve ($85k water damage)"**, then **Submit Claim**. On the list, click
 
 > "Each card expands to show exactly what ran — the system and user prompt the
 > agent used, and its raw response, pulled straight from the audit log. This is
-> the explainability story: nothing the model did is hidden."
+> the explainability story: nothing the model did is hidden. The audit entry also
+> records which model answered — all four agents run on Claude by default. The Validator and
+> Adjuster were designed for Mistral Large, and that path is still wired in as a
+> variant — when Mistral's free tier dropped the model, switching was a
+> configuration change, not a rewrite, which is exactly the substitutability the
+> gateway exists for."
 
 **Screen:** the outcome is `awaiting_human` — settlement over the $250,000 ceiling.
 

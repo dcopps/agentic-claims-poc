@@ -11,7 +11,8 @@ Step-for-step:
      Adjuster's reasoning, the retrieved chunks, and the rule
      engine's pre-detected findings (so the LLM does not
      duplicate them).
-  3. Call Claude Haiku through the LLM Gateway. The LLM's job is
+  3. Call the model its settings select (Claude Haiku by default)
+     through the LLM Gateway. The LLM's job is
      to find subtler failures the rule engine missed —
      particularly semantic-bias and citation cases the
      regex-only floor cannot catch.
@@ -82,10 +83,6 @@ _CHUNK_AUDIT_EXCERPT_CHARS = 300
 
 # Locked audit step identifier.
 _AUDIT_STEP_NAME = "output_check"
-
-# Guardrail routes through Anthropic Haiku, per the project's
-# architectural decisions.
-_PROVIDER_LABEL = "anthropic"
 
 # Pre-baked summary copy. Defined once so the audit row is stable
 # across runs that produced equivalent flag sets.
@@ -266,7 +263,7 @@ class Guardrail:
         request = CapturedRequest(
             system=system_prompt,
             user=user_prompt,
-            model=self._settings.llm.anthropic.guardrail_model,
+            model=self._settings.llm.model_for("guardrail"),
         )
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
@@ -316,6 +313,7 @@ class Guardrail:
             output=output,
             latency_ms=latency_ms,
             error=error,
+            provider_label=self._provider.vendor,
             request=request,
         )
         event = AuditEvent(
@@ -463,9 +461,14 @@ def _build_audit_payload(
     output: GuardrailOutput | None,
     latency_ms: int,
     error: BaseException | None,
+    provider_label: str,
     request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked guardrail-step audit payload.
+
+    `provider_label` is the provider the agent actually holds
+    (`self._provider.vendor`), per the Phase 5 truthful-provider rule extended to
+    every agent in Phase 8.6 — the Guardrail's provider is a settings choice.
 
     `request` carries the literal prompt (Phase 8.3) and requested model (Phase
     8.5.3) sent to the model, attached to the `llm_call` block when a call was made.
@@ -500,14 +503,14 @@ def _build_audit_payload(
         },
         "llm_call": attach_request(
             {
-                "provider": _PROVIDER_LABEL,
+                "provider": provider_label,
                 "model": response.model,
                 "prompt_tokens": response.prompt_tokens,
                 "completion_tokens": response.completion_tokens,
                 "latency_ms": latency_ms,
             }
             if response is not None
-            else {"provider": _PROVIDER_LABEL, "latency_ms": latency_ms},
+            else {"provider": provider_label, "latency_ms": latency_ms},
             request,
         ),
         "output": (

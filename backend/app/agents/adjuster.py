@@ -10,8 +10,9 @@ Step-for-step:
   2. Build the user prompt via `PromptLoader`, threading the
      parsed claim, the validator's verdict, and the looked-up
      range as explicit placeholders. No inline f-strings.
-  3. Call Mistral Large through the LLM Gateway with `response_format=
-     "json"`. The system prompt locks the schema.
+  3. Call the model its settings select (Claude Haiku by default; Mistral
+     Large under the `v1_mistral` variant) through the LLM Gateway with
+     `response_format="json"`. The system prompt locks the schema.
   4. Parse the response into `AdjusterOutput`. **Re-validate** the
      value is in `[floor, ceiling]` — out-of-bounds is a hard
      `ValueError`, never a silent clamp. The contract Phase 4
@@ -85,10 +86,6 @@ _VALIDATOR_REASONING_EXCERPT_CHARS = 500
 
 # Locked audit step identifier.
 _AUDIT_STEP_NAME = "settlement_estimate"
-
-# Adjuster routes through Mistral, per the project's architectural
-# decisions.
-_PROVIDER_LABEL = "mistral"
 
 # Deterministic demo affordance (Phase 7). A seeded claim carrying one of these
 # scenario tags returns the named fixture's Adjuster output instead of calling the
@@ -307,7 +304,7 @@ class Adjuster:
         request = CapturedRequest(
             system=system_prompt,
             user=user_prompt,
-            model=self._settings.llm.mistral.adjuster_model,
+            model=self._settings.llm.model_for("adjuster"),
         )
         correlation_id = _new_correlation_id()
         t0 = time.perf_counter()
@@ -359,6 +356,7 @@ class Adjuster:
             latency_ms=latency_ms,
             error=error,
             demo_fixture=demo_fixture,
+            provider_label=self._provider.vendor,
             request=request,
         )
         event = AuditEvent(
@@ -464,6 +462,7 @@ def _llm_call_block(
     latency_ms: int,
     demo_fixture: bool,
     request: CapturedRequest | None,
+    provider_label: str,
 ) -> dict[str, Any]:
     """Build the audit `llm_call` block, truthful about the demo-fixture path.
 
@@ -480,7 +479,7 @@ def _llm_call_block(
     if response is not None:
         return attach_request(
             {
-                "provider": _PROVIDER_LABEL,
+                "provider": provider_label,
                 "model": response.model,
                 "prompt_tokens": response.prompt_tokens,
                 "completion_tokens": response.completion_tokens,
@@ -488,7 +487,7 @@ def _llm_call_block(
             },
             request,
         )
-    return attach_request({"provider": _PROVIDER_LABEL, "latency_ms": latency_ms}, request)
+    return attach_request({"provider": provider_label, "latency_ms": latency_ms}, request)
 
 
 def _load_fixture_output(path: Path) -> AdjusterOutput:
@@ -534,10 +533,16 @@ def _build_audit_payload(
     output: AdjusterOutput | None,
     latency_ms: int,
     error: BaseException | None,
+    provider_label: str,
     demo_fixture: bool = False,
     request: CapturedRequest | None = None,
 ) -> dict[str, Any]:
     """Assemble the locked adjuster-step audit payload.
+
+    `provider_label` is the provider the agent actually holds
+    (`self._provider.vendor`). Before Phase 8.6 it was hardcoded to `"mistral"`,
+    which would have mislabelled every Haiku-backed settlement; the Phase 5
+    truthful-provider rule now covers every agent.
 
     `demo_fixture` is True when the output came from the deterministic demo
     fixture rather than a model call (Phase 7). It is recorded at the top level
@@ -571,7 +576,9 @@ def _build_audit_payload(
             "ceiling": str(market_range.ceiling),
         },
         "demo_fixture": demo_fixture,
-        "llm_call": _llm_call_block(response, latency_ms, demo_fixture, request),
+        "llm_call": _llm_call_block(
+            response, latency_ms, demo_fixture, request, provider_label
+        ),
         "output": (
             {
                 # `mode="json"` converts Decimal -> string here too.

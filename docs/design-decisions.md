@@ -33,10 +33,12 @@ thin `LLMProvider` interface (`complete(system=, user=, model=, …)`), with con
 a provider is a configuration change, not an agent rewrite. It is also the single
 place to add prompt logging, cost attribution, and PII redaction in production.
 
-**Evidence it works.** The `v2_haiku_validator` replay variant swaps the Validator
-from Mistral to Claude Haiku at run time, and the Validator's audit entry records
-the *actual* provider (`self._provider.vendor`) — so the audit log itself proves
-the substitution happened. An entry that lied about the provider would undermine
+**Evidence it works.** Each agent's provider is a settings selector
+(`llm.<agent>_provider`). In Phase 8.6 the Validator and Adjuster moved from Mistral
+Large to Claude Haiku by changing those defaults — no agent code changed — and the
+`v1_mistral` replay variant routes them back to Mistral at run time. Every agent's
+audit entry records the *actual* provider (`self._provider.vendor`) and model — so
+the audit log itself proves which substitution happened. An entry that lied about the provider would undermine
 exactly the substitutability story the prototype exists to tell.
 
 **Trade-off.** The interface is the lowest common denominator across vendors;
@@ -56,6 +58,15 @@ the Adjuster gets a LoRA adapter on redacted historical claims in production.
 
 **Trade-off.** Two SDKs, two key sets, two failure modes. The Gateway absorbs most
 of that; the operational surface is wider than a single-vendor design.
+
+**Note (15 September 2026, Phase 8.6).** The deployed prototype's *default* now runs
+single-vendor: Mistral withdrew Mistral Large from its Free tier, so the Validator
+and Adjuster default to Claude Haiku. The Mistral path is retained, tested, and
+reachable as the `v1_mistral` replay variant, and switching the default back is two
+settings values. The argument above — and the production target — are unchanged.
+The episode is itself a demonstration of the substitutability §2 argues for: a
+vendor-side change was absorbed by configuration, under real conditions, with the
+audit log recording the provider each run actually used.
 
 ## 4. An in-process event bus, not a message broker
 
