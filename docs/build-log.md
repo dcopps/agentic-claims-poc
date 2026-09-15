@@ -912,4 +912,33 @@ The rename is internal — the two names were used only in the five `backend/app
 
 **Backlog.** *Mistral tier decision* removed (this entry records it); the Phase 8.4/8.5.2 pending verification replaced by the Phase 8.6 verification that discharges it; UI polish renumbered **8.7** (`0.8.6 → 0.9.0`); added *Re-enable Mistral as default*; *Split the oversized builders* carried unchanged.
 
-**Deployed verification.** Pending at the time of the code commit — outcome recorded below in a follow-up commit.
+**Deployed verification (15 September 2026) — HALTED at step 3: auto-approve landed in the wrong terminal state.**
+
+1. `/health` → `{"status":"ok","version":"0.8.6"}` after Render redeployed commit `66a0d2c`. (Step 0, the Render env-var check, is Dermot's dashboard check. The audit rows below show the selectors resolved to the defaults, so no `LLM__*_PROVIDER` override was in effect.)
+2. **Reset.** Hostname gate passed (`.neon.tech`, `eu-central-1`). Pre-reset state: `claims` 9 (1 `extracted`, 8 `received`), `audit_log` 4, `policy_chunks` 12. `seed_claims --allow-truncate` → *Inserted 9 claims (3 scripted + 6 background)*. Post-reset: 9 `received`, `audit_log` 0, `policy_chunks` 12 (`index_policy` not re-run).
+3. **Scenarios.** Triggered through `POST /api/pipeline/run/{claim_id}`, the endpoint the Claims page's *Process* button calls; audit rows read directly from Neon. The three ran as one batch, so the threshold and guardrail scenarios had already run when the auto-approve result came back.
+
+| | Auto-approve (Harborline, $85k) | Threshold (Northwood, $850k) | Guardrail (Coral Bay, $1.4M) |
+| --- | --- | --- | --- |
+| Correlation id | `8bff04e2-6ff7-4e74-aa5c-003008f21185` | `49179971-ff2f-44c5-96ea-325fe448006f` | `529be3b0-6522-4df2-adf9-776ac3212958` |
+| Terminal status | **`awaiting_human` — expected `settled` ✗** | `awaiting_human` ✓ | `awaiting_human` ✓ |
+| Fired rules | **`guardrail_failed` — expected none ✗** | `settlement_over_ceiling` ✓ | `guardrail_failed`, `settlement_over_ceiling` ✓ |
+| Audit entries | 7 ✓ | 7 ✓ | 7 ✓ |
+| Validator | covered, confidence 0.92 (≥ 0.65 ✓) | covered, 0.92 | covered, 0.72 |
+| Adjuster | $82,500, confidence 0.88 (≥ 0.75 ✓) | $820,000, 0.85 | fixture $1,400,000 |
+| Guardrail | **passed = false** | passed = true | passed = false (fixture endorsement) |
+| `coverage_check.llm_call` | `anthropic` / `requested_model` = `model` = Haiku ✓ | same ✓ | same ✓ |
+| `settlement_estimate.llm_call` | `anthropic` / `requested_model` = `model` = Haiku, `prompt` present ✓ | same ✓ | `demo_fixture: true`, `provider: demo_fixture`, no `prompt` / `requested_model` ✓ |
+| `doc_extract` / `output_check` provider | `anthropic` ✓ | `anthropic` ✓ | `anthropic` ✓ |
+
+Chain: `GET /api/audit/verify/8bff04e2-…` → `{"ok": true, "rows_checked": 21, "first_break": null}` (whole ledger). Agent panels were **not** inspected in the UI, because the runs were API-driven.
+
+**Cause of the auto-approve failure: a false positive in the deterministic rule engine, not the LLM and not a prompt.** The `output_check` flag is `{"kind": "hallucinated_citation", "detail": "section 'with inventory and drying as primary components' not in retrieved chunks", "source": "rule"}`. The Haiku Adjuster's reasoning contains the ordinary phrase *"The loss is contained to one floor **section with** inventory and drying as primary components…"*.
+
+`guardrail_rules._CITATION_CANDIDATE_RE` is `(endorsement|sub-?limit|clause|provision|section|exclusion)\s+(?P<name>[A-Z][A-Za-z0-9 \-./]{1,60})` compiled with **`re.IGNORECASE`**. The flag also makes the name group's leading `[A-Z]` match lowercase letters, so any keyword followed by any word becomes a citation candidate. Reproduced locally: the pattern matches `'section with inventory and drying as primary components'`.
+
+The defect has been latent since Phase 3. Mistral's reasoning never happened to use a keyword word in ordinary prose, and the Phase 8 fix #5 tuning was prompt-side (for the LLM half of the Guardrail), not the regex. Validator and Adjuster outputs were well within every threshold. The Haiku wiring itself works as designed on all three runs: correct provider, model, `requested_model`, prompt capture and entry count.
+
+**Halt applied.** No prompt or token change, no Guardrail change, no re-run of the scenario. The failure depends on phrasing, so a re-run could pass by chance, and a pass-on-retry would be false evidence. Steps 4 (`v1_mistral` abort proof) and 5 (live `v2_strict_validator` replay) were **not run**. The deployed DB is left as the evidence: all three scenario claims are at `awaiting_human`. The next attempt needs a fresh reset.
+
+**Decision needed (Dermot).** Recommended: a narrow point release **8.6.1**. Make only the keyword case-insensitive, e.g. `(?i:endorsement|…|exclusion)\s+(?P<name>[A-Z]…)` without the global flag, so a citation name must start with a capital letter. `"Section 4.2"` and `"endorsement Coastal Surge Rider"` still flag; `"section with …"` no longer does. Add a regression test with this exact sentence, plus a test that the guardrail fixture still flags. Then re-run the full Phase 8.6 verification. Alternatives, such as steering Adjuster wording in its prompt, are prompt retuning and were ruled out for this phase.

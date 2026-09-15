@@ -20,6 +20,28 @@ Phase 8.6 moved the Validator and Adjuster defaults to Claude Haiku (the Mistral
 5. One live `v2_strict_validator` replay of the auto-approve claim, **after** the scenario table is recorded — evidences that the UI's *Re-process* works on the Haiku default.
 6. Record in the Phase 8.6 build-log entry and report; clear *Demo status* in `CLAUDE.md`; remove this item.
 
+**Attempted 15 September 2026 — halted at step 3.**
+- Steps 1–2 passed. Threshold and guardrail scenarios landed correctly, with full audit evidence.
+- **Auto-approve failed:** run `8bff04e2-…` ended `awaiting_human` / `guardrail_failed`. The cause is a rule-engine false positive: `_CITATION_CANDIDATE_RE` with `re.IGNORECASE` matched Haiku's ordinary prose "section with inventory…".
+- Steps 4–5 were not run. The deployed DB is left as evidence; reset again before the re-run.
+- **Blocked on:** *Guardrail citation-regex false positive* below.
+
+### Guardrail citation-regex false positive — **blocks the Phase 8.6 verification**
+
+`backend/app/agents/guardrail_rules.py:_CITATION_CANDIDATE_RE` is compiled with `re.IGNORECASE`, which also makes the name group's leading `[A-Z]` case-insensitive. Any of `endorsement|sub-limit|clause|provision|section|exclusion` followed by any word is therefore treated as a policy citation and checked against the retrieved chunks.
+
+Found live in run `8bff04e2-6ff7-4e74-aa5c-003008f21185`. The Haiku Adjuster wrote "one floor section with inventory and drying as primary components" and the rule engine flagged `hallucinated_citation`, escalating the auto-approve scenario. Latent since Phase 3.
+
+**Recommended fix (point release 8.6.1, decision pending with Dermot):**
+- Make only the keyword group case-insensitive (`(?i:…)`) and drop the global flag, so a candidate name must start with a capital.
+- Add tests:
+  - the exact Haiku sentence produces no flag;
+  - `"Section 4.2"`-style and `"endorsement Coastal Surge Rider"` citations still flag;
+  - the guardrail demo fixture still escalates.
+- Re-run the Phase 8.6 verification from a fresh reset.
+
+Not a prompt change.
+
 ---
 
 ## Next architectural phase — Phase 8.7: Demo UI polish
