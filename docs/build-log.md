@@ -943,6 +943,44 @@ The defect has been latent since Phase 3. Mistral's reasoning never happened to 
 
 **Decision needed (Dermot).** Recommended: a narrow point release **8.6.1**. Make only the keyword case-insensitive, e.g. `(?i:endorsement|…|exclusion)\s+(?P<name>[A-Z]…)` without the global flag, so a citation name must start with a capital letter. `"Section 4.2"` and `"endorsement Coastal Surge Rider"` still flag; `"section with …"` no longer does. Add a regression test with this exact sentence, plus a test that the guardrail fixture still flags. Then re-run the full Phase 8.6 verification. Alternatives, such as steering Adjuster wording in its prompt, are prompt retuning and were ruled out for this phase.
 
+
+**Deployed verification outcome (21 September 2026) — PASSED, on the `0.8.6.1` build.** The sequence halted above was re-run in full from a fresh reset once Phase 8.6.1 fixed the rule-engine false positive. Steps 4 and 5 ran for the first time.
+
+1. `/health` → `{"status":"ok","version":"0.8.6.1"}` (confirmed by Dermot, and again from the API). Render env unchanged: no `LLM__*` variables.
+2. **Reset.** Hostname gate passed (`.neon.tech`, `eu-central-1`). Pre-reset: `claims` 9 (3 `awaiting_human`, 6 `received`), `audit_log` 21 — the halted run's state exactly. `seed_claims --allow-truncate` → *Inserted 9 claims (3 scripted + 6 background)*. Post-reset: 9 `received`, `audit_log` 0, `policy_chunks` 12 (`index_policy` not re-run).
+3. **Scenarios.** Auto-approve was triggered **from the Claims page by Dermot**, who inspected the four agent panels in the UI: all filled, no *Audit entry not found*, Guardrail passed. Threshold and guardrail were API-driven. Audit rows read directly from Neon.
+
+| | Auto-approve (Harborline, $85k) | Threshold (Northwood, $850k) | Guardrail (Coral Bay, $1.4M) |
+| --- | --- | --- | --- |
+| Correlation id | `ded5557b-ffa7-410c-8ce9-c6ed7eeb5480` | `7b800947-1b38-4776-9fbb-e364c93abdce` | `2c181430-dfd5-434a-865a-210cc8b1735d` |
+| Terminal status | `settled` ✓ | `awaiting_human` ✓ | `awaiting_human` ✓ |
+| Fired rules | none ✓ | `settlement_over_ceiling` ✓ | `guardrail_failed`, `settlement_over_ceiling` ✓ |
+| Audit entries | 7 ✓ | 7 ✓ | 7 ✓ |
+| Validator | covered, 0.92 (≥ 0.65 ✓) | covered, 0.92 | covered, 0.72 |
+| Adjuster | $85,000, 0.88 (≥ 0.75 ✓) | $820,000, 0.85 | fixture $1,400,000 |
+| Guardrail | passed, no flags ✓ | passed, no flags ✓ | failed — `source: "rule"`, `endorsement 'Coastal Surge Rider' not in retrieved chunks` ✓ |
+| `coverage_check.llm_call` | `anthropic` / `requested_model` = `model` = Haiku, `prompt` present ✓ | same ✓ | same ✓ |
+| `settlement_estimate.llm_call` | `anthropic` / Haiku, `prompt` present, `demo_fixture: false` ✓ | same ✓ | `demo_fixture: true`, `provider: demo_fixture`, no `prompt` / `requested_model` ✓ |
+| `doc_extract` / `output_check` provider | `anthropic` ✓ | `anthropic` ✓ | `anthropic` ✓ |
+
+   An honest limit on what step 3 proves: Haiku's fresh auto-approve reasoning (*"localized to a single floor area…"*) contained **no citation keyword**, so this run did not exercise the 8.6.1 fix. The fix is proven by the verbatim regression test and its mutation proof; the deployed run proves the scenario is green on the build that carries it. The guardrail scenario shows the narrowed pattern still catches the planted endorsement in production.
+
+4. **`v1_mistral` abort proof — passed.** Background Claimant 01 (`CLM-2026-1001`): default run `765f1ad2-0871-41eb-bbab-1e12a0bb17bd`, then `POST /api/pipeline/replay/{claim_id}?variant=v1_mistral` → run `6f03b619-4377-4ab6-b0df-5dbae2921525`: `aborted`, failing agent `validator`; `coverage_check.llm_call` = `provider: "mistral"`, `requested_model: "mistral-large-2512"`, **no `model`**; `error` = `LLMProviderError … Status 403 … "tier_not_allowed"`. `doc_extract` stayed on `anthropic`. The retained Mistral path is wired and reachable, and the default is not on it.
+   - **Deviation from the plan, accepted:** the prior *default* run itself `aborted` — at the **Adjuster**, after a clean Validator pass on `anthropic` (covered, 0.92) — with `MarketDataTable.lookup: unknown claim_type 'sprinkler_leakage'`. See finding F1. The proof holds regardless: replay accepted the aborted run as its prior terminal run, and the Mistral replay fails at the Validator, upstream of the Adjuster.
+5. **Live `v2_strict_validator` replay from the UI — control and template proven; run aborted on a new finding.** On a *second* background claim, Background Claimant 03 (`CLM-2026-1003`, theft, $67,295), so no scenario claim was disturbed. Default run `683cc79a-c2c8-414c-a63e-55d8de0a06a0` → `awaiting_human`, 7 entries. Dermot then pressed *Re-process* on Run Detail → run `74513bca-2fc7-497e-9fff-b574d1d6c210`:
+   - `pipeline_started.variant = "v2_strict_validator"` ✓ — the UI control works on the Haiku default.
+   - `coverage_check` on `anthropic` / Haiku ✓, and the captured `llm_call.prompt.user` carries the strict template's `# Task — strict review` block, where the default run's carries `# Task` ✓. (The strict template is a *user*-message template; the two runs' system prompts are byte-identical, as designed. Verified by diffing the two audit rows, not inferred from the variant name.)
+   - Validator returned `covered: false`, 0.35. The Adjuster then proposed `recommended_settlement = 0.00`, which `AdjusterOutput` rejects (`gt 0`), and the run `aborted` with **5** entries. See finding F2. **Recorded as a new finding, not a halt on 8.6.1 (Dermot's ruling):** the halt rule covers the three scripted scenarios, and the abort is a missing pipeline branch, not a regression.
+6. **Chain:** `GET /api/audit/verify/74513bca-…` → `{"ok": true, "rows_checked": 41, "first_break": null}` — the whole ledger, including all three aborted runs.
+
+**Findings from this verification (none caused by 8.6 or 8.6.1; all in `docs/BACKLOG.md`):**
+
+- **F1 — five of the six seeded background claims cannot complete.** Their claim types (`sprinkler_leakage`, `vandalism`, `smoke_damage`, `hail`, `windstorm`) are absent from `market_data.yaml`, so the Adjuster aborts on lookup. Only Background Claimant 03 (`theft`) is processable. The three scripted scenarios are unaffected, but clicking *Process* on most background claims in a demo aborts.
+- **F2 — the pipeline has no path for `covered = false`.** The orchestrator runs the Adjuster regardless of the verdict; a model that reasons correctly ("coverage denied, so no payment") emits `0.00`, which the schema refuses, and the run aborts instead of reaching a human. The claim is also left at status **`coverage_verified`** although the verdict was *not covered* — the status name asserts the opposite of the recorded verdict. On the default run the same claim reached `awaiting_human` only because Haiku happened to propose $45,000 despite the denial.
+- **F3 — retrieval missed the governing section for a theft narrative.** Top-3 chunks were *Exclusions*, *Business Interruption*, *Duties After Loss* (similarity 0.52–0.55); *Named Perils Covered* was not retrieved, which is what drove `covered: false` on both runs. The Guardrail's one flag on the default run was `source: "llm"` — confirmed **not** a rule-engine false positive.
+
+**This discharges the Phase 8.4 / 8.5.2 seven-entry check**, carried since June: every run that reached a terminal decision wrote exactly seven audit entries, and the chain verifies end to end.
+
 ---
 
 ## Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)
@@ -998,4 +1036,6 @@ Also fixed, per the plan's optional suggestion: `test_legitimate_citation_does_n
 
 ### Deployed verification
 
-Not yet run at the time of this entry. The full Phase 8.6 sequence re-runs from a fresh Neon reset on the `0.8.6.1` build — three scenarios (auto-approve triggered from the Claims page, agent panels inspected), the `v1_mistral` abort proof, and a UI-triggered `v2_strict_validator` replay on a second background claim. The outcome is recorded as an amendment to the Phase 8.6 entry.
+**Passed, 21 September 2026**, on the `0.8.6.1` build — recorded in full as the *Deployed verification outcome* amendment to the Phase 8.6 entry above: all three scenarios in their expected terminal states with seven audit entries each, the `v1_mistral` abort proof, a UI-triggered `v2_strict_validator` replay, and a verified chain across 41 rows. The verification raised three findings unrelated to this fix (F1–F3 there), now in `docs/BACKLOG.md`.
+
+**Report:** [`docs/prompts/18-phase-8.6.1-guardrail-citation-regex-fix-report.md`](prompts/18-phase-8.6.1-guardrail-citation-regex-fix-report.md)

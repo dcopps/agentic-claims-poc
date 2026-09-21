@@ -2,35 +2,47 @@
 
 This file is the authoritative list of pending and future work on the agentic-claims-poc. Completed work lives in [`docs/build-log.md`](build-log.md); the current session's state is in the *Current Status* section of [`CLAUDE.md`](../CLAUDE.md). This file captures everything else — surveyed but not-yet-actioned items, queued future phases, and open questions.
 
-Ordered by priority: pending verifications first, then the next architectural phase, then future work, then working notes.
+Ordered by priority: pending verifications first, then unscheduled findings, then the next architectural phase, then future work, then working notes.
 
 ---
 
 ## Pending verifications (carried over from previous phases)
 
-### Deployed verification of Phase 8.6 (Validator + Adjuster on Claude Haiku) — discharges the Phase 8.4 / 8.5.2 check
+*None outstanding.* The Phase 8.6 deployed verification — which also discharged the Phase 8.4 / 8.5.2 seven-entry check carried since June — passed on the `0.8.6.1` build on 21 September 2026. See the *Deployed verification outcome* amendment to the Phase 8.6 entry in [`build-log.md`](build-log.md).
 
-Phase 8.6 moved the Validator and Adjuster defaults to Claude Haiku (the Mistral tier decision, option 3, chosen 14 September 2026). One verification sequence closes Phase 8.6 **and** the Phase 8.4 (audit-write fix) / Phase 8.5.2 (model pin) seven-entry check that could not run while Mistral refused every call. Full field list in [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md) §5 and §10.
+---
 
-0. Dermot confirms on Render: no `LLM__*` env vars (in particular no `LLM__VALIDATOR_PROVIDER` / `LLM__ADJUSTER_PROVIDER`); `MISTRAL_API_KEY` stays set so `v1_mistral` is reachable.
-1. `/health` → `version = 0.8.6.1` (the Phase 8.6.1 build; see the halt note below).
-2. Reset Neon: hostname gate (`.neon.tech`), then `uv run python -m backend.data.seed_claims --allow-truncate` → 9 claims at `received`, `audit_log` empty, `policy_chunks` (12) untouched. Do **not** re-run `index_policy`.
-3. Process the three seeded scenario claims from the Claims page. Each: expected terminal status (`settled` / `awaiting_human` / `awaiting_human`) and fired rule (none / `settlement_over_ceiling` / `guardrail_failed`); four agent panels filled, no *Audit entry not found*; **seven** audit entries (the orchestrator always writes `escalation_decision` + a terminal step); chain verified; `coverage_check` and `settlement_estimate` `llm_call.provider = "anthropic"`, `requested_model` = `model` = `claude-haiku-4-5-20251001` (guardrail scenario: `settlement_estimate` has `demo_fixture: true` and no `prompt` / `requested_model`). **A wrong terminal state halts the phase — no prompt or token retuning.**
-4. Mistral-variant proof on a non-scenario seeded claim: run it on `default`, then `POST /api/pipeline/replay/{claim_id}?variant=v1_mistral` (the *Re-process* button is hardcoded to `v2_strict_validator`). Expect `aborted` at the Validator, `403 tier_not_allowed`, `coverage_check.llm_call.provider = "mistral"`, `requested_model = "mistral-large-2512"`.
-5. One live `v2_strict_validator` replay, triggered from the UI's *Re-process* button by Dermot — evidences that the control works on the Haiku default. Run on a **second** `Background Claimant` claim (not step 4's, and not a scenario claim), so no scenario claim's terminal state is disturbed after it has been recorded.
-6. Record in the Phase 8.6 build-log entry and report; clear *Demo status* in `CLAUDE.md`; remove this item.
+## Findings from the 21 September 2026 verification (not yet scheduled)
 
-**Attempted 15 September 2026 — halted at step 3.**
-- Steps 1–2 passed. Threshold and guardrail scenarios landed correctly, with full audit evidence.
-- **Auto-approve failed:** run `8bff04e2-…` ended `awaiting_human` / `guardrail_failed`. The cause is a rule-engine false positive: `_CITATION_CANDIDATE_RE` with `re.IGNORECASE` matched Haiku's ordinary prose "section with inventory…".
-- Steps 4–5 were not run. The deployed DB is left as evidence; reset again before the re-run.
-- **Cause fixed in Phase 8.6.1** (citation-regex false positive; see the Phase 8.6.1 build-log entry). The whole sequence re-runs from scratch on the `0.8.6.1` build.
+None was caused by Phase 8.6 or 8.6.1, and none affects the three scripted scenarios. The first two are demo-visible.
+
+### Pipeline has no path for Validator `covered = false`
+
+**The orchestrator should short-circuit to human review with a coverage-not-established reason instead of running the Adjuster.**
+
+Found in run `74513bca-2fc7-497e-9fff-b574d1d6c210` (Background Claimant 03, `v2_strict_validator` replay). The Validator returned `covered: false` (0.35); the orchestrator ran the Adjuster anyway; Haiku reasoned correctly — *"coverage has been denied, no settlement payment is warranted"* — and returned `recommended_settlement = 0.00`; `AdjusterOutput` requires `> 0`, so the run **aborted** instead of reaching a human. On the default run of the same claim (`683cc79a-…`) the pipeline reached `awaiting_human` only because the model happened to propose $45,000 despite the denial — the outcome currently depends on whether the Adjuster is *wrong* in a schema-compatible way.
+
+Scope notes for whoever picks this up:
+- A denial is a decision a human must see, not an error: it belongs in `awaiting_human` with a fired rule (a new hard rule such as `coverage_not_established` in `escalation/policy.yaml`), not in `aborted`.
+- **Status naming.** The aborted claim was left at `coverage_verified` although the verdict was *not covered* — the status asserts the opposite of the audit row. Decide whether the status means "the coverage check ran" (rename it) or "coverage was confirmed" (do not set it on a denial).
+- **Interface-stability event:** a run that skips the Adjuster and Guardrail writes fewer than seven audit entries, a new fired-rule name appears in `escalation_decision`, and the agent panels need an "agent not run" state. Needs explicit acknowledgement in its plan.
+- Do **not** fix this by relaxing `AdjusterOutput` to accept `0.00` — that converts a visible abort into a silent $0 settlement recommendation.
+
+### Five of the six seeded background claims abort at the Adjuster
+
+Found in run `765f1ad2-0871-41eb-bbab-1e12a0bb17bd` (Background Claimant 01): `MarketDataTable.lookup: unknown claim_type 'sprinkler_leakage'`. `seed_claims.py` generates background claim types — `sprinkler_leakage`, `vandalism`, `smoke_damage`, `hail`, `windstorm` — that `market_data.yaml` does not list (supported: `fire`, `flood`, `storm_complex`, `theft`, `water_damage`, `wind`). Only Background Claimant 03 (`theft`) can complete. In a demo, pressing *Process* on most background claims aborts.
+
+The abort itself is correct behaviour (no silent fallback to a guessed range). The fix is data: either add market ranges for the five types, or constrain the seed generator to supported types — and add a test asserting that every seeded `claim_type` resolves in `MarketDataTable`, so the two files cannot drift again. Natural ride-along for Phase 8.7.
+
+### Retrieval misses *Named Perils Covered* for a theft narrative
+
+Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption* and *Duties After Loss* (similarity 0.52–0.55) and never *Named Perils Covered*, which is what drove `covered: false`. Similarities that low and that flat suggest the narrative's vocabulary ("forced entry", "display safes", "CCTV") is simply far from the policy's peril wording. Worth a look at `top_k` (currently 3), at whether *Named Perils Covered* should always be included for a coverage decision, or at query construction from `claim_type` as well as the narrative. Retrieval quality only — the embedding model is a one-way door and is not in question.
 
 ---
 
 ## Next architectural phase — Phase 8.7: Demo UI polish
 
-The demo is expected to be showable again once the Phase 8.6 deployed verification passes (see *Pending verifications*). Phase 8.7 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
+The three scripted scenarios are showable again: the Phase 8.6 deployed verification passed on the `0.8.6.1` build (21 September 2026). Two findings from that run are demo-visible and sit naturally in this phase — see *Findings from the 21 September 2026 verification*. Phase 8.7 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
 
 ### Deployment — highest priority in this phase (found 14 September 2026)
 
@@ -74,7 +86,7 @@ Each should be visited before Phase 8.7 lands, and any items found folded into t
 - Bundle **everything** in this section into one phase pass. Fixing three items now and three items later burns Claude Code's phase overhead twice.
 - Include a *walk through all six routes and flag any additional polish items before the phase closes* step in the QA section. Any new items surface during rehearsal and are folded into the plan before code lands.
 - Interface stability: none expected. All items are presentation-layer only. No JSON schema, HTTP shape, SSE event, or DB column changes.
-- Version bump: `0.8.6 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
+- Version bump: `0.8.6.1 → 0.9.0` (minor bump appropriate for a polish pass that touches every route).
 
 ---
 
