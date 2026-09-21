@@ -13,34 +13,18 @@ Ordered by priority: pending verifications first, then the next architectural ph
 Phase 8.6 moved the Validator and Adjuster defaults to Claude Haiku (the Mistral tier decision, option 3, chosen 14 September 2026). One verification sequence closes Phase 8.6 **and** the Phase 8.4 (audit-write fix) / Phase 8.5.2 (model pin) seven-entry check that could not run while Mistral refused every call. Full field list in [`docs/prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](prompts/17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md) §5 and §10.
 
 0. Dermot confirms on Render: no `LLM__*` env vars (in particular no `LLM__VALIDATOR_PROVIDER` / `LLM__ADJUSTER_PROVIDER`); `MISTRAL_API_KEY` stays set so `v1_mistral` is reachable.
-1. `/health` → `version = 0.8.6`.
+1. `/health` → `version = 0.8.6.1` (the Phase 8.6.1 build; see the halt note below).
 2. Reset Neon: hostname gate (`.neon.tech`), then `uv run python -m backend.data.seed_claims --allow-truncate` → 9 claims at `received`, `audit_log` empty, `policy_chunks` (12) untouched. Do **not** re-run `index_policy`.
 3. Process the three seeded scenario claims from the Claims page. Each: expected terminal status (`settled` / `awaiting_human` / `awaiting_human`) and fired rule (none / `settlement_over_ceiling` / `guardrail_failed`); four agent panels filled, no *Audit entry not found*; **seven** audit entries (the orchestrator always writes `escalation_decision` + a terminal step); chain verified; `coverage_check` and `settlement_estimate` `llm_call.provider = "anthropic"`, `requested_model` = `model` = `claude-haiku-4-5-20251001` (guardrail scenario: `settlement_estimate` has `demo_fixture: true` and no `prompt` / `requested_model`). **A wrong terminal state halts the phase — no prompt or token retuning.**
 4. Mistral-variant proof on a non-scenario seeded claim: run it on `default`, then `POST /api/pipeline/replay/{claim_id}?variant=v1_mistral` (the *Re-process* button is hardcoded to `v2_strict_validator`). Expect `aborted` at the Validator, `403 tier_not_allowed`, `coverage_check.llm_call.provider = "mistral"`, `requested_model = "mistral-large-2512"`.
-5. One live `v2_strict_validator` replay of the auto-approve claim, **after** the scenario table is recorded — evidences that the UI's *Re-process* works on the Haiku default.
+5. One live `v2_strict_validator` replay, triggered from the UI's *Re-process* button by Dermot — evidences that the control works on the Haiku default. Run on a **second** `Background Claimant` claim (not step 4's, and not a scenario claim), so no scenario claim's terminal state is disturbed after it has been recorded.
 6. Record in the Phase 8.6 build-log entry and report; clear *Demo status* in `CLAUDE.md`; remove this item.
 
 **Attempted 15 September 2026 — halted at step 3.**
 - Steps 1–2 passed. Threshold and guardrail scenarios landed correctly, with full audit evidence.
 - **Auto-approve failed:** run `8bff04e2-…` ended `awaiting_human` / `guardrail_failed`. The cause is a rule-engine false positive: `_CITATION_CANDIDATE_RE` with `re.IGNORECASE` matched Haiku's ordinary prose "section with inventory…".
 - Steps 4–5 were not run. The deployed DB is left as evidence; reset again before the re-run.
-- **Blocked on:** *Guardrail citation-regex false positive* below.
-
-### Guardrail citation-regex false positive — **blocks the Phase 8.6 verification**
-
-`backend/app/agents/guardrail_rules.py:_CITATION_CANDIDATE_RE` is compiled with `re.IGNORECASE`, which also makes the name group's leading `[A-Z]` case-insensitive. Any of `endorsement|sub-limit|clause|provision|section|exclusion` followed by any word is therefore treated as a policy citation and checked against the retrieved chunks.
-
-Found live in run `8bff04e2-6ff7-4e74-aa5c-003008f21185`. The Haiku Adjuster wrote "one floor section with inventory and drying as primary components" and the rule engine flagged `hallucinated_citation`, escalating the auto-approve scenario. Latent since Phase 3.
-
-**Recommended fix (point release 8.6.1, decision pending with Dermot):**
-- Make only the keyword group case-insensitive (`(?i:…)`) and drop the global flag, so a candidate name must start with a capital.
-- Add tests:
-  - the exact Haiku sentence produces no flag;
-  - `"Section 4.2"`-style and `"endorsement Coastal Surge Rider"` citations still flag;
-  - the guardrail demo fixture still escalates.
-- Re-run the Phase 8.6 verification from a fresh reset.
-
-Not a prompt change.
+- **Cause fixed in Phase 8.6.1** (citation-regex false positive; see the Phase 8.6.1 build-log entry). The whole sequence re-runs from scratch on the `0.8.6.1` build.
 
 ---
 
@@ -95,6 +79,16 @@ Each should be visited before Phase 8.7 lands, and any items found folded into t
 ---
 
 ## Future work (queued, not next)
+
+### Guardrail rule-engine test corpus from more than one model
+
+*Raised by Phase 8.6.1 — the lesson from the citation-regex false positive.*
+
+The rule engine's tests are hand-written sentences in one model's idiom. That is precisely the blind spot a provider swap exposes: the `re.IGNORECASE` defect sat latent from Phase 3 to Phase 8.6 because Mistral never happened to put a citation keyword in front of a lowercase word, and Claude Haiku did so in its first deployed auto-approve run.
+
+**Proposal.** Keep a small corpus of *real* Adjuster reasoning paragraphs — one file per model the prototype has run on (Mistral Large, Claude Haiku), pulled from `audit_log` `settlement_estimate` rows, which are already synthetic and anonymised — and run `GuardrailRuleEngine.scan` over every paragraph as a no-false-positive suite. Paragraphs known to contain a planted hallucination (the demo fixture) go in a matching must-flag corpus. Adding a provider then means adding a corpus file, and an overfit heuristic fails in CI rather than in a deployed demo run.
+
+Phase 8.6.1 did this informally and by hand: all three deployed Haiku paragraphs were run through the old and new patterns before the fix was written. Three paragraphs from one model is not a corpus. **Not built.**
 
 ### Re-enable Mistral as default
 

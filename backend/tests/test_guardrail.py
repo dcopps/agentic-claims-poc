@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import psycopg
@@ -25,6 +26,7 @@ from backend.app.agents import (
     AdjusterOutput,
     AdjusterResult,
     Guardrail,
+    GuardrailFlag,
     GuardrailOutput,
     GuardrailResult,
     GuardrailRuleEngine,
@@ -36,6 +38,8 @@ from backend.data.market_data import MarketRange, clear_market_data_cache
 from backend.settings import Settings
 
 from .conftest import MockProvider
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -347,7 +351,15 @@ def test_legitimate_citation_does_not_flag(
     prompt_loader: PromptLoader,
     mock_provider: MockProvider,
 ) -> None:
-    """Citing a section that does appear in the retrieved chunks passes."""
+    """Citing a section that does appear in the retrieved chunks passes.
+
+    The reasoning must produce a citation *candidate* for this test to mean
+    anything — until Phase 8.6.1 it cited "the Sub-Limits Debris removal cap",
+    where `sub-?limit` is followed by "s" rather than whitespace, so no
+    candidate was ever formed and the allow-set was never consulted. The
+    wording below matches `_retrieved_chunks()`'s first section name, so the
+    allow-set lookup is what keeps the flag away.
+    """
     claim_id = _insert_claim_stub(clean_db)
     mock_provider.response_text = _llm_clean_response()
 
@@ -361,7 +373,7 @@ def test_legitimate_citation_does_not_flag(
         claim_id,
         uuid4(),
         adjuster_result=_adjuster_result(
-            "Aligned with the Sub-Limits Debris removal cap from the policy."
+            "Aligned with section Named Perils Covered, which lists water damage."
         ),
         retrieved_chunks=_retrieved_chunks(),
     )
@@ -369,6 +381,12 @@ def test_legitimate_citation_does_not_flag(
     assert not any(
         f.kind == "hallucinated_citation" and f.source == "rule"
         for f in result.output.flags
+    )
+    # The candidate really was formed and then allowed: the same wording with a
+    # section name absent from the chunks flags, so the pass above is the
+    # allow-set's doing and not a pattern that simply never matched.
+    assert _citation_flags_for(
+        "Aligned with section Coastal Surge Schedule, which lists water damage."
     )
 
 
@@ -690,3 +708,121 @@ def test_market_vocabulary_is_not_flagged(
     )
     assert result.output.passed is True
     assert not any(f.kind == "hallucinated_citation" for f in result.output.flags)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 8.6.1 — citation keyword case-insensitivity is scoped to the keyword.
+#
+# These exercise `GuardrailRuleEngine` directly rather than through the agent:
+# the defect and the fix both live in the regex, so a failure here should point
+# at the rule engine and not at agent wiring, prompts or the audit write.
+# --------------------------------------------------------------------------- #
+
+# The Adjuster reasoning from deployed Phase 8.6 run
+# 8bff04e2-6ff7-4e74-aa5c-003008f21185, verbatim from its `settlement_estimate`
+# audit row. The paragraph — not just the offending sentence — is what the rule
+# engine scanned in production, so the whole paragraph is the regression input.
+_HAIKU_AUTO_APPROVE_REASONING = (
+    "The claim describes a sudden, accidental rupture of a supply line affecting "
+    "a mezzanine area with documented inventory damage and structural drying "
+    "costs totaling the claimed $85,000. The plumbing contractor's confirmation "
+    "of sudden failure with no prior history supports the scope as presented. "
+    "The loss is contained to one floor section with inventory and drying as "
+    "primary components, positioning it in the upper-moderate range. The "
+    "recommended value closely tracks the claimed amount while remaining well "
+    "within the market band, reflecting a straightforward, well-documented "
+    "moderate water damage loss."
+)
+
+
+def _citation_flags_for(reasoning: str) -> list[GuardrailFlag]:
+    """Run the production rule engine and return only its citation flags."""
+    engine = GuardrailRuleEngine.with_defaults()
+    flags = engine.scan(reasoning=reasoning, retrieved_chunks=_retrieved_chunks())
+    return [f for f in flags if f.kind == "hallucinated_citation"]
+
+
+def _fixture_reasoning() -> str:
+    """The $1.4M demo fixture's reasoning, read from the shipped fixture file.
+
+    Read rather than copied so that a future edit to the fixture cannot drift
+    away from the pattern that has to keep catching it.
+    """
+    path = _REPO_ROOT / "backend/data/demo_fixtures/guardrail_adjuster.json"
+    reasoning: str = json.loads(path.read_text(encoding="utf-8"))["reasoning"]
+    return reasoning
+
+
+def test_haiku_floor_section_prose_is_not_a_citation() -> None:
+    """Ordinary prose containing a citation keyword must not flag.
+
+    Regression for deployed run 8bff04e2-6ff7-4e74-aa5c-003008f21185, where the
+    globally case-insensitive pattern read "one floor section with inventory and
+    drying as primary components" as a citation to a section named "with
+    inventory and drying as primary components", failing an auto-approve claim
+    that every other check had passed.
+    """
+    assert _citation_flags_for(_HAIKU_AUTO_APPROVE_REASONING) == []
+
+
+@pytest.mark.parametrize(
+    "reasoning",
+    [
+        "Settlement respects the sub-limit of $25,000.",
+        "Settlement respects the sub-limit negotiated with the broker.",
+    ],
+    ids=["of", "negotiated"],
+)
+def test_lowercase_word_after_keyword_is_not_a_citation(reasoning: str) -> None:
+    """The same defect on a second keyword: the old pattern captured `of `.
+
+    Asserted at *candidate* level as well as flag level, because the allow-set
+    is an unreliable second line of defence here: the old pattern's `of`
+    candidate happened to be a substring of a retrieved chunk ("25% of direct
+    damage") and was swallowed, so a flag-level assertion alone passes even
+    with the defect reinstated. The first case must produce no candidate; the
+    second shows what the defect cost when the accident does not save us.
+    """
+    assert GuardrailRuleEngine.with_defaults().citation_pattern.search(reasoning) is None
+    assert _citation_flags_for(reasoning) == []
+
+
+@pytest.mark.parametrize(
+    ("reasoning", "expected_detail"),
+    [
+        (
+            "Coverage extends under endorsement Coastal Surge Rider, as cited.",
+            "endorsement 'Coastal Surge Rider' not in retrieved chunks",
+        ),
+        (
+            "Coverage extends under Endorsement CSR-7, as cited.",
+            "endorsement 'CSR-7' not in retrieved chunks",
+        ),
+        (
+            "Water damage is addressed at Section 4.2, as cited.",
+            "section '4.2' not in retrieved chunks",
+        ),
+    ],
+    ids=["lowercase_keyword", "capitalised_keyword", "numbered_section"],
+)
+def test_citation_candidates_still_flag(reasoning: str, expected_detail: str) -> None:
+    """Each shape of a real citation still flags, with the right captured name.
+
+    The `detail` is asserted in full, not merely the flag count: a pattern that
+    captured the wrong span would still produce one flag, so only the message
+    distinguishes a correct fix from one loosened until the suite went green.
+
+    Each citation sits mid-sentence because the name class contains `.` and so
+    absorbs sentence-final punctuation — pre-existing behaviour, unchanged here,
+    and not what these cases are pinning.
+    """
+    flags = _citation_flags_for(reasoning)
+    assert [f.detail for f in flags] == [expected_detail]
+
+
+def test_demo_fixture_citation_still_flags() -> None:
+    """The $1.4M scenario stops escalating if this stops matching."""
+    flags = _citation_flags_for(_fixture_reasoning())
+    assert [f.detail for f in flags] == [
+        "endorsement 'Coastal Surge Rider' not in retrieved chunks"
+    ]

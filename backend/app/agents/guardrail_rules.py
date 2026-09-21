@@ -14,7 +14,10 @@ Three checks:
   - **Hallucinated policy citation** — phrases of the form
     `(endorsement|sub-limit|clause|provision|section|exclusion) <Name>`
     that do not appear (case-insensitively, by substring) in the
-    section names or content of the retrieved policy chunks.
+    section names or content of the retrieved policy chunks. The
+    keyword may be written in any case; `<Name>` must begin with a
+    capital letter or a digit, which is what separates a citation
+    from the same keyword used in ordinary prose.
   - **Bias / protected characteristics** — substring hits against a
     small, explicit set of protected-characteristic terms.
 
@@ -57,10 +60,25 @@ _PII_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 # Citation-candidate regex. The keyword group is what makes the
 # candidate look like a policy reference; the name group is the
 # string we then check against the retrieved chunks' allow-set.
+#
+# The case-insensitivity is scoped to the keyword alternation with
+# `(?i:...)` rather than compiled as a global flag, because a global
+# flag also applies to the name group and silently turns its leading
+# `[A-Z0-9]` into "any letter or digit". That is not a style point:
+# under the global flag every keyword followed by any word became a
+# candidate, and ordinary prose — "one floor section with inventory
+# and drying" — was flagged as a hallucinated citation (Phase 8.6
+# deployed run 8bff04e2). A cited name must start with a capital or
+# a digit; the keyword itself may be written in any case.
+#
+# Digits are accepted as a name's first character because a numbered
+# reference ("Section 4.2", "Clause 7") is the commonest shape of a
+# fabricated citation, and the indexed policy has no numbered
+# provisions at all — so such a reference can never be substantiated
+# by retrieval and should reach a human.
 _CITATION_CANDIDATE_RE = re.compile(
-    r"(?P<kind>endorsement|sub-?limit|clause|provision|section|exclusion)"
-    r"\s+(?P<name>[A-Z][A-Za-z0-9 \-./]{1,60})",
-    re.IGNORECASE,
+    r"(?P<kind>(?i:endorsement|sub-?limit|clause|provision|section|exclusion))"
+    r"\s+(?P<name>[A-Z0-9][A-Za-z0-9 \-./]{1,60})"
 )
 
 # Protected-characteristic terms. Matched with word boundaries

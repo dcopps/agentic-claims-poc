@@ -942,3 +942,60 @@ The defect has been latent since Phase 3. Mistral's reasoning never happened to 
 **Halt applied.** No prompt or token change, no Guardrail change, no re-run of the scenario. The failure depends on phrasing, so a re-run could pass by chance, and a pass-on-retry would be false evidence. Steps 4 (`v1_mistral` abort proof) and 5 (live `v2_strict_validator` replay) were **not run**. The deployed DB is left as the evidence: all three scenario claims are at `awaiting_human`. The next attempt needs a fresh reset.
 
 **Decision needed (Dermot).** Recommended: a narrow point release **8.6.1**. Make only the keyword case-insensitive, e.g. `(?i:endorsement|…|exclusion)\s+(?P<name>[A-Z]…)` without the global flag, so a citation name must start with a capital letter. `"Section 4.2"` and `"endorsement Coastal Surge Rider"` still flag; `"section with …"` no longer does. Add a regression test with this exact sentence, plus a test that the guardrail fixture still flags. Then re-run the full Phase 8.6 verification. Alternatives, such as steering Adjuster wording in its prompt, are prompt retuning and were ruled out for this phase.
+
+---
+
+## Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)
+
+**Date:** 21 September 2026
+**Prompt:** [`docs/prompts/18-phase-8.6.1-guardrail-citation-regex-fix.md`](prompts/18-phase-8.6.1-guardrail-citation-regex-fix.md)
+**Plan:** [`docs/prompts/18-phase-8.6.1-guardrail-citation-regex-fix-plan.md`](prompts/18-phase-8.6.1-guardrail-citation-regex-fix-plan.md)
+**Version:** `0.8.6 → 0.8.6.1`
+
+### What was broken
+
+`guardrail_rules._CITATION_CANDIDATE_RE` was compiled with a **global** `re.IGNORECASE`. The flag applies to the whole pattern, so the name group's leading `[A-Z]` — written to mean "a cited name starts with a capital" — also matched lowercase. Every citation keyword followed by any word became a citation candidate, and the deterministic Guardrail flagged Claude Haiku's ordinary prose *"one floor section with inventory and drying as primary components"* as a hallucinated citation, escalating the auto-approve scenario (Phase 8.6 deployed run `8bff04e2-6ff7-4e74-aa5c-003008f21185`). Latent since Phase 3.
+
+### The fix — one file
+
+`backend/app/agents/guardrail_rules.py` only. No prompt, token, settings, wiring or frontend change; the LLM half of the Guardrail is untouched.
+
+```
+(?P<kind>(?i:endorsement|sub-?limit|clause|provision|section|exclusion))
+\s+(?P<name>[A-Z0-9][A-Za-z0-9 \-./]{1,60})        # compiled with no flags
+```
+
+Two decisions, both taken by Dermot on the plan:
+
+- **Scoped flag.** `(?i:…)` keeps the keyword case-insensitive while the name group's character class means what it says.
+- **`[A-Z0-9]` rather than `[A-Z]`.** The old pattern also *under*-flagged: `[A-Z]` never matches a digit, so `Section 4.2` was not a candidate at all, with or without the global flag. (The Phase 8.6 report stated that `"Section 4.2"` still flagged under the recommended fix. **That was wrong**, and this entry is the correction; the 8.6 report stands as the historical record.) The indexed policy has no numbered provisions — its seven headings are all names — so a numbered citation can never be substantiated by retrieval and belongs in front of a human.
+
+**Measured behaviour**, current pattern → new pattern: `one floor section with inventory…` match → **no match**; `the sub-limit of $25,000` match (captured `of `) → **no match**; `Section 4.2` no match → **match**; `endorsement Coastal Surge Rider`, `Endorsement CSR-7`, the $1.4M fixture's `Endorsement Coastal Surge Rider` and the existing `Endorsement A2025-CB` case: match → match, same captured name.
+
+**Audited the other patterns for the same defect:** the four PII regexes are compiled with no flags and spell out their character classes (`[A-Za-z]` in `email`); the seven protected-characteristic terms are lowercase literals in `\b…\b` where whole-pattern case-insensitivity is intended and has no case-sensitive sub-part to corrupt. **No defect in either set; both unchanged.**
+
+### Tests — `backend/tests/test_guardrail.py`
+
+Seven new tests, exercising `GuardrailRuleEngine` directly so a failure points at the regex rather than at agent wiring:
+
+1. `test_haiku_floor_section_prose_is_not_a_citation` — the **verbatim** reasoning paragraph from run `8bff04e2`, read out of its deployed `settlement_estimate` audit row, produces no `hallucinated_citation` flag. The whole paragraph, not just the sentence, because the paragraph is what the engine scanned in production.
+2–3. `test_lowercase_word_after_keyword_is_not_a_citation[of|negotiated]` — asserts at **candidate** level (`citation_pattern.search(...) is None`) as well as flag level. Flag level alone was not enough: the old pattern's `of` candidate is a substring of a retrieved chunk (*"25% of direct damage"*), so the allow-set swallowed it and the test passed even with the defect reinstated. Found by running the mutation proof, not by inspection.
+4–6. `test_citation_candidates_still_flag[lowercase_keyword|capitalised_keyword|numbered_section]` — each asserts the **full `detail` string**, so a fix that matched the wrong span would fail on content rather than merely on flag count.
+7. `test_demo_fixture_citation_still_flags` — the $1.4M scenario's planted endorsement, read from `guardrail_adjuster.json` rather than copied, so fixture drift cannot silently decouple the demo from the rule that catches it.
+
+Also fixed, per the plan's optional suggestion: `test_legitimate_citation_does_not_flag` was **vacuous**. Its sentence cited *"the Sub-Limits Debris removal cap"*, where `sub-?limit` is followed by `s` rather than whitespace, so no candidate was formed and the allow-set was never consulted. It now cites `section Named Perils Covered` (a real chunk section) and additionally asserts that the same sentence with an invented section name *does* flag, which is what makes the pass attributable to the allow-set.
+
+**Mutation proofs** (applied, observed, reverted):
+
+- **M1** — reinstate the global `re.IGNORECASE`: tests 1, 2 and 3 fail; test 1 fails with exactly the production flag text, `section 'with inventory and drying as primary components' not in retrieved chunks`.
+- **M2** — revert the name class to `[A-Z]`: `test_citation_candidates_still_flag[numbered_section]` fails.
+
+**Suite: 373 passed, 0 failed, 7 skipped.** (366 → +7.) `ruff check .` clean; `uv run mypy backend` — what CI runs — clean on 110 files. Pre-existing and untouched: `mypy .` over the whole repo reports 2 errors in `scripts/verify-demo-scenarios.py` from Phase 7, outside CI's scope.
+
+### Also in this release
+
+- `docs/BACKLOG.md`: new *Future work* entry **"Guardrail rule-engine test corpus from more than one model"** — the lesson. The rule engine's tests are hand-written sentences in one model's idiom, and a provider swap is exactly the event that exposes an overfit heuristic; the proposal keeps real Adjuster paragraphs per model, from audit rows, as a no-false-positive suite. Not built. The resolved *citation-regex false positive* item is removed, and the Phase 8.6 verification item now reads `0.8.6.1` with step 5 on a second background claim.
+
+### Deployed verification
+
+Not yet run at the time of this entry. The full Phase 8.6 sequence re-runs from a fresh Neon reset on the `0.8.6.1` build — three scenarios (auto-approve triggered from the Claims page, agent panels inspected), the `v1_mistral` abort proof, and a UI-triggered `v2_strict_validator` replay on a second background claim. The outcome is recorded as an amendment to the Phase 8.6 entry.
