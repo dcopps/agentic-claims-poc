@@ -40,16 +40,17 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 ---
 
-## Phase 9 — Azure deployment (in progress; 9.1 code landed 1 October 2026)
+## Phase 9 — Azure deployment (in progress; 9.1 deployed and verified 1 October 2026)
 
-Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — code, infra and docs committed; the deployment itself is run with Dermot present), **9.2** frontend on Static Web Apps + OIDC deploy workflow + Application Insights, **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026, see the Phase 9.1 entry in [`build-log.md`](build-log.md)), **9.2** frontend on Static Web Apps + OIDC deploy workflow + Application Insights, **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice (one pass recorded so far).
 
-### Phase 9 follow-ons (found while planning 9.1)
+### Phase 9 follow-ons (found while planning and deploying 9.1)
 
 - **Entra authentication for Postgres.** Deferred from 9.1: the app connects with a static `DATABASE_URL`; Entra tokens expire hourly, so honouring them means a token-refreshing connection path in `backend/db/connection.py` plus `azure-identity`. Natural companion to 9.3, which brings `azure-identity` in for Foundry.
 - **Hugging Face token for the image build — only if needed.** The `Dockerfile` downloads `bge-small-en-v1.5` anonymously inside `az acr build`; anonymous downloads are rate-limited per IP. If a build is ever refused, adding `HF_TOKEN` as a build secret is a flagged change, not a quiet fix.
 - **what-if drift from `minReplicas`.** `scripts/azure-stop.sh` / `azure-start.sh` toggle `minReplicas` outside Bicep. Accepted for 9.1; a 9.2 option is to drive it through a parameter in the deploy workflow instead.
-- **Retire Render / Neon?** Only after two full passes of the three-scenario verification on Azure. Until then, two deployments.
+- **`azure-stop.sh`: wait for zero replicas before stopping Postgres (9.x).** Found on the first stop/start round trip (1 October 2026). `minReplicas = 0` only permits scale-to-zero; a replica that served recent traffic stays up for the 300 s cooldown, so it outlived the Postgres stop by about five minutes. It was idle and nothing failed, but a request arriving in that window reaches a live app with no database. The fix is a behaviour change, so it needs a plan: either poll `az containerapp replica list` until it is empty before stopping the server (bounded by a named timeout, aborting with a diagnostic if the replica never drains), or deactivate the revision to force the replica down at once (which `azure-start.sh` would then have to reverse). The script's header comment now describes the actual behaviour.
+- **Retire Render / Neon?** Only after two full passes of the three-scenario verification on Azure. **One pass recorded** (1 October 2026, Phase 9.1). Until the second, two deployments.
 
 ## Next UI phase — Phase 8.7: Demo UI polish (queued after Phase 9)
 

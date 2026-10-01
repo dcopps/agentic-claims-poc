@@ -40,7 +40,7 @@ scripts/azure-deploy.sh deploy                     # pass 1: group + identity, l
 scripts/azure-deploy.sh build                      # az acr build → prints <acr>.azurecr.io/claims-backend:<short-sha>
 scripts/azure-deploy.sh what-if  <image>           # preview: only the Container App should be added
 scripts/azure-deploy.sh deploy   <image>           # pass 2: Container App
-scripts/azure-deploy.sh what-if  <image>           # idempotence: "No changes"
+scripts/azure-deploy.sh what-if  <image>           # idempotence: no real changes (verified against live state)
 ```
 
 `what-if` always precedes `deploy` on an existing group. The script reads `ANTHROPIC_API_KEY` / `MISTRAL_API_KEY` from the shell or the local `.env`, reuses the Postgres admin password already in Key Vault (or generates one on first deploy), discovers the public IP and the signed-in user's object id, and echoes names only — never values.

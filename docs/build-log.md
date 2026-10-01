@@ -1039,3 +1039,119 @@ Also fixed, per the plan's optional suggestion: `test_legitimate_citation_does_n
 **Passed, 21 September 2026**, on the `0.8.6.1` build — recorded in full as the *Deployed verification outcome* amendment to the Phase 8.6 entry above: all three scenarios in their expected terminal states with seven audit entries each, the `v1_mistral` abort proof, a UI-triggered `v2_strict_validator` replay, and a verified chain across 41 rows. The verification raised three findings unrelated to this fix (F1–F3 there), now in `docs/BACKLOG.md`.
 
 **Report:** [`docs/prompts/18-phase-8.6.1-guardrail-citation-regex-fix-report.md`](prompts/18-phase-8.6.1-guardrail-citation-regex-fix-report.md)
+
+---
+
+## Phase 9.1 — Azure Foundation: Bicep, Postgres Flexible Server, Container Apps, Key Vault, Managed Identity
+
+**Date:** 1 October 2026
+**Prompt:** [`docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps.md`](prompts/19-phase-9.1-azure-foundation-bicep-container-apps.md)
+**Plan:** [`docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps-plan.md`](prompts/19-phase-9.1-azure-foundation-bicep-container-apps-plan.md)
+**Version:** `0.8.6.1 → 0.9.0`
+
+The prototype now has a second deployment target. The same repository, migrations and settings contract that run on Render / Vercel / Neon run on Azure, provisioned entirely by Bicep. Render / Vercel / Neon is unchanged and remains canonical for demos until Azure has passed the three-scenario verification twice; this entry records the first pass.
+
+### What was built (step 1, commit `967a348`)
+
+- **`infra/bicep/`** — `main.bicep`, six single-purpose modules (`identity`, `monitoring`, `postgres`, `acr`, `keyvault`, `containerapps`) and `main.bicepparam`, which reads every secret and machine-specific value with `readEnvironmentVariable()`. Compiles and lints with zero warnings. The Container App is conditional on `containerImage`, so pass 1 creates everything except the app and no placeholder image is needed.
+- **`Dockerfile` + `.dockerignore`** — two-stage `uv` build, non-root, `bge-small-en-v1.5` baked under `HF_HOME=/opt/hf` with `HF_HUB_OFFLINE=1` at runtime, port fixed at 8000 (Container Apps configures `targetPort`; it does not inject `$PORT`). The build context is an allow-list.
+- **`pyproject.toml` / `uv.lock`** — `torch==2.11.0` declared directly and resolved from the PyTorch CPU index on Linux only. All 36 `nvidia-*` and 6 `cuda-*` entries left the lock; macOS resolution proven unchanged by `uv export` diff. A resolution change, not a new dependency.
+- **`scripts/azure-{common,deploy,start,stop}.sh`** — `what-if | deploy | build`, and the start/stop pair for demo windows. Resource names are resolved from the group at run time; secrets are never echoed.
+- **Test guard** — `_DEPLOYED_HOST_SUFFIXES = (".neon.tech", ".postgres.database.azure.com")` in `backend/tests/conftest.py`, with two new tests in `test_db_isolation.py`. **Discriminator proof** (applied, observed, reverted): with the tuple reverted to Neon-only, `test_guard_fires_on_azure_test_url` and `test_guard_fires_on_azure_database_url_fallback` both fail with `DID NOT RAISE`; the other three tests in the file still pass.
+- **CI** — Postgres service image pinned to `pgvector/pgvector:pg17`, matching both deployed databases.
+
+**Suite: 375 passed, 0 failed, 7 skipped** (373 → +2). `ruff` and `uv run mypy backend` clean. `shellcheck` is not installed on this machine and was not run; the scripts pass `bash -n`.
+
+### Deployment (step 2)
+
+Pass 1 and the image build were run by Dermot from his shell; pass 2 onward ran in the Claude Code session on his `az login`. No secret value appeared in any command line or output.
+
+| Step | Result |
+|---|---|
+| Pass 1 — `azure-deploy.sh deploy` | `claimsai-dev-967a348-20261001T160005Z` succeeded 16:10:22Z. Everything except the Container App. |
+| Image — `azure-deploy.sh build` | ACR run 16:48:49Z → 16:52:10Z (3 min 21 s). `claims-backend:967a348` (also `latest`), `linux/amd64`, `sha256:c94db4f46bf1417328480c3f9cf08faebb3a18f51231c5aa339f73218dbdc263`, **519 MB** as stored in the registry (the plan estimated about 600 MB). The anonymous Hugging Face download succeeded; no token was needed. |
+| Preview — `what-if <image>` | 1 to create (`ca-claimsai-dev-backend`), 3 "modify" entries (noise, see below), 12 no change, 2 unsupported. |
+| Pass 2 — `deploy <image>` | `claimsai-dev-967a348-20261001T170755Z` succeeded 17:11:54Z. Revision `ca-claimsai-dev-backend--yiv1hcd` ready. |
+| Idempotence — `what-if <image>` | 4 "modify" entries, 12 no change, 2 unsupported. **No real changes, verified against live state** (see below). |
+
+**Deployed URL:** `https://ca-claimsai-dev-backend.victorioushill-60f56bb8.northeurope.azurecontainerapps.io`
+
+#### Resource inventory — `rg-claimsai-dev`, North Europe
+
+| Resource | Name | Notes |
+|---|---|---|
+| User-assigned managed identity | `id-claimsai-dev-backend` | The Container App's only identity |
+| Log Analytics workspace | `log-claimsai-dev` | Container Apps log destination |
+| PostgreSQL Flexible Server | `psql-claimsai-dev-ojemo` | Postgres 17.11, `Standard_B1ms` (Burstable), 32 GiB; database `agentic_claims`; `vector` allow-listed; pgvector **0.8.2**; firewall rules `DeployerClient` and `AllowAllAzureServicesAndResourcesWithinAzureIps` |
+| Container Registry | `acrclaimsaidevojemo` | Basic; admin user disabled |
+| Key Vault | `kv-claimsai-dev-ojemo` | RBAC mode; purge protection off; secrets `database-url`, `anthropic-api-key`, `mistral-api-key`, `postgres-admin-password` |
+| Container Apps environment | `cae-claimsai-dev` | Consumption workload profile |
+| Container App | `ca-claimsai-dev-backend` | 1 vCPU / 2 GiB, `minReplicas` 0 / `maxReplicas` 1, external ingress on 8000, Startup / Readiness / Liveness probes on `/health` |
+
+#### RBAC
+
+| Principal | Role | Scope | Why |
+|---|---|---|---|
+| `id-claimsai-dev-backend` | Key Vault Secrets User | the vault | Resolve the three secret references at revision start |
+| `id-claimsai-dev-backend` | AcrPull | the registry | Pull the image without registry credentials |
+| Deploying user | Key Vault Secrets Officer | the vault | Read `database-url` for the bootstrap; Owner alone has no data-plane access in RBAC mode |
+
+#### The idempotence what-if: three categories of noise
+
+The plan's criterion was that the post-deploy what-if reports "No changes". It reported `4 to modify`. Each line was checked against live state (`az containerapp show`, the Log Analytics workspace id) and none is a pending change. Dermot accepted this as verified noise (Option 1); both READMEs now say "no real changes (verified against live state)" instead of promising the literal string.
+
+1. **Probe order (Container App).** The template declares the probes as Startup, Readiness, Liveness; Azure stores and returns them as Liveness, Readiness, Startup. what-if compares arrays by index and reports elements 0 and 2 as swapped. The live probes carry the template's values exactly (Startup: 5 s period, failure threshold 24; Readiness: 10 s; Liveness: 30 s).
+2. **Unresolved `reference()` expressions.** what-if diffs before deployment-time functions run, so it prints `live value => "[reference(...)]"` for the registry `server`, the three Key Vault `keyVaultUrl` values and the Log Analytics `customerId`. The live values are what those expressions resolve to (`acrclaimsaidevojemo.azurecr.io`, the three `https://kv-claimsai-dev-ojemo.vault.azure.net/secrets/…` URIs, the workspace's own id).
+3. **Server-defaulted properties the template does not declare.** Reported as deletions: on the Container App `ingress.exposedPort`, `ingress.traffic`, `maxInactiveRevisions`, `runningStatus`; on the environment `peerAuthentication`, `peerTrafficConfiguration`; on the registry `anonymousPullEnabled`, `dataEndpointEnabled`, `encryption`, `policies.azureADAuthenticationAsArmPolicy`; on Postgres `dataEncryption`, `replica`, `replicationRole`, `storage.iops` / `tier` / `type`. An incremental deployment does not remove properties it does not mention. The Postgres, registry and environment lines were already present in the preview what-if, before pass 2 changed anything.
+
+The **2 unsupported** entries are the two managed-identity role assignments: their names are `guid()` of the identity's `principalId`, which is not known until deployment, so what-if cannot analyse them. A literal "No changes" is not reachable for this template without declaring every server default and replacing module references with hand-built strings; reordering the probes would remove only the first category.
+
+#### Bootstrap (from the deploying machine)
+
+The URL was read from Key Vault into one shell process and never written to `.env`. Before any write, the hostname was resolved through `Settings()` — the same path Alembic and both data scripts use — and compared with the expected host; an empty secret aborts (an empty `DATABASE_URL` would otherwise fall back to the local `.env` and `--allow-truncate` would hit the dev database).
+
+| Step | Expected | Actual |
+|---|---|---|
+| Hostname echo | Azure host only | `psql-claimsai-dev-ojemo.postgres.database.azure.com` |
+| `alembic upgrade head` | head | `0002_audit_human_agent (head)` |
+| `index_policy` | 12 chunks | `Indexed 12 chunks (2388 total tokens)` |
+| `seed_claims --allow-truncate` | 9 claims | `Inserted 9 claims (3 scripted + 6 background)` |
+
+Read back from the database: 12 `policy_chunks`, 9 `claims` (all `received`), 0 `audit_log` rows.
+
+### Verification — first pass on Azure
+
+`/health` → `{"status":"ok","version":"0.9.0"}`. **Cold start: 28.0 s** from zero replicas (count confirmed 0 immediately before the request) to the 200; a warm call takes 0.06 s. `/health` returns the package version only and does not touch the database, so the app-to-Postgres path was first proven by the scenarios.
+
+`scripts/verify-demo-scenarios.py --backend <azure-url>` exited 0; all three runs took 28 s in total (17:31:31Z → 17:31:59Z).
+
+| Scenario | Terminal state | Fired rules | Audit entries | Correlation id |
+|---|---|---|---|---|
+| Auto-approve ($85,000 water damage) | `settled` | none | 7 | `08d514f2-5d47-4d0a-8f58-ddb82a691950` |
+| Threshold escalation ($850,000 fire) | `awaiting_human` | `settlement_over_ceiling` | 7 | `9a92333f-cc4a-4f05-b76f-f509be3b7759` |
+| Guardrail escalation ($1.4M storm) | `awaiting_human` | `guardrail_failed`, `settlement_over_ceiling` | 7 | `c66b9f3c-0f4a-4fab-9bdc-2fe30c49e8f6` |
+
+- **Chain:** `GET /api/audit/verify/{correlation_id}` returns `ok=true, rows_checked=21, first_break=null` for each run. The verifier is whole-ledger by design; 21 is exactly 3 × 7, so nothing else wrote to the ledger.
+- **Provider and model:** all 11 entries that made an LLM call record `provider = "anthropic"`, with `model` and `requested_model` both `claude-haiku-4-5-20251001` and `llm_call.prompt` present.
+- **The twelfth agent entry** is the Adjuster in the guardrail scenario: `provider = "demo_fixture"`, `demo_fixture = true`, and no `model`, `requested_model` or `prompt` keys (`llm_call` holds `latency_ms`, `note`, `provider` only). That is the locked Phase 7 / 8.3 / 8.5.3 behaviour.
+- **Step sequence**, identical in all three runs: `pipeline_started` (`variant = "default"`) → `doc_extract` (`fields_source = "claim_record"`) → `coverage_check` → `settlement_estimate` → `output_check` → `escalation_decision` → `pipeline_settled` or `pipeline_awaiting_human`.
+
+### Stop/start round trip
+
+| Step | Duration | Resulting state |
+|---|---|---|
+| `scripts/azure-stop.sh` | 261 s | Postgres `Stopped`; `minReplicas` 0 |
+| `scripts/azure-start.sh` | 173 s | Postgres `Ready`; `minReplicas` 1; one replica; `/health` 200 on the third poll |
+
+After the restart the ledger was re-read through the app: 12 claims (9 seeded + 3 from the run), seven entries per run, chain `ok=true` over 21 rows. The data survived, and the new revision resolves its Key Vault references and reaches Postgres.
+
+### Issues and deviations
+
+- **what-if does not print "No changes".** Accepted as verified noise, above. The plan's §7.4 criterion is superseded by "no real changes, verified against live state".
+- **`azure-stop.sh` does not take the replica down itself.** `minReplicas = 0` permits scale-to-zero but does not stop a running replica: the one that served the scenarios stayed up for the 300 s cooldown and outlived the Postgres stop by about five minutes. It was idle and nothing failed. The script's header comment claimed the app went down first; it now describes the cooldown drain. Making the script wait for zero replicas is a behaviour change and is in `docs/BACKLOG.md` as a 9.x follow-on.
+- **`azure-start.sh` creates a new revision** (`ca-claimsai-dev-backend--0000001`), because `minReplicas` is a revision-scope property. Same image. Expected, and it is the `minReplicas` drift the Bicep README already documents.
+- **pgvector is 0.8.2 on Azure, 0.8.0 on Neon.** The plan expected an exact match. The 12-chunk index and all three scenarios behave identically; recorded so the difference is not discovered later.
+- **No `containerImage` tag was written to `main.bicepparam`.** The plan's step 2 listed it; the parameter file as built reads `CONTAINER_IMAGE` from the environment, so the image reference is an argument to the script and nothing is committed per deploy.
+- **The start script's exit code was not captured** in the round-trip run (a wrapper slip: bash's `PIPESTATUS` under zsh). Success is established by the script's final line, `healthy after 3 attempt(s)`, and by the state checks above.
+
+**Report:** [`docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps-report.md`](prompts/19-phase-9.1-azure-foundation-bicep-container-apps-report.md)

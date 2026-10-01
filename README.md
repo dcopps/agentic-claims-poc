@@ -84,7 +84,7 @@ Everything below is detailed in [`infra/bicep/README.md`](infra/bicep/README.md)
 scripts/azure-deploy.sh deploy            # pass 1: everything except the Container App
 scripts/azure-deploy.sh build             # az acr build → <acr>.azurecr.io/claims-backend:<sha>
 scripts/azure-deploy.sh deploy <image>    # pass 2: the Container App
-scripts/azure-deploy.sh what-if <image>   # idempotence check: "No changes"
+scripts/azure-deploy.sh what-if <image>   # idempotence check: no real changes (verified against live state)
 
 # Bootstrap (DATABASE_URL from Key Vault, for one shell only — never in .env):
 uv run alembic --config backend/alembic.ini upgrade head
