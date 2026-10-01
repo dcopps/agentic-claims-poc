@@ -3,8 +3,14 @@
 # This is the production-target pipeline that would REPLACE the prototype's
 # GitHub Actions (`.github/workflows/ci.yml`) in the organisation's Azure DevOps
 # environment. It is an illustrative reference — it is NOT run by this repository
-# and references resources (service connections, Bicep, SQL MI, Container Apps,
-# Key Vault) that exist only in the production tenant.
+# and references resources (service connections, SQL MI, a production Container
+# Apps environment, Key Vault) that exist only in the production tenant.
+#
+# Since Phase 9.1 (1 October 2026) the prototype has its own Bicep at
+# `infra/bicep/main.bicep`, which `az deployment group what-if` below now refers
+# to for real; the prototype runs that what-if by hand (`scripts/azure-deploy.sh
+# what-if`) rather than from a pipeline. Phase 9.2 adds a GitHub Actions deploy
+# workflow; this Azure DevOps file stays the production reference.
 #
 # Each stage's comment names what the production equivalent does and, where useful,
 # what the prototype's GitHub Actions does or does NOT have. The spine is:
@@ -95,7 +101,8 @@ stages:
               inlineScript: |
                 az acr check-health --name acrClaimsAi
                 # Bicep What-If previews the infra delta before any approval.
-                # The prototype has no IaC and therefore no What-If.
+                # The prototype has the same Bicep (infra/bicep/) since Phase 9.1
+                # and runs this what-if by hand, not from CI.
                 az deployment group what-if \
                   --resource-group rg-claims-ai-prod \
                   --template-file infra/bicep/main.bicep

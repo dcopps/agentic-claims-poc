@@ -50,7 +50,7 @@ The diagram shows the prototype's default wiring. Since Phase 8.6 (15 September 
 
 ## Live demo
 
-> **Live URL:** _set after deploy_ — the Vercel frontend (e.g. `https://<app>.vercel.app`); the Render backend's `/health` returns `{"status":"ok","version":"0.7.0"}`.
+> **Live URL:** `https://agentic-claims-poc.vercel.app` (Vercel frontend); the Render backend at `https://agentic-claims-poc-backend.onrender.com/health` returns `{"status":"ok","version":"<current>"}`, where the version matches `pyproject.toml`. Since Phase 9.1 the same repository also deploys to Azure — see *Azure deployment* below.
 > A 3-minute walkthrough script is at [`docs/walkthrough.md`](docs/walkthrough.md); the recorded video is kept outside the repo (link shared for the interview).
 
 Three pre-loaded scenarios (the "Load demo claim" buttons on the submission form):
@@ -62,6 +62,45 @@ Three pre-loaded scenarios (the "Load demo claim" buttons on the submission form
 | **Guardrail escalation** | $1.4M storm with an unlisted endorsement | `awaiting_human` — `guardrail_failed` |
 
 The guardrail scenario reproduces **deterministically**: the seeded claim drives a demo fixture (a planted hallucinated endorsement) that the Guardrail's regex catches without relying on model non-determinism. The audit trail records `demo_fixture: true`, so the affordance is auditable, not hidden. (See [`docs/design-decisions.md`](docs/design-decisions.md).)
+
+## Azure deployment
+
+The prototype has two deployment targets from the same repository and the same migrations. Render + Vercel + Neon is the original; **Azure** (Phase 9) backs the production-architecture column with a running system. Nothing on Render, Vercel or Neon is changed by the Azure deployment, and Render / Vercel / Neon remains canonical for demos until Azure has passed the three-scenario verification twice.
+
+| | Render / Vercel / Neon | Azure (Phase 9.1) |
+|---|---|---|
+| Backend | Render web service | Azure Container Apps (consumption, 1 vCPU / 2 GiB), image built in-registry with `az acr build` |
+| Database | Neon Postgres 17 + pgvector 0.8, Frankfurt | Azure Database for PostgreSQL Flexible Server 17 + pgvector 0.8, North Europe |
+| Secrets | Render dashboard env vars | Azure Key Vault, read by a user-assigned managed identity (RBAC: *Key Vault Secrets User*, *AcrPull*) |
+| Infrastructure | Auto-deploy, no IaC | Bicep (`infra/bicep/`), `what-if` before every deploy |
+| Embedding model | Downloaded at first use | Baked into the image; Hugging Face access is switched off at runtime |
+
+Everything below is detailed in [`infra/bicep/README.md`](infra/bicep/README.md).
+
+```bash
+# Prerequisites (once): az login, az bicep install, az extension add --name containerapp,
+# provider registration, a budget alert on the subscription.
+
+scripts/azure-deploy.sh deploy            # pass 1: everything except the Container App
+scripts/azure-deploy.sh build             # az acr build → <acr>.azurecr.io/claims-backend:<sha>
+scripts/azure-deploy.sh deploy <image>    # pass 2: the Container App
+scripts/azure-deploy.sh what-if <image>   # idempotence check: "No changes"
+
+# Bootstrap (DATABASE_URL from Key Vault, for one shell only — never in .env):
+uv run alembic --config backend/alembic.ini upgrade head
+uv run python -m backend.data.index_policy
+uv run python -m backend.data.seed_claims --allow-truncate
+
+# Verify, then park it between demos:
+uv run python scripts/verify-demo-scenarios.py --backend https://<app>.northeurope.azurecontainerapps.io
+scripts/azure-stop.sh      # Container App → 0 replicas, Postgres stopped
+scripts/azure-start.sh     # the reverse, waits for /health
+
+# Full teardown:
+az group delete --name rg-claimsai-dev --yes && az keyvault purge --name <vault>
+```
+
+Running cost in the parked state is a few euros a month (registry storage; the B1ms database is within the free-account allowance for 12 months). One warm replica during a demo window costs cents per hour. Out of scope for Phase 9, and listed as gaps in the stack reference: VNet and private endpoints, API Management, Service Bus, Durable Functions, SQL Managed Instance with Ledger Tables, AI Search, Entra sign-in, Langfuse, Document Intelligence, the LoRA adapter, Azure DevOps Pipelines.
 
 ## One-command local setup
 
@@ -100,7 +139,7 @@ Open `http://localhost:5173/`. The Vite dev server proxies `/health` and `/api/*
 
 The backend test suite uses **its own database**, separate from the dev DB. The
 suite's fixtures TRUNCATE tables between tests, so it must never run against the
-deployed Neon database (or any `*.neon.tech` host) — the fixtures refuse to, and
+deployed Neon or Azure database (any `*.neon.tech` or `*.postgres.database.azure.com` host) — the fixtures refuse to, and
 fail loudly if asked. Point the suite at a local test DB once:
 
 ```bash
@@ -174,7 +213,7 @@ The questions a reviewer will ask, answered up front (full treatment in [`docs/d
 
 ## Production architecture
 
-The prototype runs on commodity hosting (Render + Vercel + Neon) for fast iteration; the production target is the organisation's Azure tenant, with all data confined to the tenant and all model inference reached over private network paths. Full detail in [`docs/architecture-stack-reference.md`](docs/architecture-stack-reference.md).
+The prototype runs on commodity hosting (Render + Vercel + Neon) for fast iteration, and since Phase 9.1 also on Azure (Container Apps, Flexible Server, Key Vault, Bicep — see *Azure deployment* above); the production target is the organisation's Azure tenant, with all data confined to the tenant and all model inference reached over private network paths. Full detail, including what the Azure prototype deployment still lacks against the target, in [`docs/architecture-stack-reference.md`](docs/architecture-stack-reference.md).
 
 | Concern | Development (prototype) | Production (target) |
 |---|---|---|

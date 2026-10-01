@@ -12,10 +12,11 @@ jobs:
 
     services:
       postgres:
-        # Image with pgvector pre-built — keeps CI under a minute and
-        # matches the prototype's deployed Neon environment closely
-        # enough that the chain tests exercise the same SQL surface.
-        image: pgvector/pgvector:pg16
+        # Image with pgvector pre-built — keeps CI under a minute. Pinned to
+        # Postgres 17 (Phase 9.1) to match both deployed databases: Neon and
+        # Azure Database for PostgreSQL Flexible Server both run 17 with
+        # pgvector 0.8.
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

@@ -40,13 +40,24 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 ---
 
-## Next architectural phase — Phase 8.7: Demo UI polish
+## Phase 9 — Azure deployment (in progress; 9.1 code landed 1 October 2026)
+
+Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — code, infra and docs committed; the deployment itself is run with Dermot present), **9.2** frontend on Static Web Apps + OIDC deploy workflow + Application Insights, **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+
+### Phase 9 follow-ons (found while planning 9.1)
+
+- **Entra authentication for Postgres.** Deferred from 9.1: the app connects with a static `DATABASE_URL`; Entra tokens expire hourly, so honouring them means a token-refreshing connection path in `backend/db/connection.py` plus `azure-identity`. Natural companion to 9.3, which brings `azure-identity` in for Foundry.
+- **Hugging Face token for the image build — only if needed.** The `Dockerfile` downloads `bge-small-en-v1.5` anonymously inside `az acr build`; anonymous downloads are rate-limited per IP. If a build is ever refused, adding `HF_TOKEN` as a build secret is a flagged change, not a quiet fix.
+- **what-if drift from `minReplicas`.** `scripts/azure-stop.sh` / `azure-start.sh` toggle `minReplicas` outside Bicep. Accepted for 9.1; a 9.2 option is to drive it through a parameter in the deploy workflow instead.
+- **Retire Render / Neon?** Only after two full passes of the three-scenario verification on Azure. Until then, two deployments.
+
+## Next UI phase — Phase 8.7: Demo UI polish (queued after Phase 9)
 
 The three scripted scenarios are showable again: the Phase 8.6 deployed verification passed on the `0.8.6.1` build (21 September 2026). Two findings from that run are demo-visible and sit naturally in this phase — see *Findings from the 21 September 2026 verification*. Phase 8.7 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
 
 ### Deployment — highest priority in this phase (found 14 September 2026)
 
-- **SPA deep links 404 on hard load.** There is no `vercel.json`, so Vercel's edge has no rewrite sending non-root paths to `index.html`. Every deep URL — `/audit`, `/agents`, `/claims/:id/runs/:cid`, `/audit?correlation_id=…` — returns Vercel's own 404 (`NOT_FOUND`, `dub1::…` request id) on a hard load or refresh. Only `/` works. Client-side navigation (clicking links inside the app) works because it never touches the edge, which is why every deep link used in rehearsals so far appeared to work. **A page refresh mid-demo, or sharing a run URL with an interviewer, 404s.** Latent since Phase 6. Fix: add `frontend/vercel.json` with `{"rewrites": [{"source": "/(.*)", "destination": "/index.html"}]}` (standard Vite + React Router on Vercel). One file. Verify by hard-loading `/audit?correlation_id=<any>` after deploy.
+- **SPA deep links 404 on hard load.** There is no `vercel.json`, so Vercel's edge has no rewrite sending non-root paths to `index.html`. Every deep URL — `/audit`, `/agents`, `/claims/:id/runs/:cid`, `/audit?correlation_id=…` — returns Vercel's own 404 (`NOT_FOUND`, `dub1::…` request id) on a hard load or refresh. Only `/` works. Client-side navigation (clicking links inside the app) works because it never touches the edge, which is why every deep link used in rehearsals so far appeared to work. **A page refresh mid-demo, or sharing a run URL with an interviewer, 404s.** Latent since Phase 6. Fix: add `frontend/vercel.json` with `{"rewrites": [{"source": "/(.*)", "destination": "/index.html"}]}` (standard Vite + React Router on Vercel). One file. Verify by hard-loading `/audit?correlation_id=<any>` after deploy. **Phase 9.2 resolves this for the Azure frontend** via Static Web Apps' `navigationFallback`; the `vercel.json` fix is still needed for as long as the Vercel deployment is the demo surface.
 
 ### Claims page (surveyed 3 August 2026)
 
@@ -144,7 +155,7 @@ Suggested in the Phase 8.5.3 plan by Claude Code; logged, not built.
 
 Risk 1 of the Phase 8.5.2 plan (*"is there an `LLM__MISTRAL__*` override on Render?"*) needed a dashboard visit to answer. Render's Blueprint format supports an `envVars` block where `sync: false` declares a variable's *name* without its value, so the inventory of what the deployed backend expects (`ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`, and any future `LLM__*` overrides) can live in the repo with no secrets. Turns the check into a file read and documents the deployment contract. Would also have shortened the July CORS diagnosis.
 
-Suggested in the Phase 8.5.2 report by Claude Code; logged, not built.
+Suggested in the Phase 8.5.2 report by Claude Code; logged, not built. Considered again at the Phase 9.1 approval gate (1 October 2026) and kept here: Phase 9.1 forbids changes on Render, and the Azure side now documents the same four-variable contract in `infra/bicep/modules/containerapps.bicep`.
 
 ### In-UI "How it works" info page
 

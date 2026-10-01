@@ -41,10 +41,10 @@ This is a generic prototype for a regulated specialty insurer. The client name d
 - Production target replaces this with Azure SQL Managed Instance + Ledger Tables; documented in `docs/architecture-stack-reference.md` but not implemented in the prototype
 
 **Hosting & CI**
-- Backend: Render
-- Frontend: Vercel
-- Postgres: Neon (managed Postgres) — `eu-central-1` / Frankfurt, Postgres 17, pgvector 0.8.0
-- CI: GitHub Actions (Azure DevOps Pipelines is the production target — config in `infra/azure-devops-pipeline.yml` for reference, GitHub Actions actually runs the prototype)
+- Two deployment targets from one repository (since Phase 9.1, 1 October 2026):
+  - **Render / Vercel / Neon (canonical for demos):** Backend on Render; frontend on Vercel; Postgres on Neon (managed Postgres) — `eu-central-1` / Frankfurt, Postgres 17, pgvector 0.8.0.
+  - **Azure (Phase 9):** backend on Azure Container Apps (consumption, 1 vCPU / 2 GiB) from an image built with `az acr build` into Azure Container Registry; Azure Database for PostgreSQL Flexible Server 17 (Burstable B1ms, pgvector 0.8) in North Europe; secrets in Key Vault read by a user-assigned managed identity; everything provisioned by Bicep in `infra/bicep/`. Operated by `scripts/azure-deploy.sh`, `azure-start.sh`, `azure-stop.sh`. Frontend stays on Vercel until 9.2.
+- CI: GitHub Actions (Azure DevOps Pipelines is the production target — config in `infra/azure-devops-pipeline.yml` for reference, GitHub Actions actually runs the prototype). CI's Postgres service image is `pgvector/pgvector:pg17`, matching both deployed databases.
 
 ## Project Structure (target — fully populated by end of Phase 0)
 
@@ -54,8 +54,10 @@ agentic-claims-poc/
 ├── CLAUDE.md
 ├── BUILD-PLAN.md                  # local only — not committed
 ├── HANDOFF.md                     # local only — not committed
-├── pyproject.toml                 # uv project config
+├── pyproject.toml                 # uv project config (torch pinned to the CPU index on Linux)
 ├── uv.lock                        # uv lockfile
+├── Dockerfile                     # backend image for Azure Container Apps (model baked in)
+├── .dockerignore                  # allow-list build context
 ├── .editorconfig
 ├── .gitignore
 ├── .github/
@@ -94,7 +96,12 @@ agentic-claims-poc/
 │       ├── fixtures/
 │       └── test_*.py
 ├── scripts/
-│   └── setup-dev-db.sh            # one-time local Postgres + pgvector setup
+│   ├── setup-dev-db.sh            # one-time local Postgres + pgvector setup
+│   ├── verify-demo-scenarios.py   # three-scenario check against a deployed backend
+│   ├── azure-common.sh            # shared helpers (sourced)
+│   ├── azure-deploy.sh            # what-if | deploy [image] | build
+│   ├── azure-start.sh             # Postgres start + 1 warm replica
+│   └── azure-stop.sh              # 0 replicas + Postgres stop
 ├── docs/
 │   ├── architecture-stack-reference.md
 │   ├── BACKLOG.md                 # pending + future work; completed work goes to build-log.md
@@ -112,7 +119,8 @@ agentic-claims-poc/
 │   ├── 4-production-architecture.mmd
 │   └── README.md
 └── infra/
-    └── azure-devops-pipeline.yml  # production CI/CD reference
+    ├── azure-devops-pipeline.yml  # production CI/CD reference
+    └── bicep/                     # Phase 9.1: main.bicep, main.bicepparam, modules/, README.md
 ```
 
 ## Build Approach
@@ -128,15 +136,13 @@ Together these make the build reproducible end-to-end.
 
 ## Current Status
 
-- **Date:** 2026-09-21
-- **Phase:** Phase 8.6.1 complete, deployed and **verified** (Guardrail citation-regex false positive fixed; `/health` = `0.8.6.1`). The full Phase 8.6 deployed verification passed on this build on 21 September 2026, which also discharged the Phase 8.4 / 8.5.2 seven-entry check. See the *Deployed verification outcome* amendment to the Phase 8.6 build-log entry.
-- **Demo status: showable — the three scripted scenarios only.** Auto-approve `settled` with no fired rules (triggered from the Claims page, four agent panels inspected in the UI); threshold and guardrail `awaiting_human` with the expected rules; seven audit entries each; all agents on Haiku with truthful `provider` / `requested_model`; chain verified across 41 rows. `v1_mistral` abort proof passed (`provider = "mistral"`, `requested_model = "mistral-large-2512"`, 403). UI *Re-process* proven to start a `v2_strict_validator` run with the strict user template. **Stay off the background claims in a demo:** five of the six abort at the Adjuster (claim types missing from `market_data.yaml`), and a `covered = false` verdict has no pipeline path — the strict replay of Background Claimant 03 aborted when the Adjuster returned `0.00`. Both are in `docs/BACKLOG.md` → *Findings from the 21 September 2026 verification*; neither is a regression. Deployed DB state: Harborline `settled`, Northwood and Coral Bay `awaiting_human`, Background 01 `extracted`, Background 03 `coverage_verified`.
-- **What works (8.6.1):** citation keyword case-insensitivity scoped with `(?i:…)`; name group `[A-Z0-9]`, which also closes a second latent defect (`Section 4.2` was never a candidate under the old pattern — the Phase 8.6 report was wrong about this, corrected in the 8.6.1 build-log entry). PII and bias patterns audited for the same defect: neither has it, both unchanged. LLM half of the Guardrail untouched. Seven new rule-engine tests, including the verbatim Haiku paragraph from run `8bff04e2` and a full-`detail` assertion on each positive; the previously vacuous `test_legitimate_citation_does_not_flag` now really exercises the allow-set. Mutation proofs recorded (global flag reinstated → the Haiku test fails; `[A-Z]` restored → the numbered-section test fails). Suite **373 passed, 0 failed, 7 skipped**; `ruff` and `uv run mypy backend` clean.
-- **What works (8.6):** per-agent provider selectors plus `LLMSettings.model_for` / `provider_for` in `backend/settings.py` (template parity in `settings.yaml.template`). Unknown selector values fail at load, as does a selector whose provider block has no model for that agent; both are re-checked at call time, because variants mutate a deep copy without validation. `PipelineOrchestrator.with_defaults` builds each agent's provider from its selector, so the default path constructs no `MistralProvider` and needs no `MISTRAL_API_KEY`. Variants are settings overlays: `resolve_variant_settings` / `resolve_validator_template` replace `resolve_validator_config`, and `VariantSpec` gains an `adjuster` slot (`ProviderOverride` — `prompt_template` is refused there at load). `variants.yaml` is `default`, `v1_mistral`, `v2_strict_validator`; `v2_haiku_validator` is retired (a no-op under the new default). The agent test bench resolves all four agents' providers from the variant, so the Adjuster now honours `?variant=`. All four agents record their truthful provider (locked-interface bullet above). Stale correlation-id comment in `Validator._invoke_llm` corrected. Suite **366 passed, 0 failed, 7 skipped** (373 collected; +19 tests); `ruff` and `mypy` clean. Wiring discriminator: `test_agent_wiring.py::test_default_wiring_builds_without_a_mistral_key` was proven to fail against reinstated Mistral wiring. No frontend change.
-- **What works (8.5.3, carried):** every agent audit payload records `llm_call.requested_model` (success, parse-failure and provider-exception paths; omitted on the Adjuster demo-fixture path), via `_shared.CapturedRequest(system, user, model)` / `attach_request`.
-- **What works (8.5.1 / 8.5, carried):** separate `agentic_claims_test` DB; migration-test DDL wrapped in an explicit transaction under autocommit; pytest refuses any `*.neon.tech` host.
-- **Known debt:** three `_build_audit_payload` builders (Validator, Adjuster, Guardrail) were already over the 50-line limit; in 8.6 the Doc-Parser, Adjuster and Guardrail builders each gained a `provider_label` parameter (the Validator already had one) (backlog: *Split the oversized audit-payload builders*). `docs/prompts/README.md` index has not been maintained past prompt 04.
-- **What's next:** (1) Dermot schedules the three verification findings — the `covered = false` pipeline path (an interface-stability event), the background-claim market-data gap, and theft-narrative retrieval. (2) Phase 8.7 demo UI polish (`0.8.6.1 → 0.9.0`). All other pending and future work lives in `docs/BACKLOG.md`.
+- **Date:** 2026-10-01
+- **Phase:** Phase 9.1 — **step 1 complete** (code, infra-as-code, scripts, tests and docs committed and pushed); **step 2 pending**: the Azure deployment, data bootstrap and three-scenario verification, run with Dermot present (needs his `az login` session and the secret values in his shell). Version `0.9.0` in `pyproject.toml`; Render auto-deploys `main`, so Render's `/health` will report `0.9.0` after this push (the Render app itself is otherwise unchanged). Plan: `docs/prompts/19-…-plan.md` (approved 2026-10-01T12:47:35Z). Build-log entry and report are written after step 2.
+- **Step 0 facts (1 October 2026):** subscription `Azure subscription 1` (free trial, spending limit on, user is Owner); Bicep CLI 0.47.16 and the `containerapp` extension installed; providers `Microsoft.App`, `DBforPostgreSQL`, `ContainerRegistry`, `KeyVault`, `OperationalInsights`, `ManagedIdentity` registered; `Standard_B1ms` is offered in `northeurope` for Postgres 11–18, so no region fallback was needed.
+- **What works (9.1 step 1):** `infra/bicep/main.bicep` + six modules compile and lint with zero warnings; `main.bicepparam` reads every secret with `readEnvironmentVariable()`. The Container App is conditional on `containerImage` (pass 1 deploys everything but the app; no placeholder image). `Dockerfile` is two-stage, `uv`-based, non-root, bakes `bge-small-en-v1.5` under `HF_HOME=/opt/hf` with `HF_HUB_OFFLINE=1` at runtime, port fixed at 8000; `.dockerignore` is an allow-list. `torch==2.11.0` is now a direct dependency resolved from the PyTorch CPU index on Linux only (`uv.lock` lost all 36 `nvidia-*` and 6 `cuda-*` entries; macOS resolution proven unchanged by `uv export` diff). pytest guard extended: `_DEPLOYED_HOST_SUFFIXES = (".neon.tech", ".postgres.database.azure.com")`, two new discriminator tests. CI Postgres image pinned to `pg17`. Scripts pass `bash -n`; no function over 30 lines; `shellcheck` is not installed on this machine, so it was not run. Suite **375 passed, 0 failed, 7 skipped** (+2); `ruff` and `uv run mypy backend` clean.
+- **Demo status: unchanged — Render / Vercel / Neon, the three scripted scenarios only.** Stay off the background claims (see `docs/BACKLOG.md` → *Findings from the 21 September 2026 verification*).
+- **Known debt:** three `_build_audit_payload` builders over the 50-line limit (backlog: *Split the oversized audit-payload builders*); `docs/prompts/README.md` index not maintained past prompt 04.
+- **What's next — Phase 9.1 step 2, in this order:** `scripts/azure-deploy.sh deploy` (pass 1) → `scripts/azure-deploy.sh build` → `what-if <image>` → `deploy <image>` (pass 2) → `what-if <image>` must say "No changes" → bootstrap from this machine (`alembic upgrade head`, `index_policy` → 12 chunks, `seed_claims --allow-truncate` → 9 claims; hostname-only echo) → `/health` = `0.9.0` → `scripts/verify-demo-scenarios.py --backend <azure-url>` → seven audit entries and chain verified per run, `provider = "anthropic"` → `azure-stop.sh` / `azure-start.sh` round trip → report, build-log entry, CLAUDE.md, commit, push. Halt if any scenario lands in the wrong terminal state. Then Phase 9.2 (`0.9.1`), 9.3 (`0.9.2`); Phase 8.7 UI polish is queued after Phase 9.
 
 ## Standing Instructions
 
@@ -180,13 +186,14 @@ Together these make the build reproducible end-to-end.
   - **Mechanism:** each agent has a provider selector — `llm.doc_parser_provider`, `llm.validator_provider`, `llm.adjuster_provider`, `llm.guardrail_provider` (`anthropic` | `mistral`, default `anthropic`) — and resolves its model via `LLMSettings.model_for(agent)` from the selected provider block. The Mistral path is retained: `MistralProvider`, its tests, and the `mistral-large-2512` pin in `llm.mistral.*`. The **`v1_mistral` replay variant** routes the Validator and Adjuster back to Mistral; setting `LLM__VALIDATOR_PROVIDER=mistral` and `LLM__ADJUSTER_PROVIDER=mistral` makes it the default without a code change (see `docs/BACKLOG.md` → *Re-enable Mistral as default*).
   - **Verified combinations: only two** — all-Anthropic (the default) and Validator + Adjuster on Mistral (`v1_mistral`). Doc-Parser or Guardrail on Mistral is structurally possible (it requires `llm.mistral.<agent>_model`, which has no default; startup refuses the selector otherwise) but untested.
 - **Database.** PostgreSQL with pgvector for the prototype. Single database hosts claims, audit log, vector index. Local dev uses native Postgres (Postgres.app or Homebrew) or, optionally, a Neon dev branch via `DATABASE_URL`; deployed dev/prod uses Neon (managed Postgres) in `eu-central-1` (Frankfurt). Production target: Azure SQL Managed Instance with Ledger Tables for audit.
-- **Embedding model.** `BAAI/bge-small-en-v1.5` via `sentence-transformers`, runs on CPU inside the FastAPI process. Same model used for indexing the policy and for encoding query narratives — embedding model is a one-way door, never silently swap.
+- **Embedding model.** `BAAI/bge-small-en-v1.5` via `sentence-transformers`, runs on CPU inside the FastAPI process. Same model used for indexing the policy and for encoding query narratives — embedding model is a one-way door, never silently swap. Since Phase 9.1 `torch` is pinned to `2.11.0` on every platform (PyPI on macOS, the PyTorch CPU index on Linux) so the Mac that indexes the policy and the container that embeds queries run the same numerics; the Azure image bakes the model and runs with Hugging Face access off.
 - **Streaming transport.** Server-Sent Events. The FastAPI endpoint pushes pipeline progress to the React frontend as agents complete.
 - **Hosting.** Render (backend), Neon (Postgres), Vercel (frontend). Free tiers sufficient for the demo.
+- **Two deployment targets (Phase 9.1, 1 October 2026).** The same repository, migrations and settings contract deploy to Render / Vercel / Neon **and** to Azure (Container Apps + Flexible Server + Key Vault + ACR, Bicep-provisioned, North Europe). **Render / Vercel / Neon is canonical for demos** until the Azure deployment has passed the full three-scenario verification twice; only then is retiring Render / Neon considered. Nothing on Render, Vercel or Neon is changed by Phase 9. The Azure specifics that are decisions, not defaults: user-assigned managed identity (a system-assigned identity cannot be referenced by the Key Vault secret refs in the same deployment pass); password auth for Postgres with the connection string in Key Vault (Entra auth deferred); public endpoints behind firewall rules (private endpoints are a documented gap); `minReplicas` 0 between demos, 1 during; the backend image is built with `az acr build`, never local Docker, and bakes the embedding model.
 - **Decoupled architecture.** Claims are persisted to a claims-of-record table before any agent fires. The pipeline is triggered by a button click in the prototype (simulating the production Azure Service Bus event).
 - **Demo content.** Commercial Property line. Three scripted scenarios: auto-approve $85,000 commercial water damage; threshold escalation $850,000 fire loss; guardrail escalation $1.4M with hallucinated endorsement.
 - **Escalation policy.** OR semantics. Hard rules (always escalate): guardrail_failed, claim_type_watchlist, claimant_watchlist, cross_jurisdictional. Threshold rules: settlement > $250,000, validator confidence < 0.65, adjuster confidence < 0.75. Policy lives in `backend/app/escalation/policy.yaml`. Every decision logs which rules fired.
-- **Local dev environment.** Native Postgres (Postgres.app or Homebrew), no Docker. Chosen to keep the local footprint small and avoid virtualisation overhead. **Two databases:** `agentic_claims_dev` runs the app (via `DATABASE_URL`); `agentic_claims_test` runs pytest (via `TEST_DATABASE_URL` in `.env.test`). The two are kept separate because the test suite's fixtures TRUNCATE tables — the test fixtures resolve `TEST_DATABASE_URL` in preference to `DATABASE_URL` and **categorically refuse to run against any `*.neon.tech` host** (Phase 8.5, after a Phase 8.4 incident where a pytest run against a Neon-pointing `.env` wiped the deployed database). CI needs no `TEST_DATABASE_URL`: its `DATABASE_URL` is a localhost service container, which the non-Neon fallback accepts.
+- **Local dev environment.** Native Postgres (Postgres.app or Homebrew), no Docker. Chosen to keep the local footprint small and avoid virtualisation overhead. **Two databases:** `agentic_claims_dev` runs the app (via `DATABASE_URL`); `agentic_claims_test` runs pytest (via `TEST_DATABASE_URL` in `.env.test`). The two are kept separate because the test suite's fixtures TRUNCATE tables — the test fixtures resolve `TEST_DATABASE_URL` in preference to `DATABASE_URL` and **categorically refuse to run against any deployed-database host — `*.neon.tech` (Phase 8.5, after a Phase 8.4 incident where a pytest run against a Neon-pointing `.env` wiped the deployed database) and `*.postgres.database.azure.com` (Phase 9.1)**. CI needs no `TEST_DATABASE_URL`: its `DATABASE_URL` is a localhost service container, which the non-deployed fallback accepts.
 
 ### Locked interface extensions since Phase 4
 

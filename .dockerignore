@@ -1,0 +1,14 @@
+# Allow-list build context (Phase 9.1). Everything is excluded by default and
+# only what the backend image needs is re-admitted, so a forgotten pattern can
+# never leak a secret (.env*), local notes (BUILD-PLAN.md, HANDOFF.md) or the
+# frontend / docs / .git trees into the context that `az acr build` uploads.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!backend/
+# Within backend/: tests, caches and any local settings overlay stay out. The
+# image is configured by environment variables only, exactly like Render.
+backend/tests/
+backend/**/__pycache__/
+backend/settings.yaml

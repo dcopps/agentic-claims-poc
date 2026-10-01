@@ -57,43 +57,49 @@ def client() -> Iterator[TestClient]:
 
 
 # --------------------------------------------------------------------------- #
-# Test-database safety (Phase 8.5)
+# Test-database safety (Phase 8.5; extended Phase 9.1)
 #
 # The suite's destructive fixtures TRUNCATE tables. If the resolved database is
-# the deployed Neon instance, running pytest wipes production — which is exactly
-# what happened in Phase 8.4. The helpers below pin the suite to a *non-Neon*
-# database and refuse, loudly, to do anything else.
+# a deployed instance, running pytest wipes production — which is exactly what
+# happened in Phase 8.4 against Neon. The helpers below pin the suite to a
+# *non-deployed* database and refuse, loudly, to do anything else. Phase 9.1
+# added the Azure Database for PostgreSQL host pattern: same category of
+# deployed database, same wipe risk.
 # --------------------------------------------------------------------------- #
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOTENV_PATH = _REPO_ROOT / ".env"
 _DOTENV_TEST_PATH = _REPO_ROOT / ".env.test"
 
-# Managed-Neon hosts all live under this suffix. The categorical rule is: the
-# test suite never targets one, with no env-var bypass.
-_NEON_HOST_SUFFIX = ".neon.tech"
+# Every deployed database the prototype has ever used lives under one of these
+# host suffixes: managed Neon, and Azure Database for PostgreSQL Flexible Server
+# (Phase 9.1). The categorical rule is: the test suite never targets one, with
+# no env-var bypass. Adding a deployment target means adding its suffix here.
+_DEPLOYED_HOST_SUFFIXES: tuple[str, ...] = (".neon.tech", ".postgres.database.azure.com")
 
 # Every refusal points the developer at the one place that explains the fix.
 _README_POINTER = (
     "See the 'Local test database setup' section of README.md: create a local "
     "test database (DEV_DB_NAME=agentic_claims_test ./scripts/setup-dev-db.sh) "
-    "and set TEST_DATABASE_URL in .env.test to it — never a .neon.tech host."
+    "and set TEST_DATABASE_URL in .env.test to it — never a deployed-database host "
+    "(*.neon.tech or *.postgres.database.azure.com)."
 )
 
 
-def _is_neon_host(url: str) -> bool:
-    """True if `url`'s host is a managed-Neon host (`*.neon.tech`), case-insensitive."""
+def _is_deployed_host(url: str) -> bool:
+    """True if `url`'s host matches any deployed-database suffix, case-insensitive."""
     host = (urlparse(url).hostname or "").lower()
-    return host.endswith(_NEON_HOST_SUFFIX)
+    return host.endswith(_DEPLOYED_HOST_SUFFIXES)
 
 
 def _resolve_test_database_url(test_url: str | None, database_url: str | None) -> str:
     """
     Resolve the database URL the suite may safely TRUNCATE, or raise `RuntimeError`.
 
-    Categorical safety rule: never a Neon (`*.neon.tech`) host. Prefer an explicit
-    `TEST_DATABASE_URL`; fall back to `DATABASE_URL` only when it is itself non-Neon
-    (the CI path, where `DATABASE_URL` is a localhost service container).
+    Categorical safety rule: never a deployed-database host (`*.neon.tech`,
+    `*.postgres.database.azure.com`). Prefer an explicit `TEST_DATABASE_URL`; fall
+    back to `DATABASE_URL` only when it is itself non-deployed (the CI path, where
+    `DATABASE_URL` is a localhost service container).
 
     Defensive ordering: sanitise (strip) → validate (presence + host) → abort
     (raise with the offending host) → execute (return the safe URL). No silent
@@ -103,10 +109,11 @@ def _resolve_test_database_url(test_url: str | None, database_url: str | None) -
     database_url = (database_url or "").strip()
 
     if test_url:
-        # An explicit test URL pointing at Neon is always a configuration error.
-        if _is_neon_host(test_url):
+        # An explicit test URL pointing at a deployed database is always a
+        # configuration error.
+        if _is_deployed_host(test_url):
             raise RuntimeError(
-                "TEST_DATABASE_URL points at a Neon host "
+                "TEST_DATABASE_URL points at a deployed-database host "
                 f"({urlparse(test_url).hostname!r}); the test suite TRUNCATEs tables "
                 f"and must never run against deployed data. {_README_POINTER}"
             )
@@ -114,11 +121,13 @@ def _resolve_test_database_url(test_url: str | None, database_url: str | None) -
 
     if database_url:
         # CI sets DATABASE_URL to a localhost Postgres and no TEST_DATABASE_URL;
-        # accept it only because it is non-Neon. A Neon DATABASE_URL with no
-        # TEST_DATABASE_URL is the laptop foot-gun this whole change exists to stop.
-        if _is_neon_host(database_url):
+        # accept it only because it is non-deployed. A deployed DATABASE_URL with
+        # no TEST_DATABASE_URL is the laptop foot-gun this whole change exists to
+        # stop.
+        if _is_deployed_host(database_url):
             raise RuntimeError(
-                "No TEST_DATABASE_URL is set and DATABASE_URL points at a Neon host "
+                "No TEST_DATABASE_URL is set and DATABASE_URL points at a "
+                "deployed-database host "
                 f"({urlparse(database_url).hostname!r}); refusing to run destructive "
                 f"tests against deployed data. {_README_POINTER}"
             )
@@ -148,10 +157,10 @@ def _read_env_candidate(name: str, dotenv_path: Path) -> str | None:
 @pytest.fixture(scope="session")
 def db_settings() -> Settings:
     """
-    Resolve Settings once per session, pinned to a *safe* (non-Neon) database.
+    Resolve Settings once per session, pinned to a *safe* (non-deployed) database.
 
     `_resolve_test_database_url` enforces the safety rule and raises loudly on any
-    Neon target rather than letting `clean_db` TRUNCATE it. The resolved URL is
+    deployed target rather than letting `clean_db` TRUNCATE it. The resolved URL is
     injected via `os.environ["DATABASE_URL"]` — the highest-precedence path
     `Settings` honours — so every `Settings()` / `open_connection()` built during
     the session, explicit or bare, targets the test database.
@@ -203,14 +212,14 @@ def clean_db(migrated_db: Settings) -> Iterator[psycopg.Connection]:
     chain-hash assertions across tests aren't sensitive to the order
     pytest happens to pick.
     """
-    # Defence in depth: `db_settings` already refuses a Neon target, but a
+    # Defence in depth: `db_settings` already refuses a deployed target, but a
     # destructive TRUNCATE is the wrong place to trust an upstream invariant.
     # Re-check the resolved host here so no future fixture wiring can route this
     # fixture at deployed data without tripping the guard.
     url = migrated_db.database.url.get_secret_value()
-    if _is_neon_host(url):
+    if _is_deployed_host(url):
         raise RuntimeError(
-            "clean_db refuses to TRUNCATE a Neon host "
+            "clean_db refuses to TRUNCATE a deployed-database host "
             f"({urlparse(url).hostname!r}). {_README_POINTER}"
         )
     with open_connection(migrated_db) as conn:

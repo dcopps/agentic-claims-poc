@@ -1,6 +1,6 @@
 [project]
 name = "agentic-claims-poc"
-version = "0.8.6.1"
+version = "0.9.0"
 description = "Multi-agent agentic AI prototype for insurance claims processing."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -15,6 +15,13 @@ dependencies = [
     "alembic>=1.13",
     "sqlalchemy>=2.0",
     "sentence-transformers>=3.0",
+    # torch is already required transitively by sentence-transformers. It is
+    # declared directly so the `[tool.uv.sources]` CPU-index pin below applies
+    # (uv honours sources only for the project's own dependencies), and pinned
+    # exactly so macOS (PyPI) and Linux (CPU index) resolve the *same* torch:
+    # the policy index is embedded on a developer Mac and queried in the Azure
+    # container, and the embedding stack is a one-way door (CLAUDE.md).
+    "torch==2.11.0",
     "anthropic>=0.40",
     "mistralai>=1.5",
     "sse-starlette>=2.1",
@@ -29,6 +36,19 @@ dev = [
     "types-pyyaml>=6.0",
     "pip-audit>=2.7",
 ]
+
+# PyTorch's PyPI wheels for Linux declare the CUDA toolkit as dependencies
+# (36 `nvidia-*` packages, a 530 MB torch wheel), none of which a CPU-only
+# container can use. Resolve torch from the PyTorch CPU index on Linux only,
+# so the Azure image and CI stay small; macOS development keeps resolving
+# from PyPI unchanged (Phase 9.1).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
