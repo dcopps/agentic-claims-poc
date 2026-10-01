@@ -1,0 +1,81 @@
+# Phase 9.1 — Azure foundation: Bicep, Postgres Flexible Server, Container Apps, Key Vault, managed identity
+
+## Why Phase 9 exists
+
+The prototype's production architecture (`docs/architecture-stack-reference.md`) has always targeted Azure, but the prototype itself has run on Render, Vercel and Neon. Phase 9 deploys the prototype **to Azure**, so that the Azure column of that document is backed by a running deployment rather than a design. The motivation is concrete: the next role Dermot is pursuing requires *"built and shipped AI on the Microsoft stack — deep hands-on Azure experience"*. Phase 9 converts design-level Azure into a working, Bicep-provisioned, identity-secured deployment of a real multi-agent RAG system, with the LLM calls routed through Azure AI Foundry.
+
+Phase 9 is three sub-phases, each independently landable and demonstrable. **This prompt scopes all three so the plan for 9.1 is made with 9.2 and 9.3 in view, and then executes 9.1 only.**
+
+| Sub-phase | Delivers | Demonstrable outcome |
+|---|---|---|
+| **9.1 (this prompt)** | Resource group, Azure Database for PostgreSQL Flexible Server with `vector`, Azure Container Registry, Container Apps environment + backend Container App, Key Vault, system-assigned managed identity with RBAC, all in Bicep. Backend `Dockerfile`. Migrations, policy index and seed run against the Azure database. | `https://<app>.<region>.azurecontainerapps.io/health` returns `0.9.0`; the three scenarios run end-to-end against Azure Postgres (LLM calls still to the public Anthropic API). |
+| **9.2** | Frontend on Azure Static Web Apps with `navigationFallback` (which also fixes the deep-link 404), CORS updated, GitHub Actions deploy workflow using OIDC federated credentials (no stored cloud secrets), Application Insights on the Container App. | Full demo on Azure URLs, deployed by a push to `main`, with no long-lived Azure credentials anywhere. |
+| **9.3** | `foundry` as a third LLM provider through the gateway: Claude Haiku via Azure AI Foundry, selectable per agent by the Phase 8.6 selectors, authenticated by managed identity. | Audit rows show `provider = "foundry"`; the same app has now swapped providers three times through one abstraction. |
+
+Out of scope for all of Phase 9, and to be stated as the remaining gaps to the production target in the docs: VNet and private endpoints (Foundry is reached over its public endpoint), API Management, Service Bus, Durable Functions, SQL Managed Instance and Ledger Tables, Azure AI Search, Entra ID human sign-in, Langfuse, Document Intelligence, the LoRA adapter, Azure DevOps Pipelines (GitHub Actions deploys; `infra/azure-devops-pipeline.yml` stays a reference).
+
+**Render, Vercel and Neon stay up throughout Phase 9.** Azure is a second deployment of the same repository. Nothing is retired until Azure has passed the full three-scenario verification twice. That is itself a talking point: one codebase, one set of migrations, two clouds.
+
+## Prerequisites — Dermot, before the plan is executed
+
+Claude Code cannot do these.
+
+1. **An Azure subscription.** A new account carries a free credit; a Pay-As-You-Go subscription is fine. Note the subscription id.
+2. **`az` CLI installed and logged in** on the machine Claude Code runs on (`az login`; `az account show` returns the subscription). Bicep is bundled with the CLI (`az bicep version`).
+3. **A budget alert** on the subscription (Cost Management → Budgets), e.g. €40/month with an email at 80%. Set before anything is provisioned.
+4. Decide the **resource naming prefix** (suggest `claimsai`) and confirm the **region: North Europe** (Dublin) — the production target's primary region, and the right answer for a Dublin role.
+
+Estimated running cost for 9.1: Postgres Flexible Server Burstable B1ms is the largest line (~€12–15/month, and the server can be stopped between demo sessions); ACR Basic ~€4/month; Container Apps consumption plan is near-zero at idle; Key Vault pennies. Roughly €20/month, on top of the existing Render Standard until it is retired.
+
+## Design constraints that come from the existing architecture
+
+- **Backend hosting is Azure Container Apps**, because that is what `docs/architecture-stack-reference.md` names for the production target and what `infra/azure-devops-pipeline.yml` already assumes (`AzureContainerApps@1`, ACR, `infra/bicep/main.bicep` at line 101). Phase 9.1 makes that Bicep path real. App Service is not to be substituted for convenience.
+- **Database is Azure Database for PostgreSQL Flexible Server**, not SQL Managed Instance. This is the prototype's data tier on Azure — same engine as Neon, same Alembic migrations, same `pgvector` extension (`vector` is on Flexible Server's allow-list; the plan confirms the Postgres major version to request so that `pgvector ≥ 0.8` is available). The audit-vault swap to Ledger Tables and the vector-store swap to AI Search are separate transitions in the architecture document and are not part of Phase 9.
+- **The embedding model runs in-process** (`bge-small-en-v1.5`, ~50 MB, `sentence-transformers` on CPU). Render's 512 MB free tier OOM-killed this in July. The Container App must be sized accordingly — plan to state the CPU/memory (likely 1 vCPU / 2 GiB). **Cold start and the baked model are separate decisions.** Baking the model into the image (plan item 3) removes the network fetch and makes cold start predictable; it does not remove it — scale-from-zero still pays image pull, Python imports and loading the model from disk, several seconds in total. The only thing that makes cold start *absent* is `minReplicas: 1`. Plan to state the `minReplicas` choice and the cost of each: `0` (scale-to-zero, near-zero idle cost, a visible pause on the first request after idle) versus `1` (one warm replica, a small continuous cost, no pause). Recommendation to consider: `1` while a demo window is open and `0` otherwise, toggled by the start/stop scripts in item 8.
+- **Secrets never live in app settings as plain values.** Key Vault holds `DATABASE_URL`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`; the Container App's system-assigned managed identity is granted `Key Vault Secrets User` and the app references secrets from the vault. This is the RBAC story: no secret is copied into a dashboard, and a compromised container cannot read any secret it was not granted.
+- **Bicep is the only way resources are created.** No portal click-ops for anything that ends up in the resource group, so that `az deployment group what-if` is truthful and the deployment is reproducible. Exception: the subscription, the budget alert and `az login` (prerequisites above).
+- **The backend image is built with `az acr build`, not local Docker.** Decided by Dermot, 21 September 2026. No Docker Desktop prerequisite; the build context is uploaded and built inside Azure Container Registry, and the image is tagged and stored there in one step. The same command is what 9.2's GitHub Actions workflow will run. The `Dockerfile` and `.dockerignore` still live in the repo and must be correct — they are just never executed locally. If the `Dockerfile` needs debugging, `az acr build` output is the feedback loop.
+- **The settings hierarchy is unchanged.** The app reads the same environment variables on Azure as on Render (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `CORS_ALLOWED_ORIGINS`, and any `LLM__*` selector). Nothing in `backend/settings.py` should need to change for 9.1. If it does, that is an interface event to flag.
+
+## Plan-first
+
+Produce `docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps-plan.md` covering:
+
+1. **Bicep module layout.** `infra/bicep/main.bicep` with modules (suggest `postgres.bicep`, `keyvault.bicep`, `acr.bicep`, `containerapps.bicep`, `identity.bicep` or inline) and a `main.bicepparam` (or `parameters.dev.json`) for the prefix, region, Postgres SKU, and admin login. Secrets are **parameters marked `@secure()`**, supplied at deploy time from the shell (never committed). State how `az deployment group create` is invoked and how what-if is run first.
+2. **Postgres Flexible Server specifics.** Major version; SKU (Burstable B1ms); storage (32 GiB minimum); `azure.extensions` server parameter set to include `VECTOR` so `CREATE EXTENSION vector` succeeds; firewall — allow Azure services and Dermot's client IP for migrations (public access for the prototype; private endpoint is a Phase 9 gap to document); admin credential handling (generated at deploy, stored in Key Vault). Whether to enable Entra authentication for Postgres in 9.1 or defer — plan decides, and says why.
+3. **Container image.** New `Dockerfile` for the backend: multi-stage, `uv`-based, Python 3.11, non-root user, `uv sync --frozen --no-dev`, `uvicorn backend.app.main:app` on the port Container Apps injects. **The `sentence-transformers` model is baked into the image at build time** — decided by Dermot, 21 September 2026. The `Dockerfile` sets the cache location (`SENTENCE_TRANSFORMERS_HOME` or `HF_HOME`) to a path inside the image, runs a build step that downloads `BAAI/bge-small-en-v1.5` into it, and the runtime reads from the same path with no network access to Hugging Face. The non-root runtime user must be able to read the cache. Reasons: no runtime egress to a third-party endpoint (the production-target posture; also removes a demo-time failure mode), a deterministic pinned model (CLAUDE.md calls the embedding model a one-way door), and a shorter, predictable cold start. The plan states the resulting image size and confirms the ACR build agent can reach Hugging Face during the build (it has outbound network; if anonymous pulls are rate-limited, say so — do not add a Hugging Face token as a build secret without flagging it). Build is `az acr build` (see constraints); the plan states the exact invocation, the tag scheme (suggest the short git SHA), and the `.dockerignore` contents so the uploaded context excludes `.venv`, `node_modules`, `frontend/`, `.git`, `docs/`, and anything else the backend image does not need.
+4. **Container App.** Environment + app; ingress external on the app port; system-assigned identity; Key Vault secret references for the three secrets; environment variables for `CORS_ALLOWED_ORIGINS` (initially the Vercel origin, updated in 9.2); CPU/memory and `minReplicas` per the constraint above; revision mode single. `/health` as the readiness/liveness probe.
+5. **RBAC.** Exactly which role assignments exist and why: managed identity → Key Vault (`Key Vault Secrets User`); managed identity → ACR (`AcrPull`) so the app can pull its image without admin credentials; Dermot's user → whatever is needed to deploy and to seed. Nothing broader. List them in the plan as a table.
+6. **Data bootstrap.** After the server is up: `alembic upgrade head`, `python -m backend.data.index_policy`, `python -m backend.data.seed_claims --allow-truncate`, all run from Dermot's machine with `DATABASE_URL` pointed at the Azure server (hostname-only echo before running, as with Neon). Confirm 12 chunks and 9 claims. **The Phase 8.5 pytest guard refuses `*.neon.tech`; it does not know about `*.postgres.database.azure.com`. Extend `_resolve_test_database_url` to refuse that host pattern too** — same category of deployed database, same wipe risk — with a discriminator test. This is the one test-layer change in 9.1.
+7. **Verification.** `/health` on the Azure URL reports `0.9.0`. All three scripted scenarios run end-to-end against the Azure backend and Azure Postgres (LLM calls to public Anthropic), landing in the expected terminal states, 7 audit entries each, chain verified, `provider = "anthropic"` throughout. Run them through the deployed Vercel frontend by temporarily pointing `VITE_API_BASE_URL` at the Azure backend, or via `scripts/verify-demo-scenarios.py --backend <azure-url>` — plan decides; the script is the cleaner option and needs no frontend change. `az deployment group what-if` against the deployed stack reports no changes (idempotence).
+8. **Cost and teardown.** A `scripts/azure-stop.sh` / `azure-start.sh` pair (or documented `az` commands) that stops the Postgres server and scales the Container App to zero between demo sessions, and the reverse. A documented full teardown (`az group delete`) so the whole thing can be removed in one command.
+9. **Docs.** `README.md` gains an *Azure deployment* section (prerequisites, deploy, bootstrap, verify, stop/start, teardown). `docs/architecture-stack-reference.md`: the *Development (Prototype)* column and the detailed sections need to reflect that the prototype now also runs on Azure — plan proposes how (a third column, or annotating the existing column) without touching the *Production (Target)* column, and adds a *Remaining gaps to the production target* list (the out-of-scope items above). `infra/azure-devops-pipeline.yml` header comment updated: `infra/bicep/main.bicep` now exists. `docs/BACKLOG.md`: Phase 8.7 UI polish stays queued after Phase 9; the deep-link 404 item is annotated as "resolved by SWA `navigationFallback` in 9.2".
+10. **Version.** `0.8.6.1 → 0.9.0`. Phase 9 is a minor version: a new deployment target is a larger change than any 8.x phase. 9.2 and 9.3 are `0.9.1` and `0.9.2`.
+11. **Dependencies.** Expected: none in Python for 9.1 (`psycopg` already talks to any Postgres). `azure-identity` arrives in 9.3 for Foundry, not now. Any new dependency is flagged per the standing rule.
+12. **Interface stability.** None expected. Same schema, same migrations, same audit payloads, same HTTP shapes. If the Dockerfile or Container Apps port injection requires any change to how the app starts, state it.
+
+Wait for explicit confirmation before creating any Azure resource or writing any code.
+
+## Deliverables (after plan is approved)
+
+- `infra/bicep/` — `main.bicep`, modules, parameter file (no secrets), a `README.md` in that folder explaining deploy / what-if / teardown.
+- `Dockerfile` (repo root or `backend/`), `.dockerignore`.
+- `scripts/azure-stop.sh`, `scripts/azure-start.sh` (or documented commands).
+- `backend/tests/conftest.py` — Azure host pattern added to the Neon guard; `backend/tests/test_db_isolation.py` — discriminator test for it.
+- `pyproject.toml` → `0.9.0`.
+- `README.md`, `docs/architecture-stack-reference.md`, `infra/azure-devops-pipeline.yml` header, `docs/BACKLOG.md`, `docs/build-log.md` (Phase 9.1 entry with the resource inventory, the RBAC table, the bootstrap counts and the three-scenario verification table), `CLAUDE.md` (Tech Stack *Hosting & CI* gains the Azure deployment; Current Status; a new *Architectural Decisions* bullet recording that the prototype has two deployment targets and which is canonical for demos).
+- `docs/prompts/19-…-plan.md`, `19-…-report.md`.
+- Commit and push the code and docs. **The Azure deployment itself is an operational act, done with Dermot present** (it needs his `az login` session and the `@secure()` parameter values typed at the shell). The report records the resource names, the deployed URL and the verification outcome.
+
+## Constraints
+
+- **Nothing on Render, Vercel or Neon is changed or torn down in 9.1.**
+- **No secret in any committed file** — not in Bicep, not in parameter files, not in the Dockerfile, not in scripts, not in docs. `@secure()` parameters and Key Vault only. Before the commit, grep the diff for anything that looks like a key or a connection string.
+- **No portal-created resources** other than the prerequisites.
+- **The Azure Postgres is a deployed database.** Same rules as Neon: hostname-only echoes, deliberate `--allow-truncate`, pytest must refuse it.
+- **Halt if a scenario lands in the wrong terminal state on Azure.** That would indicate an environment difference (not a model difference — same provider as Render), and it should be diagnosed, not retried.
+- Standing conventions per `CLAUDE.md`, including plan-first and the 50-line function limit (Bicep modules are exempt from the Python rule but should be small and single-purpose).
+
+## Archive
+
+Pre-saved at `docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps.md`; plan and report alongside with `-plan.md` / `-report.md`. Phases 9.2 and 9.3 will be prompts 20 and 21.
