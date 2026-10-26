@@ -108,3 +108,25 @@ def test_valid_connection_string_configures_distro_and_psycopg_once(
         ("configure_azure_monitor", {"connection_string": _VALID}),
         ("PsycopgInstrumentor.instrument", None),
     ]
+
+
+def test_create_app_builds_the_class_the_distro_installs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    The FastAPI instrumentor rebinds `fastapi.FastAPI` to a subclass; the app
+    must be an instance of whatever that attribute holds when `create_app`
+    runs. Regression for Phase 9.2: an import-time `from fastapi import
+    FastAPI` kept the original class, so no request reached Application Insights.
+    """
+    import fastapi
+
+    from backend.app.main import create_app
+    from backend.settings import Settings
+
+    class _InstrumentedFastAPI(fastapi.FastAPI):
+        pass
+
+    monkeypatch.setattr(fastapi, "FastAPI", _InstrumentedFastAPI)
+
+    app = create_app(Settings())
+
+    assert type(app) is _InstrumentedFastAPI

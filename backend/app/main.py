@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import fastapi
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import api_router
@@ -35,7 +35,7 @@ from backend.settings import Settings
 
 
 @asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan(app: fastapi.FastAPI) -> AsyncIterator[None]:
     """Build startup collaborators and hang them off `app.state`."""
     cfg: Settings = app.state.settings
     # Load + validate the policy once. A malformed policy fails here, at
@@ -52,7 +52,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None) -> fastapi.FastAPI:
     """Build a configured FastAPI instance.
 
     `settings` is injectable so tests can pin a known configuration without
@@ -62,11 +62,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings if settings is not None else Settings()
 
     # Before the FastAPI instance exists: the Azure Monitor distro instruments
-    # FastAPI by patching the class, so an app built first would be invisible
-    # to it. A no-op (and import-free) call when no connection string is set.
+    # FastAPI by rebinding the module attribute `fastapi.FastAPI` to an
+    # instrumented subclass. A no-op (and import-free) call when no connection
+    # string is set.
     configure_telemetry(cfg.telemetry)
 
-    app = FastAPI(
+    # Looked up through the module at call time, never via `from fastapi import
+    # FastAPI`: that binding is taken at import, before the distro runs, and
+    # would keep the uninstrumented class — every request would go unrecorded.
+    app = fastapi.FastAPI(
         title=cfg.app_name,
         lifespan=_lifespan,
         # The root path stays empty so /health and /api/* are siblings rather

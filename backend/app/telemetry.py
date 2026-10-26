@@ -11,11 +11,13 @@ cannot be a connection string is a deployment error to surface, not
 something to hand to the SDK and discover in the portal.
 
 What the distro captures once configured: every FastAPI request (the
-distro patches `fastapi.FastAPI`, so the app must be constructed *after*
-this call), unhandled exceptions, outbound `httpx` calls (the Anthropic and
-Mistral SDKs) as dependencies, and Python logging. Postgres is reached
-through psycopg 3, which the distro does not bundle, so its instrumentor is
-enabled here explicitly.
+distro rebinds the module attribute `fastapi.FastAPI` to an instrumented
+subclass, so the app must be constructed *after* this call and through
+`fastapi.FastAPI` looked up at that moment — a `from fastapi import FastAPI`
+taken at import keeps the original class), unhandled exceptions, outbound
+`httpx` calls (the Anthropic and Mistral SDKs) as dependencies, and Python
+logging. Postgres is reached through psycopg 3, which the distro does not
+bundle, so its instrumentor is enabled here explicitly.
 
 Probe traffic on `/health` is excluded from request telemetry by the
 `OTEL_PYTHON_EXCLUDED_URLS` environment variable the Container App sets —
