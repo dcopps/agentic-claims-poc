@@ -1160,7 +1160,7 @@ After the restart the ledger was re-read through the app: 12 claims (9 seeded + 
 
 ## Phase 9.2 — Frontend on Static Web Apps, OIDC Deploy on Push, Application Insights, Second Verification Pass
 
-**Date:** 26 October 2026 (code); deployment and verification recorded below as they happen
+**Date:** 26 October 2026 (code, deployment and verification)
 **Prompt:** [`docs/prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md`](prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md)
 **Plan:** [`docs/prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md`](prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md) — approved 26 October 2026; decisions in its *Approval* section
 **Version:** `0.9.0 → 0.9.1`
@@ -1196,7 +1196,7 @@ Phase 9.2 makes the Azure deployment complete and self-deploying: the frontend o
 - `deploy-frontend.yml` — same trigger; `permissions: contents: read` only (no Azure login); `concurrency: deploy-frontend`. Refuses to run if `vars.AZURE_BACKEND_URL` is empty; `setup-node` 20; `npm ci`; `npm run build` with `VITE_API_BASE_URL`; `Azure/static-web-apps-deploy@v1` with `skip_app_build: true`, `app_location: frontend/dist`, `production_branch: main`, token from `secrets.AZURE_STATIC_WEB_APPS_API_TOKEN`. No path filter, by decision: every green run on `main` redeploys (about ninety seconds, free).
 - Resource names arrive as repository variables because the deployer identity deliberately cannot list the resource group.
 
-**Backend telemetry.** `backend/app/telemetry.py` — `configure_telemetry(settings) -> bool`: strip; empty → `False` **before any `azure.*` / `opentelemetry.*` import** (local dev, Render, CI and pytest never load the SDK); a value without `InstrumentationKey=` → `ValueError` naming the expected shape, the first 60 characters of the value and its length; otherwise `configure_azure_monitor(connection_string=…)` and `PsycopgInstrumentor().instrument()` (psycopg 3 is not bundled by the distro). Called in `create_app()` *before* `FastAPI(...)` is constructed, because the distro instruments FastAPI by patching the class. `TelemetrySettings` (`telemetry.connection_string: SecretStr | None`) in `backend/settings.py`; `APPLICATIONINSIGHTS_CONNECTION_STRING` is the fourth named env alias; `telemetry:` block in `settings.yaml.template`. Warm import of the SDK measured at 0.2–0.4 s on this Mac, under the baseline for `fastapi + anthropic + psycopg` (0.44 s).
+**Backend telemetry.** `backend/app/telemetry.py` — `configure_telemetry(settings) -> bool`: strip; empty → `False` **before any `azure.*` / `opentelemetry.*` import** (local dev, Render, CI and pytest never load the SDK); a value without `InstrumentationKey=` → `ValueError` naming the expected shape, the first 60 characters of the value and its length; otherwise `configure_azure_monitor(connection_string=…)` and `PsycopgInstrumentor().instrument()` (psycopg 3 is not bundled by the distro). Called in `create_app()` *before* `FastAPI(...)` is constructed, because the distro instruments FastAPI by patching the class — necessary but, as deployed, not sufficient: see *FastAPI request telemetry fix* below. `TelemetrySettings` (`telemetry.connection_string: SecretStr | None`) in `backend/settings.py`; `APPLICATIONINSIGHTS_CONNECTION_STRING` is the fourth named env alias; `telemetry:` block in `settings.yaml.template`. Warm import of the SDK measured at 0.2–0.4 s on this Mac, under the baseline for `fastapi + anthropic + psycopg` (0.44 s).
 
 **Dependencies** (Option A, approved): `azure-monitor-opentelemetry>=1.8.11` and `opentelemetry-instrumentation-psycopg>=0.66b1`. **Two, not the plan's three:** the current distro already bundles `opentelemetry-instrumentation-httpx`, so the Anthropic and Mistral calls are captured without declaring it. Resolution side effects, checked package by package: 35 packages added (the OpenTelemetry stack, `azure-core`, `azure-identity`, `msal`, `cryptography`…); `mistralai` moved **2.4.5 → 2.10.1** because 2.4.5 capped `opentelemetry-semantic-conventions` below 0.61 while the distro needs 0.66 — the first resolution jumped to **3.5.0**, which broke mypy (`httpx2` types) and would have changed the Mistral provider's runtime, and was rejected by pinning `mistralai>=1.5,<3`; `idna` 3.13 → 3.20; `importlib-metadata` and `zipp` dropped. The Mistral provider tests pass on 2.10.1.
 
@@ -1222,6 +1222,87 @@ Run with the live image (the new default) and `staticWebAppLocation=eastus2`:
 
 This is the plan's §2c exactly.
 
-### Deployment, verification and the second pass
+### Deployment (26 October 2026, Dermot present)
 
-_To be recorded during the deployment session (Dermot present): provider registration, the Bicep pass, the repository variables and the token secret, the three workflow runs, the three scenarios through the Azure frontend with their correlation ids and the chain over 42 rows, the deep-link reloads on both hosts, the Application Insights observation, the idempotence what-if, cold start before/after telemetry, and `azure-stop.sh` with the replica drain timed._
+| Step | Result |
+|---|---|
+| Providers | `Microsoft.Web`, `Microsoft.Insights` registered |
+| Bicep pass (`azure-deploy.sh deploy`, live image `967a348`) | `claimsai-dev-b820d96-20261026T162838Z` succeeded: 4 creates, the Container App's env + probe order modified. Static Web App `delightful-beach-009db650f.5.azurestaticapps.net` (East US 2); CORS composed from its output in the same pass |
+| Repository settings | seven variables (`AZURE_CLIENT_ID` = the deployer's client id, tenant, subscription, resource group, registry, app name, `AZURE_BACKEND_URL`) and one secret (`AZURE_STATIC_WEB_APPS_API_TOKEN`) |
+| `b820d96` push | CI red (npm 11 lockfile, see below); both deploys `skipped` by the gate — the gate working as designed |
+| `3abad04` push (lockfile regenerated with npm 10) | CI green. Frontend deploy green. Backend deploy **red at *Verify the rollout*** (run 40362374360) although the rollout succeeded: revision `--0000004` healthy, 100 % traffic, image `claims-backend:3abad04`, `/health` `0.9.1` |
+| `8d211ad` push (fix to `require_active_image`) | CI green; backend run reports *"backend unchanged since 3abad04; nothing to deploy"* — change detection proven; frontend redeployed |
+| `2b662da` push (FastAPI telemetry fix) | CI green; backend deploy **green end to end** (run 40385452835): ACR build 3 min 39 s, `--0000006` healthy with 100 % traffic on `claims-backend:2b662da`, `/health` `0.9.1` on the first poll, `require_active_image` passed — the corrected verify step's first real exercise |
+
+**CI lockfile.** `dcc52bd` regenerated `frontend/package-lock.json` with npm 11 (Node 24), which omits the `@emnapi/core` / `@emnapi/runtime` entries that CI's npm 10 (Node 20) requires, so CI stayed red on that push and on `b820d96`. `3abad04` regenerated it with `npx npm@10 install --package-lock-only` (no version changes) and verified under Node 20.20.2 / npm 10.9.9. Until CI's Node version changes, the lockfile is regenerated with npm 10.
+
+**`require_active_image`.** `--query '[latestRevisionName, latestReadyRevisionName]' -o tsv` prints one element per line, so `read -r latest ready` saw `ready` as empty and the check could never pass. Fixed with `join(' ', …)` (`8d211ad`); verified from the shell against the live app (exit 0 for `3abad04`; exit 1 with the mismatch message for `967a348`), then by the `2b662da` workflow run.
+
+**`Managed Identity Operator` was not needed.** `az containerapp update --image` succeeded under *Container Apps Contributor* scoped to the app; the deployer holds exactly the three planned roles.
+
+### FastAPI request telemetry fix (`2b662da`)
+
+After deployment, Application Insights held dependencies but **no requests**. The FastAPI instrumentor the distro enables rebinds the module attribute `fastapi.FastAPI` to `_InstrumentedFastAPI`; `main.py` had taken `from fastapi import FastAPI` at import time, before `configure_telemetry` runs, so `create_app` always constructed the original class. Calling `configure_telemetry` first was necessary but not sufficient. The httpx and psycopg instrumentors patch methods on classes, which is why dependencies were still captured — with no request to parent them.
+
+`create_app` now constructs `fastapi.FastAPI(...)`, looked up at call time; comments in `main.py` and `telemetry.py` name the real mechanism. New test `test_create_app_builds_the_class_the_distro_installs` rebinds `fastapi.FastAPI` as the instrumentor does and asserts the app is that subclass; reintroducing the import-time binding makes it fail. **Suite: 382 passed, 0 failed, 7 skipped** (+1); `ruff check .` and `uv run mypy backend` clean.
+
+### Application Insights observation (after `2b662da`)
+
+Probe: one `POST /api/agents/test/validator` (the test bench — a real pgvector retrieval and a real Haiku call, but no audit entry and no claim), plus a few `GET /api/claims*` reads.
+
+| Request | Result | Dependencies, each a direct child of the request span |
+|---|---|---|
+| `POST /api/agents/test/validator` | 200, 7.4 s | `postgresql` `SET` 1 ms, `SELECT` 9 ms on `psql-claimsai-dev-ojemo…|agentic_claims`; `HTTP` `api.anthropic.com` `POST /v1/messages` 200, 2.6 s |
+| `GET /api/claims`, `/api/claims/{claim_id}`, `/api/claims/{claim_id}/runs` | 200, 59–126 ms | `postgresql` `SET` / `SELECT` |
+
+Requests carry route templates (`{claim_id}`, not ids) and cloud role `ca-claimsai-dev-backend`. **`/health` excluded:** 0 of the 7 requests recorded in the window. Ingestion lag: dependencies within about a minute, requests 2–5 minutes. No request telemetry exists for the UI pass below, which ran before the fix.
+
+### Second verification pass — through the Azure frontend
+
+Run from the Static Web App against image `3abad04` (identical application code to `2b662da` apart from the telemetry fix). Four runs: the auto-approve scenario was run twice.
+
+| | Auto-approve ($85k) ×2 | Threshold ($850k) | Guardrail ($1.4M) |
+|---|---|---|---|
+| Correlation id | `8590b47e-c296-4764-b069-62afb914de9c` (17:08), `f02fb888-621c-4262-95e8-c4695e498a03` (17:28) | `45692633-9e35-4a37-ba12-4afd69a7de66` | `b35b146b-e528-4af6-b010-805783eb4157` |
+| Terminal status | `awaiting_human` ✗ — **recorded exception, below** | `awaiting_human` ✓ | `awaiting_human` ✓ |
+| Fired rules | `guardrail_failed` (LLM check only; rule checks clean) | `settlement_over_ceiling` (observed $920,000) ✓ | `guardrail_failed`, `settlement_over_ceiling` ✓ (rule: endorsement *Coastal Surge Rider* not in retrieved chunks) |
+| Audit entries | 7 / 7 ✓ | 7 ✓ | 7 ✓ |
+| Providers / models | all `anthropic`, `requested_model` = `model` = `claude-haiku-4-5-20251001` ✓; Adjuster $82,500 | same ✓ | same, except `settlement_estimate`: `demo_fixture: true`, `provider = "demo_fixture"` ✓ |
+
+**Chain:** `{"ok": true, "rows_checked": 49, "first_break": null}` — 21 rows from pass one plus 4 × 7. The database now holds 16 claims.
+
+**Through the UI:** all four runs showed the four agent cards arriving live in Run Detail — the SSE stream over CORS from the Static Web App origin. A probe of the stream endpoint with the Static Web App `Origin` header returned 200 `text/event-stream` with the keepalive; the access log showed `OPTIONS`, `GET /api/pipeline/stream/…`, then `POST /api/pipeline/run/…` for each run. **Deep links:** a hard reload of a deep link on Azure returned the app (200). The Vercel deep link (`vercel.json`) was not tested by hand; it is verified by the deploy check only.
+
+**Verdict (Dermot, 26 October 2026): pass two is passed for the deployment, with the Harborline terminal state as an explicit recorded exception.** It satisfies the condition for *considering* the Render / Neon retirement.
+
+### Recorded exception — the Guardrail's verdict changed under an unchanged model id
+
+Both Harborline runs failed `output_check` on the **LLM check** (`hallucinated_citation`-class flags — 17:08: *"sudden failure"* treated as the covered basis; 17:28: *"moderate-severity band"* / *"market range"* treated as policy concepts, and no policy section cited for the amount). The deterministic rule checks found nothing. Investigation in the deployment session:
+
+- **Today's exact recorded Guardrail prompt** (the `llm_call.prompt` system + user from the audit), replayed to `claude-haiku-4-5-20251001` at temperature 0 from the Mac, **without the telemetry packages**, reproduced the flag **5 out of 5**.
+- **Pass one's recorded prompt from 1 October** (correlation `08d514f2-5d47-4d0a-8f58-ddb82a691950`, which *passed* then), replayed the same way today, **fails 3 out of 3**, with a different flag — the *"market band / market range"* vocabulary treated as a policy citation.
+
+So the Guardrail's verdict on **byte-identical input changed between 1 and 26 October under an unchanged model id**. The `3abad04` / `2b662da` images and the telemetry packages are not the cause. The replays used the prompts recorded in the audit's `llm_call.prompt`; `requested_model` = `model` = `claude-haiku-4-5-20251001` on every run. **It affects the Render demo too:** the same model and prompts run there. Follow-ons are in the backlog (Adjuster temperature 0 for the scripted scenarios; Guardrail false positives on Harborline); a governance note is in `docs/change-governance.md` and the DORA register.
+
+### Idempotence what-if (read-only, after `2b662da`)
+
+`scripts/azure-deploy.sh what-if` with the live image: **0 creates, no real changes** — `6 to modify, 14 no change, 5 unsupported, 1 to ignore`. Every modify line is in a known category:
+
+| Resource | Lines |
+|---|---|
+| `ca-claimsai-dev-backend` | category 2 (`reference()` for the registry server, three secret URLs, and now the `CORS_ALLOWED_ORIGINS` and `APPLICATIONINSIGHTS_CONNECTION_STRING` env values); category 3 (`ingress.exposedPort`, `ingress.traffic`, `runningStatus`); `scale.minReplicas` 1 → 0 — the known drift from `azure-start.sh` |
+| `cae-claimsai-dev` | category 2 (`customerId`); category 3 (`peerAuthentication`, `peerTrafficConfiguration`) |
+| `acrclaimsaidevojemo` | category 3 (`anonymousPullEnabled`, `dataEndpointEnabled`, `encryption`, `azureADAuthenticationAsArmPolicy`) |
+| `psql-claimsai-dev-ojemo` | category 3 (`dataEncryption`, `replica`, `replicationRole`, `storage.iops` / `tier` / `type`) |
+| `appi-claimsai-dev` | **new, server-populated:** `Flow_Type: "Bluefield"`, `Request_Source: "rest"` shown as additions |
+| `swa-claimsai-dev` | **new, server-populated:** `branch`, `deploymentAuthPolicy`, `provider: "GitHub"`, `repositoryUrl`, `stableInboundIP`, `trafficSplitting` shown as deletions — metadata the upload action records on each deploy; the app still has no repository link and no Azure-written workflow |
+
+The probe-order category is gone (the Bicep now declares Azure's order). The 5 unsupported entries are the backend identity's two role assignments and the deployer's three; the 1 ignored is the *Application Insights Smart Detection* action group that Azure creates alongside the component. The same picture as the what-if run after the `b820d96` deploy, which also showed 0 creates and no real changes.
+
+### Cold start
+
+**Not measured** before or after telemetry. The 9.1 baseline remains 28.0 s from zero replicas; the measurement is in the backlog.
+
+### Parking
+
+`scripts/azure-stop.sh` is run as the last act of the session, after this entry is committed; it now waits for the replica to drain before stopping Postgres. Its outcome is recorded in `CLAUDE.md` at the start of the next Azure session.

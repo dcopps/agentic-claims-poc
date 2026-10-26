@@ -93,6 +93,26 @@ reach an auto-approval) → Emergency.
   recent runs for the missed format, and either ratify or roll back. The incident
   and the change link to the same Work Item.
 
+## Observed in the prototype — a third-party model changed behaviour without a version change
+
+**26 October 2026.** The Guardrail, pinned to `claude-haiku-4-5-20251001` at
+temperature 0, failed the $85k Harborline scenario that it passed on 1 October.
+Replaying pass one's recorded prompt, byte for byte, failed today too. No commit,
+prompt, setting or model id had changed. The change came from outside the repository.
+None of the three classes above would have caught it, because there was no change
+request to classify.
+
+**What detected it:** the audit trail. Every `llm_call` records the literal prompt
+sent, `requested_model` and the responding `model`, so the verdict could be
+replayed and the deployment ruled out in one session (Phase 9.2 build-log entry,
+*Recorded exception*).
+
+**What production adds:** the eval gate runs **on a schedule against the live
+model**, not only when a change is raised. A moved result with no change on our side
+opens a vendor-change incident against the provider entry in the
+[DORA register](dora-third-party-register.md). The fix that follows, here a
+Guardrail prompt change, is classified as usual (at least *Normal*).
+
 ## What the prototype has vs. what production adds
 
 The prototype ships the *mechanisms* this taxonomy governs — `variants.yaml`,

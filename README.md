@@ -61,11 +61,13 @@ Three pre-loaded scenarios (the "Load demo claim" buttons on the submission form
 | **Threshold escalation** | $850,000 fire loss | `awaiting_human` — settlement > $250,000 |
 | **Guardrail escalation** | $1.4M storm with an unlisted endorsement | `awaiting_human` — `guardrail_failed` |
 
+> **Known issue (found 26 October 2026, both deployments):** the auto-approve scenario currently ends `awaiting_human` on `guardrail_failed`. The Guardrail model's verdict on byte-identical input changed between 1 and 26 October under an unchanged model id, so the scenario no longer settles. The fix (a tighter Guardrail prompt, plus a pre-demo regression fixture) is at the top of [`docs/BACKLOG.md`](docs/BACKLOG.md).
+
 The guardrail scenario reproduces **deterministically**: the seeded claim drives a demo fixture (a planted hallucinated endorsement) that the Guardrail's regex catches without relying on model non-determinism. The audit trail records `demo_fixture: true`, so the affordance is auditable, not hidden. (See [`docs/design-decisions.md`](docs/design-decisions.md).)
 
 ## Azure deployment
 
-The prototype has two deployment targets from the same repository and the same migrations. Render + Vercel + Neon is the original; **Azure** (Phase 9) backs the production-architecture column with a running system. Nothing on Render, Vercel or Neon is changed by the Azure deployment, and Render / Vercel / Neon remains canonical for demos until Azure has passed the three-scenario verification twice.
+The prototype has two deployment targets from the same repository and the same migrations. Render + Vercel + Neon is the original; **Azure** (Phase 9) backs the production-architecture column with a running system. Nothing on Render, Vercel or Neon is changed by the Azure deployment. Azure has passed the three-scenario verification twice: on 1 October 2026 (headless) and on 26 October 2026 (through the Azure frontend, with the auto-approve known issue above recorded as an exception). Render / Vercel / Neon remains canonical for demos until retiring it is decided ([`docs/BACKLOG.md`](docs/BACKLOG.md)). The Azure frontend is `https://delightful-beach-009db650f.5.azurestaticapps.net`. It is parked between demos, so the backend answers only after `scripts/azure-start.sh`.
 
 | | Render / Vercel / Neon | Azure (Phase 9.1 + 9.2) |
 |---|---|---|

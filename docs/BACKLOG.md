@@ -40,13 +40,36 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 ---
 
-## Phase 9 — Azure deployment (in progress; 9.1 verified 1 October 2026, 9.2 built 26 October 2026)
+## Findings from the 26 October 2026 verification (demo-visible — before the next demo)
 
-Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (code complete 26 October 2026; deployment and verification recorded in the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+Found in Phase 9.2's second verification pass. **Both affect the Render / Vercel / Neon demo as well as Azure**: the same model id and prompts run on both. Until they are addressed, the $85k Harborline auto-approve scenario cannot be relied on to settle. Evidence is in the *Recorded exception* of the Phase 9.2 entry in [`build-log.md`](build-log.md).
 
-### Decision: retire Render / Neon? (opens once pass two is recorded)
+### Guardrail false positives on Harborline
 
-The `CLAUDE.md` condition for *considering* retirement is two full passes of the three-scenario verification on Azure. Pass one: 1 October 2026 (headless). Pass two: through the Azure frontend in 9.2 — see the build log for its status. Retirement is **not** done by 9.2; it is Dermot's decision. What it would remove: the Render web service (Render Standard, **$25 / month** saved), the Neon database, `render.yaml` and the Render-specific README text; the Vercel frontend could stay as a second surface or go with them. What would have to be true first: the Azure deployment is the demo URL in `README.md` and `docs/walkthrough.md`, the deploy-on-push workflows have run green more than once, and the stop/start parking routine is reliable (see the seven-day auto-restart below).
+**Tighten the Guardrail prompt so that it judges only claims about what the policy covers; keep the replayed prompts as a pre-demo regression fixture.**
+
+Both Harborline runs on 26 October (`8590b47e-…`, `f02fb888-…`) ended `awaiting_human` on `guardrail_failed`, from the LLM check alone; the rule checks found nothing. The LLM check treated the Adjuster's settlement vocabulary (*"moderate-severity band"*, *"market range"*) and a paraphrase of the covered peril (*"sudden failure"*) as hallucinated policy citations. Replaying the recorded Guardrail prompts to `claude-haiku-4-5-20251001` at temperature 0 reproduced the flag 5 / 5 for today's prompt and 3 / 3 for pass one's 1 October prompt (`08d514f2-…`), which passed then: the verdict on byte-identical input changed under an unchanged model id.
+
+Scope notes:
+- The prompt change is to `backend/app/prompts/system/` (Guardrail): settlement-method language (bands, market ranges, severity) is the Adjuster's own, not a policy citation, and only statements about what the policy covers are to be checked against the retrieved chunks. Under [`change-governance.md`](change-governance.md) this is at least *Normal*: it changes output behaviour at a contract level.
+- **Regression fixture:** the recorded system + user prompts from `8590b47e`, `f02fb888` and `08d514f2` (from the audit's `llm_call.prompt`), plus the guardrail scenario's prompt from `b35b146b` as the must-still-flag case, replayed against the live model before each demo. Gated like the other real-LLM tests (`RUN_LLM_E2E_TESTS=1`), not in CI.
+- Do **not** fix this by loosening the hallucinated-citation rule engine or the `guardrail_failed` hard rule. The guardrail scenario depends on both.
+
+### Adjuster temperature 0 for the scripted demo scenarios
+
+**Run the Adjuster at temperature 0 for the three scripted scenarios, so that the Guardrail sees the same reasoning text from run to run.**
+
+`llm.adjuster_temperature` is `0.2` (headroom for settlement reasoning). The two Harborline runs on 26 October produced the same $82,500 with different reasoning text, and the Guardrail flagged different phrases in each. A temperature-0 Adjuster for the scripted scenarios, through a variant or a per-scenario setting rather than a change to the default, makes the demo input to the Guardrail stable and the regression fixture above meaningful. It does not by itself fix the false positive. Temperature 0 narrows run-to-run variation but does not guarantee identical output.
+
+---
+
+## Phase 9 — Azure deployment (in progress; 9.1 verified 1 October 2026, 9.2 deployed and verified 26 October 2026)
+
+Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (**complete** 26 October 2026; pass two passed with the Harborline terminal state as a recorded exception — see the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+
+### Decision: retire Render / Neon? (open since 26 October 2026)
+
+The `CLAUDE.md` condition for *considering* retirement is two full passes of the three-scenario verification on Azure. Pass one: 1 October 2026 (headless). Pass two: 26 October 2026, through the Azure frontend — passed for the deployment, with the Harborline auto-approve run ending `awaiting_human` as a recorded exception (a model-behaviour change, not the deployment; see *Findings from the 26 October 2026 verification* above). The condition is met; the decision is open. Retirement is **not** done by 9.2; it is Dermot's decision. What it would remove: the Render web service (Render Standard, **$25 / month** saved), the Neon database, `render.yaml` and the Render-specific README text; the Vercel frontend could stay as a second surface or go with them. What would have to be true first: the Azure deployment is the demo URL in `README.md` and `docs/walkthrough.md`, the deploy-on-push workflows have run green more than once (the backend's first full green run was `2b662da` on 26 October), and the stop/start parking routine is reliable (see the seven-day auto-restart below).
 
 ### Phase 9 follow-ons (found while planning and deploying 9.1 and 9.2)
 
@@ -55,7 +78,7 @@ The `CLAUDE.md` condition for *considering* retirement is two full passes of the
 - **what-if drift from `minReplicas`.** `scripts/azure-stop.sh` / `azure-start.sh` toggle `minReplicas` outside Bicep. Accepted for 9.1 and 9.2 (the deploy workflow deliberately does not run Bicep, so driving it from there is not an option).
 - **Postgres restarts itself seven days after a stop.** Observed 26 October 2026: stopped on 1 October, running again by the 26th with no user action in the activity log. Parking is therefore good for a week at a time; a longer pause needs `azure-stop.sh` re-run. A scheduled re-stop from GitHub Actions would need a stop-capable role on the deployer identity — a widening of its grants, so not done quietly. Options: accept and re-run; a scheduled workflow with a narrowly scoped *Contributor* on the Postgres server only; or tear down between demo seasons.
 - **Frontend deploys on every green CI run.** `deploy-frontend.yml` has no path filter (decided 26 October 2026): `workflow_run` ignores `paths:`, and a Static Web App exposes no deployed commit to diff against. Each run is about ninety seconds and free. If that ever matters, the alternatives are `push` + `paths:` gated by a check-runs poll (costs `checks: read`) or stamping the build with its commit and comparing against the live site.
-- **`Managed Identity Operator` for the deployer — only if the first deploy proves it necessary.** `az containerapp update --image` under *Container Apps Contributor* scoped to the app is expected to suffice; if ARM demands `assign/action` on the backend identity, the role is added in `identity.bicep`, scoped to that identity. Resolved either way in the Phase 9.2 build-log entry.
+- **Cold start before and after telemetry — not measured in 9.2.** The plan called for it; it was not done. The 9.1 baseline is 28.0 s from zero replicas. Measure it from zero replicas on the `2b662da` image (telemetry on) at the next Azure session, and once with `APPLICATIONINSIGHTS_CONNECTION_STRING` cleared if the difference is material.
 
 ## Next UI phase — Phase 8.7: Demo UI polish (queued after Phase 9)
 
