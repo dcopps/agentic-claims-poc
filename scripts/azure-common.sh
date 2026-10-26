@@ -106,8 +106,10 @@ wait_for_health_version() {
 require_active_image() {
     local app="$1" image="$2" attempt latest="" ready="" active_image
     for attempt in $(seq 1 "$HEALTH_RETRIES"); do
+        # join(): with -o tsv an array prints one element per line, and read
+        # would see only the first; one space-joined line splits into both.
         read -r latest ready < <(az containerapp show --resource-group "$AZ_RESOURCE_GROUP" --name "$app" \
-            --query '[properties.latestRevisionName, properties.latestReadyRevisionName]' -o tsv)
+            --query "join(' ', [properties.latestRevisionName, properties.latestReadyRevisionName])" -o tsv)
         if [[ -n "$latest" && "$latest" == "$ready" ]]; then
             active_image="$(az containerapp revision show --resource-group "$AZ_RESOURCE_GROUP" --name "$app" \
                 --revision "$latest" --query 'properties.template.containers[0].image' -o tsv)"
