@@ -6,8 +6,10 @@
 #   scripts/azure-deploy.sh build             build the backend image in ACR, print its reference
 #
 # IMAGE is the full reference (<acr>.azurecr.io/claims-backend:<sha>). Without
-# it the deployment creates everything except the Container App (pass 1); with
-# it the Container App is created or updated (pass 2).
+# it: if the group already runs a Container App, its live image is used, so a
+# Bicep run can never regress the image the deploy workflow put there (the
+# workflow owns the image since Phase 9.2); if there is no app yet, the
+# deployment creates everything except the Container App (pass 1).
 #
 # Strategy: sanitise → validate → abort → execute. Every secret the Bicep
 # parameter file reads with readEnvironmentVariable() is resolved into this
@@ -77,15 +79,32 @@ resolve_deployer_identity() {
     info "deployer client IP $DEPLOYER_CLIENT_IP, principal $DEPLOYER_PRINCIPAL_ID"
 }
 
-# Validate the optional image reference and export it for the parameter file.
+# The image the Container App currently runs, or nothing if the group has no
+# app yet (including before the group exists). Empty is the documented pass-1
+# state here, not an error — the caller says which it is.
+live_container_image() {
+    local app
+    app="$(az resource list --resource-group "$AZ_RESOURCE_GROUP" \
+        --resource-type Microsoft.App/containerApps --query '[0].name' -o tsv 2>/dev/null || true)"
+    [[ -n "$app" ]] || return 0
+    az containerapp show --resource-group "$AZ_RESOURCE_GROUP" --name "$app" \
+        --query 'properties.template.containers[0].image' -o tsv
+}
+
+# Resolve the image for the parameter file: the argument if given, else the
+# live image if an app exists, else none (pass 1). Validate whatever results.
 resolve_container_image() {
     local image="${1:-}"
+    if [[ -z "$image" ]]; then
+        image="$(live_container_image)"
+        [[ -z "$image" ]] || info "no image given: defaulting to the live image"
+    fi
     if [[ -n "$image" ]]; then
         [[ "$image" =~ ^[a-z0-9]+\.azurecr\.io/${IMAGE_REPOSITORY}:[A-Za-z0-9._-]+$ ]] \
             || die "IMAGE must look like <acr>.azurecr.io/${IMAGE_REPOSITORY}:<tag>, got '$image'"
         info "container image: $image (Container App will be deployed)"
     else
-        info "no image given: deploying infrastructure only (pass 1)"
+        info "no image given and no Container App exists: deploying infrastructure only (pass 1)"
     fi
     export CONTAINER_IMAGE="$image"
 }

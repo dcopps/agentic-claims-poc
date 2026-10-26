@@ -125,6 +125,17 @@ embedding:
   normalise_embeddings: true
   batch_size: 32
 
+# --- telemetry -------------------------------------------------------------
+
+# Azure Application Insights (Phase 9.2). Unset means telemetry is off and
+# the OpenTelemetry stack is never imported — the state for local dev,
+# Render and the test suite. The Azure Container App supplies the value as
+# the APPLICATIONINSIGHTS_CONNECTION_STRING environment variable (a named
+# alias, like DATABASE_URL); it is ingestion configuration, not a secret,
+# but it is still environment-only so this file carries no deployment ids.
+telemetry:
+  # connection_string: loaded from env — do not put values here
+
 # --- langfuse --------------------------------------------------------------
 
 # LLM observability. Disabled in Phase 1 because no traces are emitted

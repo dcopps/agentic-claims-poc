@@ -7,6 +7,9 @@ isolated TestClient per test session). Everything that mutates the app
 (routers, middleware, lifespan) goes through this factory; nothing is stitched
 on elsewhere.
 
+Telemetry (Phase 9.2) is configured first, before the app object exists, and
+only when `Settings.telemetry.connection_string` is set — see `telemetry.py`.
+
 The lifespan builds the cheap, always-available collaborators once at startup —
 the escalation policy (which also fails fast on a malformed policy file) and the
 in-process event bus — and stashes them on `app.state`. The orchestrator is
@@ -27,6 +30,7 @@ from backend.app.api.health import health_router
 from backend.app.escalation import EscalationPolicy
 from backend.app.orchestrator import PipelineEventBus
 from backend.app.orchestrator.variant_registry import VariantRegistry
+from backend.app.telemetry import configure_telemetry
 from backend.settings import Settings
 
 
@@ -56,6 +60,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     defaults-plus-overlay-plus-env construction.
     """
     cfg = settings if settings is not None else Settings()
+
+    # Before the FastAPI instance exists: the Azure Monitor distro instruments
+    # FastAPI by patching the class, so an app built first would be invisible
+    # to it. A no-op (and import-free) call when no connection string is set.
+    configure_telemetry(cfg.telemetry)
 
     app = FastAPI(
         title=cfg.app_name,

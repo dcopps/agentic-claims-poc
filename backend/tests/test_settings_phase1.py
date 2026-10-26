@@ -115,3 +115,17 @@ def test_extra_keys_rejected_at_top_level(monkeypatch: pytest.MonkeyPatch) -> No
     # overlay flows through.
     with pytest.raises(ValueError):
         Settings(unknown_top_level_key=1)  # type: ignore[call-arg]
+
+
+def test_telemetry_defaults_off() -> None:
+    """No connection string means telemetry is off — the local / Render / CI state."""
+    settings = Settings()
+    assert settings.telemetry.connection_string is None
+
+
+def test_applicationinsights_named_alias_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Container App's env var lands on telemetry.connection_string (Phase 9.2)."""
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "InstrumentationKey=abc")
+    settings = Settings()
+    assert settings.telemetry.connection_string is not None
+    assert settings.telemetry.connection_string.get_secret_value() == "InstrumentationKey=abc"

@@ -67,11 +67,14 @@ The guardrail scenario reproduces **deterministically**: the seeded claim drives
 
 The prototype has two deployment targets from the same repository and the same migrations. Render + Vercel + Neon is the original; **Azure** (Phase 9) backs the production-architecture column with a running system. Nothing on Render, Vercel or Neon is changed by the Azure deployment, and Render / Vercel / Neon remains canonical for demos until Azure has passed the three-scenario verification twice.
 
-| | Render / Vercel / Neon | Azure (Phase 9.1) |
+| | Render / Vercel / Neon | Azure (Phase 9.1 + 9.2) |
 |---|---|---|
+| Frontend | Vercel | Azure Static Web Apps (Free), `navigationFallback` to `index.html`; the resource sits in East US 2 (the service is not offered in North Europe) and serves from a global edge |
 | Backend | Render web service | Azure Container Apps (consumption, 1 vCPU / 2 GiB), image built in-registry with `az acr build` |
 | Database | Neon Postgres 17 + pgvector 0.8, Frankfurt | Azure Database for PostgreSQL Flexible Server 17 + pgvector 0.8, North Europe |
 | Secrets | Render dashboard env vars | Azure Key Vault, read by a user-assigned managed identity (RBAC: *Key Vault Secrets User*, *AcrPull*) |
+| Telemetry | Render log viewer | Application Insights (workspace-based) via the Azure Monitor OpenTelemetry distro: requests, exceptions, Anthropic / Mistral and Postgres dependencies, logs. Off everywhere the connection string is unset |
+| Deploy | Render / Vercel auto-deploy | GitHub Actions on a green CI run on `main`: backend by OIDC on a dedicated managed identity (no stored Azure credential), frontend by the Static Web App's token |
 | Infrastructure | Auto-deploy, no IaC | Bicep (`infra/bicep/`), `what-if` before every deploy |
 | Embedding model | Downloaded at first use | Baked into the image; Hugging Face access is switched off at runtime |
 
@@ -81,26 +84,30 @@ Everything below is detailed in [`infra/bicep/README.md`](infra/bicep/README.md)
 # Prerequisites (once): az login, az bicep install, az extension add --name containerapp,
 # provider registration, a budget alert on the subscription.
 
-scripts/azure-deploy.sh deploy            # pass 1: everything except the Container App
+scripts/azure-deploy.sh deploy            # first time, pass 1: everything except the Container App
 scripts/azure-deploy.sh build             # az acr build → <acr>.azurecr.io/claims-backend:<sha>
-scripts/azure-deploy.sh deploy <image>    # pass 2: the Container App
-scripts/azure-deploy.sh what-if <image>   # idempotence check: no real changes (verified against live state)
+scripts/azure-deploy.sh deploy <image>    # first time, pass 2: the Container App
+scripts/azure-deploy.sh what-if           # later changes: one pass, defaults to the live image; then deploy, then what-if again
 
 # Bootstrap (DATABASE_URL from Key Vault, for one shell only — never in .env):
 uv run alembic --config backend/alembic.ini upgrade head
 uv run python -m backend.data.index_policy
 uv run python -m backend.data.seed_claims --allow-truncate
 
-# Verify, then park it between demos:
+# Deploy on push (once, after the Bicep pass): seven repository variables and one secret —
+# see infra/bicep/README.md → "Deploy on push". From then on, a push to main deploys both tiers.
+
+# Verify — through the UI at the Static Web App URL (all three scenarios; deep links survive a hard reload),
+# or headless against the backend:
 uv run python scripts/verify-demo-scenarios.py --backend https://<app>.northeurope.azurecontainerapps.io
-scripts/azure-stop.sh      # Container App → 0 replicas, Postgres stopped
+scripts/azure-stop.sh      # Container App → 0 replicas, waits for the replica to drain, Postgres stopped
 scripts/azure-start.sh     # the reverse, waits for /health
 
 # Full teardown:
 az group delete --name rg-claimsai-dev --yes && az keyvault purge --name <vault>
 ```
 
-Running cost in the parked state is a few euros a month (registry storage; the B1ms database is within the free-account allowance for 12 months). One warm replica during a demo window costs cents per hour. Out of scope for Phase 9, and listed as gaps in the stack reference: VNet and private endpoints, API Management, Service Bus, Durable Functions, SQL Managed Instance with Ledger Tables, AI Search, Entra sign-in, Langfuse, Document Intelligence, the LoRA adapter, Azure DevOps Pipelines.
+Running cost in the parked state is about €8 a month at list price (registry unit ≈ €4.5, Postgres storage ≈ €3.5; Static Web App Free and Application Insights within the free allowance cost nothing), less if the free-account Postgres allowance applies. One warm replica during a demo window costs about €0.10 an hour at list, inside the Container Apps monthly free grant. Azure restarts a stopped Postgres server after seven days, so a long pause needs `azure-stop.sh` re-run. Out of scope for Phase 9, and listed as gaps in the stack reference: VNet and private endpoints, API Management, Service Bus, Durable Functions, SQL Managed Instance with Ledger Tables, AI Search, Entra sign-in, Langfuse, Document Intelligence, the LoRA adapter, Azure DevOps Pipelines.
 
 ## One-command local setup
 

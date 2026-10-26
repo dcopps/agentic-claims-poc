@@ -10,6 +10,11 @@
 // the environment with no app (the registry must exist before an image can
 // be built); pass 2 supplies the image and creates the app. No placeholder
 // image is ever deployed.
+//
+// Phase 9.2: the app also receives the Application Insights connection string
+// and the OpenTelemetry knobs the backend's telemetry module relies on, and
+// the deployer identity (GitHub Actions) is granted Container Apps Contributor
+// on the app alone, so `az containerapp update --image` is the most it can do.
 
 @description('Managed environment name.')
 param environmentName string
@@ -40,6 +45,12 @@ param mistralApiKeySecretUri string
 @description('JSON list of allowed CORS origins, as pydantic-settings parses it.')
 param corsAllowedOrigins string
 
+@description('Application Insights connection string (ingestion configuration, not a secret).')
+param appInsightsConnectionString string
+
+@description('Principal id of the deployer identity that updates the app image.')
+param deployerPrincipalId string
+
 @description('vCPU as a decimal string, e.g. 1.0.')
 param cpu string
 
@@ -58,24 +69,36 @@ var targetPort = 8000
 
 // Startup: 5 s × 24 = two minutes for image pull plus Python import. /health
 // touches neither the database nor the model, so it measures process liveness.
+// Declared in the order Azure stores and returns them (Liveness, Readiness,
+// Startup) so a what-if does not report the array as reordered.
+var healthPath = '/health'
 var probes = [
   {
-    type: 'Startup'
-    httpGet: { path: '/health', port: targetPort }
-    periodSeconds: 5
-    failureThreshold: 24
+    type: 'Liveness'
+    httpGet: { path: healthPath, port: targetPort }
+    periodSeconds: 30
   }
   {
     type: 'Readiness'
-    httpGet: { path: '/health', port: targetPort }
+    httpGet: { path: healthPath, port: targetPort }
     periodSeconds: 10
   }
   {
-    type: 'Liveness'
-    httpGet: { path: '/health', port: targetPort }
-    periodSeconds: 30
+    type: 'Startup'
+    httpGet: { path: healthPath, port: targetPort }
+    periodSeconds: 5
+    failureThreshold: 24
   }
 ]
+
+// OpenTelemetry's own configuration surface, read by the instrumentors at
+// configure time. The probes above hit /health every few seconds; excluding
+// it keeps probe traffic out of request telemetry (and out of the ingestion
+// allowance). The value is a regex fragment matched against the URL.
+var telemetryExcludedUrls = 'health'
+
+// Built-in role: Container Apps Contributor.
+var containerAppsContributorRoleId = '358470bc-b998-42bd-ab17-a7e34c199c0f'
 
 var deployApp = !empty(containerImage)
 
@@ -149,6 +172,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
             { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
             { name: 'MISTRAL_API_KEY', secretRef: 'mistral-api-key' }
             { name: 'CORS_ALLOWED_ORIGINS', value: corsAllowedOrigins }
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
+            // cloud role name in Application Insights.
+            { name: 'OTEL_SERVICE_NAME', value: appName }
+            { name: 'OTEL_PYTHON_EXCLUDED_URLS', value: telemetryExcludedUrls }
           ]
           probes: probes
         }
@@ -158,6 +185,18 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
         maxReplicas: maxReplicas
       }
     }
+  }
+}
+
+// Deterministic name so redeploys are no-ops. Scoped to the app resource, not
+// the environment or the group: updating this one app is all the deployer does.
+resource deployerAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployApp) {
+  name: guid(resourceGroup().id, appName, deployerPrincipalId, containerAppsContributorRoleId)
+  scope: app
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', containerAppsContributorRoleId)
+    principalId: deployerPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 

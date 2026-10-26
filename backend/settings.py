@@ -3,8 +3,9 @@ Settings model — single source of truth for runtime configuration.
 
 Strategy: defaults live in the Pydantic models below. A YAML overlay (loaded
 from `backend/settings.yaml` if present) supplies environment-specific
-overrides. Environment variables override both, with three named aliases
-(`DATABASE_URL`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`) propagated into
+overrides. Environment variables override both, with four named aliases
+(`DATABASE_URL`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`,
+`APPLICATIONINSIGHTS_CONNECTION_STRING`) propagated into
 their nested sub-model fields ahead of the standard nested-form syntax
 (`DATABASE__URL` etc.) — the named aliases keep deployment configuration
 ergonomic. CLI flags will layer on top in later phases when there's a CLI
@@ -145,6 +146,9 @@ _NAMED_ENV_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("DATABASE_URL", ("database", "url")),
     ("ANTHROPIC_API_KEY", ("llm", "anthropic", "api_key")),
     ("MISTRAL_API_KEY", ("llm", "mistral", "api_key")),
+    # Application Insights publishes its connection string under this exact
+    # name, and the Azure Container App sets it verbatim (Phase 9.2).
+    ("APPLICATIONINSIGHTS_CONNECTION_STRING", ("telemetry", "connection_string")),
 )
 
 # The LLM vendors an agent can be routed to, and the four agents that sit behind
@@ -471,6 +475,23 @@ class LangfuseSettings(BaseModel):
         return self
 
 
+class TelemetrySettings(BaseModel):
+    """
+    Azure Application Insights export (Phase 9.2).
+
+    Strategy: the connection string is the single switch. Absent (local dev,
+    Render, CI, pytest) nothing telemetry-related is imported, let alone
+    started — see `backend/app/telemetry.py`. Present, the OpenTelemetry
+    distro exports requests, exceptions, dependencies and logs to the
+    component the string names. The shape check lives in the configurer,
+    not here, so an unset value never trips validation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    connection_string: SecretStr | None = None
+
+
 class AdjusterSettings(BaseModel):
     """
     Adjuster-agent configuration.
@@ -585,6 +606,9 @@ class Settings(BaseSettings):
     # Phase 4 sub-models.
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
+    # Phase 9.2 sub-models.
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
+
     @model_validator(mode="before")
     @classmethod
     def _apply_overlays(cls, values: Any) -> Any:
@@ -596,7 +620,8 @@ class Settings(BaseSettings):
           2. Values pydantic-settings already collected (init kwargs and
              nested-form env vars like `DATABASE__URL`).
           3. Named env-var aliases (`DATABASE_URL`, `ANTHROPIC_API_KEY`,
-             `MISTRAL_API_KEY`) — applied last so the ergonomic deployment
+             `MISTRAL_API_KEY`, `APPLICATIONINSIGHTS_CONNECTION_STRING`) —
+             applied last so the ergonomic deployment
              form trumps the verbose nested form, per the documented rule.
         """
         # Pydantic also passes model instances when revalidating; pass through.
@@ -698,7 +723,8 @@ def _resolve_database_settings() -> DatabaseSettings:
 def _collect_named_env_aliases() -> dict[str, Any]:
     """
     Resolve the named env aliases (`DATABASE_URL`, `ANTHROPIC_API_KEY`,
-    `MISTRAL_API_KEY`) into a nested overlay dict.
+    `MISTRAL_API_KEY`, `APPLICATIONINSIGHTS_CONNECTION_STRING`) into a
+    nested overlay dict.
 
     Order of resolution per alias: real `os.environ` wins; if absent, fall
     back to a value from `.env` if that file exists. Missing aliases are

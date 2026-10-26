@@ -125,26 +125,29 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 
 Phase 9 deploys the prototype to Azure so that the Azure column of this document is backed by a running system rather than a design. It is a **second deployment of the same repository**: one codebase, one set of Alembic migrations, two clouds. Only the rows that differ from the Render / Vercel / Neon deployment are listed; everything else (framework, agents, audit chain, embedding model, LLM provider) is identical.
 
-| Layer / Concern | Render / Vercel / Neon | Azure (Phase 9.1) | Production (Target) |
+| Layer / Concern | Render / Vercel / Neon | Azure (Phase 9.1 + 9.2) | Production (Target) |
 |---|---|---|---|
 | Backend hosting | Render web service | Azure Container Apps, consumption plan, 1 vCPU / 2 GiB, single revision, `minReplicas` 0 between demos | Azure Container Apps |
 | Container build | Render buildpack (`uv sync`) | `az acr build` from the repo `Dockerfile` into Azure Container Registry (Basic); `bge-small-en-v1.5` baked into the image, Hugging Face access off at runtime; torch pinned to the CPU build on Linux | Image build in the tenant's Azure DevOps pipeline |
 | Claims of record / audit / vector index | Neon (Postgres 17, pgvector 0.8), Frankfurt | Azure Database for PostgreSQL Flexible Server 17, Burstable B1ms, 32 GiB, pgvector 0.8 via `azure.extensions`, North Europe | Azure SQL Managed Instance + Ledger Tables; Azure AI Search |
 | Secrets management | Render dashboard environment variables | Azure Key Vault (RBAC model); the Container App references `DATABASE_URL`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY` from the vault | Azure Key Vault |
-| Identity (services) | None | User-assigned managed identity; exactly two grants: *Key Vault Secrets User* on the vault, *AcrPull* on the registry | Entra ID managed identities |
-| Infrastructure as code | None (auto-deploys) | Bicep: `infra/bicep/main.bicep` + six modules; `what-if` before every deploy | Bicep |
-| Operational observability | Render log viewer | Log Analytics workspace (Application Insights in 9.2) | Azure Monitor + Application Insights |
-| Region | Oregon (Render), Frankfurt (Neon) | North Europe (Dublin) | North Europe primary, West Europe DR |
+| Identity (services) | None | Two user-assigned managed identities with disjoint grants: the backend's (*Key Vault Secrets User*, *AcrPull*) and the deployer's for GitHub Actions (*AcrPush*, *Container Registry Tasks Contributor*, *Container Apps Contributor* on the app), the latter trusted by OIDC federated credential for `main` of one repository | Entra ID managed identities |
+| Infrastructure as code | None (auto-deploys) | Bicep: `infra/bicep/main.bicep` + nine modules; `what-if` before every deploy | Bicep |
+| Operational observability | Render log viewer | Log Analytics workspace + workspace-based Application Insights fed by the Azure Monitor OpenTelemetry distro (requests, exceptions, Anthropic / Mistral and Postgres dependencies, logs; `/health` probes excluded) | Azure Monitor + Application Insights |
+| Region | Oregon (Render), Frankfurt (Neon) | North Europe (Dublin) for everything that holds data; the Static Web App resource in East US 2 (the service is not offered in North Europe and West Europe refused new customers), serving the static bundle from a global edge | North Europe primary, West Europe DR |
 | Network model | Public internet | Public endpoints with firewall rules (Azure services + the deploying machine); TLS enforced | Private VNet, private endpoints, PrivateLink |
-| Frontend hosting | Vercel | Unchanged in 9.1 (Static Web Apps in 9.2) | Azure Container Apps |
+| Frontend hosting | Vercel | Azure Static Web Apps (Free), `navigationFallback` to `index.html`, built and uploaded by GitHub Actions with the app's deployment token | Azure Container Apps |
 | LLM providers | Public Anthropic API (Mistral via `v1_mistral`) | Unchanged in 9.1 (Azure AI Foundry as a third provider in 9.3) | Azure AI Foundry private endpoints |
-| CI / CD | GitHub Actions (test) + Render / Vercel auto-deploy | Unchanged in 9.1 (OIDC deploy workflow in 9.2) | Azure DevOps Pipelines |
+| CI / CD | GitHub Actions (test) + Render / Vercel auto-deploy | GitHub Actions: deploy on a green CI run on `main`; backend by OIDC (no stored credential), image built with `az acr build`, rollout verified against `/health` and the ready revision; infrastructure still deployed from a developer shell with Bicep | Azure DevOps Pipelines |
 
 **Resource inventory (resource group `rg-claimsai-dev`).** Names carry a five-character deterministic suffix where Azure requires global uniqueness.
 
 | Resource | Name |
 |---|---|
-| User-assigned identity | `id-claimsai-dev-backend` |
+| User-assigned identity (runtime) | `id-claimsai-dev-backend` |
+| User-assigned identity (GitHub deployer) | `id-claimsai-dev-deployer` |
+| Application Insights | `appi-claimsai-dev` |
+| Static Web App | `swa-claimsai-dev` (East US 2) |
 | Log Analytics workspace | `log-claimsai-dev` |
 | Key Vault | `kv-claimsai-dev-<suffix>` |
 | Container Registry | `acrclaimsaidev<suffix>` |
@@ -163,7 +166,7 @@ What the Azure prototype deployment deliberately does **not** have, so that the 
 - **Data tier:** Postgres Flexible Server, not SQL Managed Instance; the SHA-256 hash chain, not Ledger Tables; pgvector, not Azure AI Search; no immutable Blob digest.
 - **Database identity:** password authentication with the connection string in Key Vault, not Entra authentication for Postgres (deferred: it needs a token-refreshing connection path and `azure-identity`).
 - **Human identity:** no Entra ID sign-in; single-user demo.
-- **Observability:** Log Analytics only in 9.1 (Application Insights in 9.2); no Langfuse.
+- **Observability:** Application Insights and Log Analytics, but no Langfuse.
 - **AI tier:** no Document Intelligence, no LoRA adapter, no golden eval gate.
 - **Delivery:** GitHub Actions, not Azure DevOps Pipelines; `infra/azure-devops-pipeline.yml` remains a reference.
 

@@ -1,4 +1,4 @@
-// Parameters for the dev deployment (Phase 9.1).
+// Parameters for the dev deployment (Phase 9.1, extended in 9.2).
 //
 // Only names and non-secret values are committed. Every secret and every
 // machine-specific value is read from the environment at deploy time with
@@ -21,7 +21,16 @@ param containerCpu = '1.0'
 param containerMemory = '2Gi'
 param minReplicas = 0
 param maxReplicas = 1
-param corsAllowedOrigins = '["https://agentic-claims-poc.vercel.app"]'
+// The Static Web App origin is appended by main.bicep from the live resource.
+param corsAllowedOrigins = ['https://agentic-claims-poc.vercel.app']
+
+// Phase 9.2: the only repository whose main-branch workflows can deploy, and
+// the Static Web App region. The service is not offered in North Europe, and
+// West Europe refused the resource on 26 October 2026 ("region is currently
+// not accepting new customers"), so this is the nearest region that accepted
+// it. It holds the static bundle and deployment metadata only — no claim data.
+param githubRepository = 'dcopps/agentic-claims-poc'
+param staticWebAppLocation = 'eastus2'
 
 // Secrets and machine-specific values — from the environment only.
 param postgresAdminPassword = readEnvironmentVariable('POSTGRES_ADMIN_PASSWORD')

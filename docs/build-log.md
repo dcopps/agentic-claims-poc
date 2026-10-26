@@ -1155,3 +1155,73 @@ After the restart the ledger was re-read through the app: 12 claims (9 seeded + 
 - **The start script's exit code was not captured** in the round-trip run (a wrapper slip: bash's `PIPESTATUS` under zsh). Success is established by the script's final line, `healthy after 3 attempt(s)`, and by the state checks above.
 
 **Report:** [`docs/prompts/19-phase-9.1-azure-foundation-bicep-container-apps-report.md`](prompts/19-phase-9.1-azure-foundation-bicep-container-apps-report.md)
+
+---
+
+## Phase 9.2 — Frontend on Static Web Apps, OIDC Deploy on Push, Application Insights, Second Verification Pass
+
+**Date:** 26 October 2026 (code); deployment and verification recorded below as they happen
+**Prompt:** [`docs/prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md`](prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md)
+**Plan:** [`docs/prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md`](prompts/20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md) — approved 26 October 2026; decisions in its *Approval* section
+**Version:** `0.9.0 → 0.9.1`
+
+Phase 9.2 makes the Azure deployment complete and self-deploying: the frontend on Azure, both tiers deployed by a push to `main` with no stored cloud credential, telemetry on the backend, and the second three-scenario verification run through the browser so that the pass which unlocks the Render / Neon decision also proves CORS and the SSE stream.
+
+### Findings that shaped the work (measured 26 October 2026)
+
+- **CI on `main` had been red since 15 June 2026 (Phase 6).** `frontend/package-lock.json` was out of sync with `package.json` — the optional `wasm32-wasi` entries (`@emnapi/core`, `@emnapi/runtime`, `@emnapi/wasi-threads` under `@rolldown/binding` and `@tailwindcss/oxide`) were missing — so `npm ci` refused with `EUSAGE` on every run; the Backend job passed throughout. A deploy that depends on CI passing could never have fired. Regenerated with `npm install` (37 insertions, 3 deletions, no direct dependency change) as the first commit of 9.2, `dcc52bd`; `npm ci`, lint, typecheck, build and the 36 frontend tests pass on it.
+- **Resource providers `Microsoft.Web` and `Microsoft.Insights` were `NotRegistered`.** Added to the prerequisites in both READMEs.
+- **Static Web Apps is offered to this subscription in Central US, East US 2, West US 2, West Europe and East Asia — not North Europe.** A read-only `what-if` with `westeurope` was refused: `RequestDisallowedByAzure — The selected region is currently not accepting new customers`. `eastus2` was accepted and is the committed parameter. The resource holds the static bundle and deployment metadata only, served from a global edge; every resource that holds data stays in North Europe.
+- **The Postgres server was `Ready`, not stopped.** The activity log shows the 1 October stop succeeded and no `start` since; Azure's seven-day auto-restart brought it back around 8 October. Left running for the duration of 9.2 at Dermot's direction; `azure-stop.sh` is the last act of the session.
+- **The subscription has been Pay-As-You-Go since 1 October 2026**, so the 30 October credit expiry disables nothing (the plan's §1c was corrected at the approval gate).
+- **Role definitions, read from the subscription:** `AcrPush` cannot queue an `az acr build`; *Container Registry Tasks Contributor* (`fb382eab-…`) holds `scheduleRun/action`, `listBuildSourceUploadUrl/action` and `runs/*`. *Container Apps Contributor* (`358470bc-…`) holds `containerApps/*/write`.
+- **`CORS_ALLOWED_ORIGINS` with two origins** parses to a Python `list` through `Settings()` — verified by running it, no settings change needed.
+
+### What was built
+
+**Infrastructure (`infra/bicep/`).**
+
+- `modules/deployer-identity.bicep` — **new.** A second user-assigned identity, `id-claimsai-dev-deployer`, with a federated identity credential (`github-main`): issuer `https://token.actions.githubusercontent.com`, subject `repo:dcopps/agentic-claims-poc:ref:refs/heads/main`, audience `api://AzureADTokenExchange`. No app registration, no client secret. Separate from the runtime identity so that the principal GitHub can act as cannot read Key Vault and the runtime principal cannot push images or rewrite the app.
+- `modules/staticwebapp.bicep` — **new.** `Microsoft.Web/staticSites@2024-04-01`, Free, no repository link, `stagingEnvironmentPolicy: Disabled`, `allowConfigFileUpdates: true`. Outputs the server-generated `defaultHostname`.
+- `modules/appinsights.bicep` — **new.** `Microsoft.Insights/components@2020-02-02`, workspace-based on `log-claimsai-dev`, `IngestionMode: LogAnalytics`. Outputs the connection string.
+- `modules/acr.bicep` — `pushPrincipalId`; *AcrPush* and *Container Registry Tasks Contributor* for the deployer, scoped to the registry.
+- `modules/containerapps.bicep` — env gains `APPLICATIONINSIGHTS_CONNECTION_STRING` (plain value), `OTEL_SERVICE_NAME` (= the app name, the cloud role) and `OTEL_PYTHON_EXCLUDED_URLS=health` (probe traffic out of request telemetry); *Container Apps Contributor* for the deployer scoped to the app resource, conditional on `deployApp`; probes declared Liveness, Readiness, Startup — the order Azure returns — with values unchanged, which removes the one what-if noise category that was ours.
+- `main.bicep` / `main.bicepparam` — three new modules wired; `corsAllowedOrigins` is now an `array` of committed origins (Vercel) and `main.bicep` appends `https://<static web app hostname>` from the resource's own output, so the frontend origin is never copied from the portal into a file and the whole delta is **one pass**. New params `githubRepository`, `staticWebAppLocation` (`eastus2`); new outputs `deployerClientId`, `deployerPrincipalId`, `appInsightsName`, `staticWebAppName`, `staticWebAppDefaultHostname`. `az bicep build` and `lint`: zero warnings.
+
+**Frontend.** `frontend/public/staticwebapp.config.json` — `navigationFallback` to `/index.html`, excluding `/assets/*` and static file extensions; placed in `public/` so Vite copies it into `dist/`, the folder the workflow uploads (confirmed: `dist/staticwebapp.config.json` after `npm run build`). `frontend/vercel.json` — the SPA rewrite, the backlog item open since Phase 6.
+
+**Workflows (`.github/workflows/`).**
+
+- `deploy-backend.yml` — `workflow_run` on `CI` (`completed`, `main`) + `workflow_dispatch`; `permissions: id-token: write, contents: read`; `concurrency: deploy-backend`, no cancel. Steps: checkout at the CI run's `head_sha` with full history → `azure/login@v2` by OIDC with `vars.AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` → read the deployed image's tag and `git diff --quiet <deployed> <head> -- backend pyproject.toml uv.lock Dockerfile` (unchanged → log and stop; a tag that is not a commit → fail) → `az acr build … --image claims-backend:<short-sha>` → `az containerapp update --image` → `wait_for_health_version` (same 36 × 5 s budget as `azure-start.sh`, must report the `pyproject.toml` version) and `require_active_image` (the latest revision is ready *and* runs the new image — `/health` cannot tell two builds of one version apart).
+- `deploy-frontend.yml` — same trigger; `permissions: contents: read` only (no Azure login); `concurrency: deploy-frontend`. Refuses to run if `vars.AZURE_BACKEND_URL` is empty; `setup-node` 20; `npm ci`; `npm run build` with `VITE_API_BASE_URL`; `Azure/static-web-apps-deploy@v1` with `skip_app_build: true`, `app_location: frontend/dist`, `production_branch: main`, token from `secrets.AZURE_STATIC_WEB_APPS_API_TOKEN`. No path filter, by decision: every green run on `main` redeploys (about ninety seconds, free).
+- Resource names arrive as repository variables because the deployer identity deliberately cannot list the resource group.
+
+**Backend telemetry.** `backend/app/telemetry.py` — `configure_telemetry(settings) -> bool`: strip; empty → `False` **before any `azure.*` / `opentelemetry.*` import** (local dev, Render, CI and pytest never load the SDK); a value without `InstrumentationKey=` → `ValueError` naming the expected shape, the first 60 characters of the value and its length; otherwise `configure_azure_monitor(connection_string=…)` and `PsycopgInstrumentor().instrument()` (psycopg 3 is not bundled by the distro). Called in `create_app()` *before* `FastAPI(...)` is constructed, because the distro instruments FastAPI by patching the class. `TelemetrySettings` (`telemetry.connection_string: SecretStr | None`) in `backend/settings.py`; `APPLICATIONINSIGHTS_CONNECTION_STRING` is the fourth named env alias; `telemetry:` block in `settings.yaml.template`. Warm import of the SDK measured at 0.2–0.4 s on this Mac, under the baseline for `fastapi + anthropic + psycopg` (0.44 s).
+
+**Dependencies** (Option A, approved): `azure-monitor-opentelemetry>=1.8.11` and `opentelemetry-instrumentation-psycopg>=0.66b1`. **Two, not the plan's three:** the current distro already bundles `opentelemetry-instrumentation-httpx`, so the Anthropic and Mistral calls are captured without declaring it. Resolution side effects, checked package by package: 35 packages added (the OpenTelemetry stack, `azure-core`, `azure-identity`, `msal`, `cryptography`…); `mistralai` moved **2.4.5 → 2.10.1** because 2.4.5 capped `opentelemetry-semantic-conventions` below 0.61 while the distro needs 0.66 — the first resolution jumped to **3.5.0**, which broke mypy (`httpx2` types) and would have changed the Mistral provider's runtime, and was rejected by pinning `mistralai>=1.5,<3`; `idna` 3.13 → 3.20; `importlib-metadata` and `zipp` dropped. The Mistral provider tests pass on 2.10.1.
+
+**Scripts.** `scripts/azure-common.sh`: `wait_for_health_version` (200 *and* `.version` equal), `require_active_image` (latest revision ready and running the given image), `wait_for_zero_replicas` (polls `az containerapp replica list` every 15 s for up to 420 s — the 300 s cooldown plus margin — and aborts, leaving Postgres running, if the replica never drains). `scripts/azure-stop.sh` calls the wait before stopping Postgres. `scripts/azure-deploy.sh`: with no image argument it now defaults to the **live** image when a Container App exists (so a Bicep run can never regress the image the workflow deployed) and falls back to pass-1 behaviour only when there is no app. All four pass `bash -n`; no function over 30 lines; `shellcheck` is not installed here.
+
+**Docs.** `README.md` (Azure table: frontend, telemetry, deploy rows; deploy-on-push pointer; cost restated), `infra/bicep/README.md` (layout, prerequisites, one-pass deploy, *Deploy on push* with the seven variables and the token line, RBAC table, decisions), `docs/architecture-stack-reference.md` (Azure column rows and inventory; the observability gap now reads "no Langfuse"), `docs/BACKLOG.md` (deep-link item closed; Render / Neon retirement as a decision item with the $25/month saving; new follow-ons: seven-day auto-restart, frontend always-deploy, the conditional *Managed Identity Operator*), `CLAUDE.md` (Hosting & CI, structure, Current Status, the 9.2 decisions bullet).
+
+### Tests
+
+**Suite: 381 passed, 0 failed, 7 skipped** (375 → +6): four in `backend/tests/test_telemetry.py` (unset → `False` and nothing under `azure.monitor.opentelemetry` / `opentelemetry.instrumentation.psycopg` in `sys.modules`; whitespace counts as unset; malformed → the `ValueError` text including the truncated value and its length, with the SDK still not imported; valid → stub modules injected into `sys.modules` record exactly one `configure_azure_monitor` call with the *stripped* string and one `instrument()`), two in `test_settings_phase1.py` (default off; the named alias lands on `telemetry.connection_string`). `ruff check .` and `uv run mypy backend` (112 files) clean. Frontend: lint, typecheck, build, 36 tests.
+
+### Read-only what-if of the delta (26 October 2026, before any deployment)
+
+Run with the live image (the new default) and `staticWebAppLocation=eastus2`:
+
+| Change | Resources |
+|---|---|
+| Create 4 | `id-claimsai-dev-deployer`, its `federatedIdentityCredentials/github-main`, `staticSites/swa-claimsai-dev`, `components/appi-claimsai-dev` |
+| Modify 1 (real) | `ca-claimsai-dev-backend` — `template.containers` (three new env entries, probe order); the rest of its lines are the 9.1 category-3 noise (`ingress.exposedPort`, `ingress.traffic`, `maxInactiveRevisions`, `runningStatus`) and category-2 `reference()` lines on `registries` and `secrets` |
+| Modify (noise) 3 | Postgres, the managed environment, the registry — the same category-2 / category-3 lines as the 9.1 idempotence run |
+| No change 12 | including the deploying user's *Key Vault Secrets Officer* assignment |
+| Unsupported 5 (was 2) | the backend identity's two assignments plus the deployer's three (`8311e382` AcrPush, `fb382eab` Tasks Contributor, `358470bc` Container Apps Contributor) |
+
+This is the plan's §2c exactly.
+
+### Deployment, verification and the second pass
+
+_To be recorded during the deployment session (Dermot present): provider registration, the Bicep pass, the repository variables and the token secret, the three workflow runs, the three scenarios through the Azure frontend with their correlation ids and the chain over 42 rows, the deep-link reloads on both hosts, the Application Insights observation, the idempotence what-if, cold start before/after telemetry, and `azure-stop.sh` with the replica drain timed._

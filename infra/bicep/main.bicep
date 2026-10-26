@@ -1,11 +1,15 @@
-// Azure foundation for the agentic-claims prototype (Phase 9.1).
+// Azure deployment of the agentic-claims prototype (Phase 9.1, extended in 9.2).
 //
-// Resource-group scope. Wires six single-purpose modules in dependency order:
-// identity → monitoring → postgres → registry → key vault → container apps.
-// Secrets arrive as @secure() parameters supplied from the shell (see
-// main.bicepparam) and land only in Key Vault. Bicep is the only way anything
-// in the resource group is created, so `what-if` is a truthful preview and the
-// deployment is reproducible.
+// Resource-group scope. Wires nine single-purpose modules in dependency order:
+// identities → monitoring → application insights → postgres → registry →
+// key vault → static web app → container apps. Secrets arrive as @secure()
+// parameters supplied from the shell (see main.bicepparam) and land only in
+// Key Vault. Bicep is the only way anything in the resource group is created,
+// so `what-if` is a truthful preview and the deployment is reproducible.
+//
+// The backend's CORS list is composed here from the committed origins plus the
+// Static Web App's server-generated hostname, so the frontend origin is never
+// a value anyone has to copy from the portal into a file.
 
 targetScope = 'resourceGroup'
 
@@ -77,8 +81,14 @@ param minReplicas int = 0
 @minValue(1)
 param maxReplicas int = 1
 
-@description('JSON list of allowed CORS origins.')
-param corsAllowedOrigins string = '["https://agentic-claims-poc.vercel.app"]'
+@description('Allowed CORS origins besides the Static Web App, which is appended automatically.')
+param corsAllowedOrigins array = ['https://agentic-claims-poc.vercel.app']
+
+@description('GitHub repository (owner/name) whose main-branch workflows may deploy.')
+param githubRepository string
+
+@description('Region for the Static Web App; the service is not offered in every region.')
+param staticWebAppLocation string = 'eastus2'
 
 // Deterministic per resource group, so redeploys produce the same names.
 var suffix = take(uniqueString(resourceGroup().id), 5)
@@ -86,6 +96,9 @@ var base = '${namePrefix}-${environmentName}'
 
 var names = {
   identity: 'id-${base}-backend'
+  deployer: 'id-${base}-deployer'
+  appInsights: 'appi-${base}'
+  staticWebApp: 'swa-${base}'
   logAnalytics: 'log-${base}'
   keyVault: 'kv-${base}-${suffix}'
   // Registry names allow alphanumerics only.
@@ -103,6 +116,15 @@ module identity 'modules/identity.bicep' = {
   }
 }
 
+module deployerIdentity 'modules/deployer-identity.bicep' = {
+  name: 'deployerIdentity'
+  params: {
+    name: names.deployer
+    location: location
+    githubRepository: githubRepository
+  }
+}
+
 module monitoring 'modules/monitoring.bicep' = {
   name: 'monitoring'
   params: {
@@ -110,6 +132,26 @@ module monitoring 'modules/monitoring.bicep' = {
     location: location
   }
 }
+
+module appInsights 'modules/appinsights.bicep' = {
+  name: 'appInsights'
+  params: {
+    name: names.appInsights
+    location: location
+    workspaceId: monitoring.outputs.id
+  }
+}
+
+module staticWebApp 'modules/staticwebapp.bicep' = {
+  name: 'staticWebApp'
+  params: {
+    name: names.staticWebApp
+    location: staticWebAppLocation
+  }
+}
+
+// Compact JSON, exactly the form pydantic-settings decodes from the env var.
+var corsOrigins = string(concat(corsAllowedOrigins, ['https://${staticWebApp.outputs.defaultHostname}']))
 
 module postgres 'modules/postgres.bicep' = {
   name: 'postgres'
@@ -133,6 +175,7 @@ module registry 'modules/acr.bicep' = {
     name: names.registry
     location: location
     pullPrincipalId: identity.outputs.principalId
+    pushPrincipalId: deployerIdentity.outputs.principalId
   }
 }
 
@@ -165,7 +208,9 @@ module containerApps 'modules/containerapps.bicep' = {
     databaseUrlSecretUri: keyVault.outputs.databaseUrlSecretUri
     anthropicApiKeySecretUri: keyVault.outputs.anthropicApiKeySecretUri
     mistralApiKeySecretUri: keyVault.outputs.mistralApiKeySecretUri
-    corsAllowedOrigins: corsAllowedOrigins
+    corsAllowedOrigins: corsOrigins
+    appInsightsConnectionString: appInsights.outputs.connectionString
+    deployerPrincipalId: deployerIdentity.outputs.principalId
     cpu: containerCpu
     memory: containerMemory
     minReplicas: minReplicas
@@ -181,3 +226,8 @@ output postgresFqdn string = postgres.outputs.fqdn
 output containerAppName string = containerApps.outputs.appName
 output containerAppFqdn string = containerApps.outputs.appFqdn
 output identityPrincipalId string = identity.outputs.principalId
+output deployerClientId string = deployerIdentity.outputs.clientId
+output deployerPrincipalId string = deployerIdentity.outputs.principalId
+output appInsightsName string = appInsights.outputs.name
+output staticWebAppName string = staticWebApp.outputs.name
+output staticWebAppDefaultHostname string = staticWebApp.outputs.defaultHostname

@@ -1,0 +1,118 @@
+# Deploy the backend to Azure Container Apps after a green CI run on main
+# (Phase 9.2).
+#
+# Trigger: `workflow_run` on CI, so "CI passed on this commit" is a literal
+# precondition rather than a convention. GitHub applies no path filter to
+# workflow_run; instead the job diffs the commit against the image the Container
+# App is running (its tag is the short SHA it was built from) and stops when
+# nothing under the backend paths changed. That is stronger than a path filter:
+# correct across multi-commit pushes, and self-healing after a failed deploy.
+#
+# Authentication is OIDC: azure/login exchanges the job's GitHub token for an
+# Azure token on the deployer managed identity (infra/bicep/modules/
+# deployer-identity.bicep). The ids in the repository variables are identifiers,
+# not credentials. The federated credential trusts only
+# repo:<owner>/<repo>:ref:refs/heads/main, so giving this job a GitHub
+# `environment` would change the token's subject and the login would fail. That
+# is a halt, never a reason to add a stored credential.
+#
+# Infrastructure is not deployed here: Bicep runs from a developer shell via
+# scripts/azure-deploy.sh, because its parameter file reads secrets from that
+# shell's environment.
+name: Deploy backend (Azure)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# Pushes queue; a running deploy is never cancelled mid-update.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: claims-backend
+  # Paths whose change means the image must be rebuilt.
+  BACKEND_PATHS: backend pyproject.toml uv.lock Dockerfile
+
+jobs:
+  deploy:
+    name: Build in ACR and update the Container App
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+      AZURE_CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+      AZURE_BACKEND_URL: ${{ vars.AZURE_BACKEND_URL }}
+      # The commit CI passed on; for a manual run, the branch head.
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          # Full history: the deployed SHA must be reachable for the diff.
+          fetch-depth: 0
+
+      - name: Azure login (OIDC, no stored credential)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install the containerapp CLI extension
+        run: az extension add --name containerapp --only-show-errors
+
+      - name: Compare the commit with the deployed image
+        id: change
+        run: |
+          deployed_image="$(az containerapp show --resource-group "$AZURE_RESOURCE_GROUP" \
+              --name "$AZURE_CONTAINER_APP_NAME" --query 'properties.template.containers[0].image' -o tsv)"
+          deployed_sha="${deployed_image##*:}"
+          echo "deployed image: $deployed_image"
+          # A tag that is not a commit in this repository means something was
+          # deployed outside this workflow; refuse to guess rather than redeploy blindly.
+          git cat-file -e "${deployed_sha}^{commit}" \
+            || { echo "::error::deployed tag '$deployed_sha' is not a commit in this repository"; exit 1; }
+          # shellcheck disable=SC2086  # BACKEND_PATHS is a deliberate word list
+          if git diff --quiet "$deployed_sha" "$TARGET_SHA" -- $BACKEND_PATHS; then
+            echo "backend unchanged since $deployed_sha; nothing to deploy"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the image in ACR
+        id: build
+        if: steps.change.outputs.changed == 'true'
+        run: |
+          short_sha="$(git rev-parse --short "$TARGET_SHA")"
+          az acr build --registry "$AZURE_ACR_NAME" --platform linux/amd64 --file Dockerfile \
+              --image "${IMAGE_REPOSITORY}:${short_sha}" .
+          echo "image=${AZURE_ACR_NAME}.azurecr.io/${IMAGE_REPOSITORY}:${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Point the Container App at the new image
+        if: steps.change.outputs.changed == 'true'
+        run: |
+          az containerapp update --resource-group "$AZURE_RESOURCE_GROUP" \
+              --name "$AZURE_CONTAINER_APP_NAME" --image "${{ steps.build.outputs.image }}" -o none
+
+      - name: Verify the rollout
+        if: steps.change.outputs.changed == 'true'
+        run: |
+          expected="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          # Same polling budget as scripts/azure-start.sh.
+          source scripts/azure-common.sh
+          wait_for_health_version "${AZURE_BACKEND_URL}/health" "$expected"
+          # /health cannot tell two builds of one version apart; the revision can.
+          require_active_image "$AZURE_CONTAINER_APP_NAME" "${{ steps.build.outputs.image }}"

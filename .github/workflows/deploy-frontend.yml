@@ -1,0 +1,78 @@
+# Deploy the frontend to Azure Static Web Apps after a green CI run on main
+# (Phase 9.2).
+#
+# Trigger: `workflow_run` on CI, the same gate as the backend. There is no path
+# filter: GitHub does not apply `paths:` to workflow_run, and a Static Web App
+# exposes no deployed commit to diff against, so every green run on main
+# redeploys — about ninety seconds, free, and the same bytes when nothing
+# changed. (Decided 26 October 2026 over a `push` + `paths` design that would
+# have needed a `checks: read` permission to wait for CI.)
+#
+# The build runs here, not in the action's Oryx step, so the Node version and
+# the commands are exactly CI's, and VITE_API_BASE_URL is set explicitly for
+# the one step that bakes it in. staticwebapp.config.json ships from
+# frontend/public/, which Vite copies into dist/ — the folder this uploads.
+#
+# No Azure login: the Static Web Apps action authenticates with the app's
+# deployment token, the one secret this repository holds
+# (AZURE_STATIC_WEB_APPS_API_TOKEN, set once from `az staticwebapp secrets list`).
+name: Deploy frontend (Azure Static Web Apps)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and upload to Static Web Apps
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_API_BASE_URL: ${{ vars.AZURE_BACKEND_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Require the backend URL
+        # An empty value would bake same-origin API calls into the bundle and
+        # fail only in the browser; refuse here instead.
+        run: |
+          [[ -n "$VITE_API_BASE_URL" ]] \
+            || { echo "::error::repository variable AZURE_BACKEND_URL is not set"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build (API base URL baked in)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: frontend/dist
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
