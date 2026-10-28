@@ -48,6 +48,9 @@ param corsAllowedOrigins string
 @description('Application Insights connection string (ingestion configuration, not a secret).')
 param appInsightsConnectionString string
 
+@description('Adjuster sampling temperature as the LLM__ADJUSTER_TEMPERATURE setting string (Phase 9.2.1).')
+param adjusterTemperature string
+
 @description('Principal id of the deployer identity that updates the app image.')
 param deployerPrincipalId string
 
@@ -176,6 +179,9 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
             // cloud role name in Application Insights.
             { name: 'OTEL_SERVICE_NAME', value: appName }
             { name: 'OTEL_PYTHON_EXCLUDED_URLS', value: telemetryExcludedUrls }
+            // Phase 9.2.1: the deployed Adjuster runs at temperature 0 so the scripted
+            // scenarios hand the Guardrail stable text. The committed default stays 0.2.
+            { name: 'LLM__ADJUSTER_TEMPERATURE', value: adjusterTemperature }
           ]
           probes: probes
         }

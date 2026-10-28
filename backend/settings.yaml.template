@@ -93,6 +93,9 @@ llm:
   doc_parser_temperature: 0.0
   # Adjuster needs a touch of latitude (0.2) to pick a sensible value
   # inside the looked-up range without inviting hallucinated citations.
+  # The deployed stacks run it at 0 via LLM__ADJUSTER_TEMPERATURE (Azure:
+  # infra/bicep/main.bicepparam; Render: dashboard env var) so the scripted
+  # demo scenarios give the Guardrail stable text (Phase 9.2.1).
   adjuster_max_tokens: 768
   adjuster_temperature: 0.2
   # Guardrail is a discrimination task; temperature 0 keeps the flag

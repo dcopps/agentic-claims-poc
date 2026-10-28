@@ -63,6 +63,8 @@ Three pre-loaded scenarios (the "Load demo claim" buttons on the submission form
 
 > **Known issue (found 26 October 2026, both deployments):** the auto-approve scenario currently ends `awaiting_human` on `guardrail_failed`. The Guardrail model's verdict on byte-identical input changed between 1 and 26 October under an unchanged model id, so the scenario no longer settles. The fix (a tighter Guardrail prompt, plus a pre-demo regression fixture) is at the top of [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
+> **Before a demo:** replay the recorded Guardrail runs against the live model — `RUN_LLM_E2E_TESTS=1 uv run pytest backend/tests/test_guardrail_replay.py` with `ANTHROPIC_API_KEY` set. It takes under a minute and a few cents, and it is the check that catches the Guardrail model changing its verdict under an unchanged model id (Phase 9.2.1). The auto-approve run must pass and the guardrail run must still flag.
+
 The guardrail scenario reproduces **deterministically**: the seeded claim drives a demo fixture (a planted hallucinated endorsement) that the Guardrail's regex catches without relying on model non-determinism. The audit trail records `demo_fixture: true`, so the affordance is auditable, not hidden. (See [`docs/design-decisions.md`](docs/design-decisions.md).)
 
 ## Azure deployment

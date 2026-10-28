@@ -58,7 +58,11 @@ _DEFAULT_REQUEST_TIMEOUT_S = 60.0
 # choose a value within the range with a short justification, without
 # encouraging the kind of creative reasoning that produces hallucinated
 # citations. max_tokens=768 holds the JSON object plus a 2000-char
-# reasoning paragraph.
+# reasoning paragraph. The deployed stacks override this to 0 through
+# LLM__ADJUSTER_TEMPERATURE (Azure: infra/bicep/main.bicepparam; Render:
+# a dashboard environment variable) so the scripted demo scenarios hand
+# the Guardrail near-identical reasoning text from run to run (Phase
+# 9.2.1). The committed default keeps the headroom for local work.
 #
 # Guardrail: temperature=0.0 — flagging is a discrimination task, not a
 # generative one. max_tokens=512 holds a small flags list plus a

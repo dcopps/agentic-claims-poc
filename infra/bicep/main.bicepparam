@@ -32,6 +32,12 @@ param corsAllowedOrigins = ['https://agentic-claims-poc.vercel.app']
 param githubRepository = 'dcopps/agentic-claims-poc'
 param staticWebAppLocation = 'eastus2'
 
+// Phase 9.2.1: the deployed Adjuster samples at temperature 0 so the three
+// scripted demo scenarios give the Guardrail near-identical reasoning text from
+// run to run (the committed default in backend/settings.py stays 0.2 for local
+// work). Render carries the same value as a dashboard environment variable.
+param adjusterTemperature = '0'
+
 // Secrets and machine-specific values — from the environment only.
 param postgresAdminPassword = readEnvironmentVariable('POSTGRES_ADMIN_PASSWORD')
 param anthropicApiKey = readEnvironmentVariable('ANTHROPIC_API_KEY')

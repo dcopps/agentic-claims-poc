@@ -41,3 +41,15 @@ def test_user_template_has_required_placeholders() -> None:
         "{rule_flags_already_found}",
     ):
         assert placeholder not in formatted
+
+
+def test_system_prompt_judges_named_citations_and_not_coverage() -> None:
+    """
+    Phase 9.2.1: the prompt must say coverage is decided upstream and name market-range
+    vocabulary as not a citation. Verified to fail on the pre-9.2.1 prompt, which said
+    neither — that prompt's market-data note was a closed list that omitted "market range".
+    """
+    PromptLoader.clear_cache()
+    text = PromptLoader().system("guardrail").lower()
+    assert "coverage has already been decided" in text
+    assert "market range" in text

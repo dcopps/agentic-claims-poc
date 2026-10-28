@@ -113,6 +113,17 @@ opens a vendor-change incident against the provider entry in the
 [DORA register](dora-third-party-register.md). The fix that follows, here a
 Guardrail prompt change, is classified as usual (at least *Normal*).
 
+**The control response (Phase 9.2.1, 28 October 2026).** Classified *Normal*: the
+placeholders did not change, which alone would make it Standard, but the change
+moves an eval result (the auto-approve scenario from `awaiting_human` back to
+`settled`), which is the taxonomy's boundary. The Guardrail's definition of a
+citation was narrowed to a provision named by title or number, with coverage
+explicitly left to the Validator; the change was proven by replaying the recorded
+prompts through the new system prompt against the live model, before and after;
+and the recorded runs were kept as a gated regression fixture that is run before
+each demo — the prototype's stand-in for the scheduled live-model eval. Record in
+the Phase 9.2.1 entry of the [build log](build-log.md).
+
 ## What the prototype has vs. what production adds
 
 The prototype ships the *mechanisms* this taxonomy governs — `variants.yaml`,

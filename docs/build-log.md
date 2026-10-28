@@ -1306,3 +1306,70 @@ The probe-order category is gone (the Bicep now declares Azure's order). The 5 u
 ### Parking
 
 `scripts/azure-stop.sh` is run as the last act of the session, after this entry is committed; it now waits for the replica to drain before stopping Postgres. Its outcome is recorded in `CLAUDE.md` at the start of the next Azure session.
+
+---
+
+## Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)
+
+**Date:** 28 October 2026 (prompt, fixture, script, infra; **Azure session pending**)
+**Prompt:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix.md)
+**Plan:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md) — approved 28 October 2026; decisions in its *Approval* section
+**Version:** `0.9.1 → 0.9.1.1`
+**Status:** built and locally verified; stopped before the Azure steps (fixture extraction from the Azure database, the before/after replay on those fixtures, the Bicep deploy, the push and the deployed verification) so Dermot can be present.
+
+### What was broken
+
+Since at least 26 October the $85k Harborline auto-approve scenario ended `awaiting_human` on `guardrail_failed`, raised by the Guardrail's **LLM check alone**; the rule engine found nothing. Replaying the recorded prompts to `claude-haiku-4-5-20251001` at temperature 0 reproduced it, including pass one's 1 October prompt that had passed then (Phase 9.2 *Recorded exception*).
+
+The prompt, not the model, was the thing we could change. `guardrail.md` defined a hallucinated citation correctly in *Role* and then overrode it in step 2 of *How to reason*: *"Any policy reference in the reasoning that does not appear in the chunks (by section name **or by the chunk content**) is a hallucination, **regardless of how plausible it sounds**."* "By the chunk content" licensed comparing the substance of the reasoning with the substance of the policy — coverage adjudication, the Validator's job — which is how *"sudden failure"* was judged against the centrifugal-force exclusion. "Regardless of how plausible" inverted the burden to "when in doubt, flag", which is how the settlement amount became a finding for lacking a policy section. The market-data note sat under that rule as an aside with a closed list of four quoted phrases; *"moderate-severity band"* and *"market range"* were not on it. Supporting evidence: the 21 September Render run (`ded5557b`, passed with `[]`) already contained *"sudden, accidental rupture of a water supply line"* and *"moderate-severity range"* — the vocabulary never changed. The Adjuster produces peril paraphrases by construction, because its template hands it the Validator's policy basis.
+
+### The fix — one prompt file
+
+`backend/app/prompts/system/guardrail.md` (full text in plan §2; the *Output format* section is byte-identical to before, checked programmatically when the file was written). What changed:
+
+- A new section, *What is, and is not, a policy citation*: **coverage has already been decided** upstream and is not re-judged; a citation is a provision named by title or number (*"Endorsement Coastal Surge Rider"*, *"Section 4.2"*, *"the Debris Removal sub-limit"*); an explicit list of what is **not** a citation — peril descriptions and paraphrases, settlement-method vocabulary (*market range*, *market band*, *moderate-severity band*, *mid-range*, *lookup table*, …, "any wording about where a value sits in a range"), severity labels, third-party findings, the recommended amount, references to the validator's decision.
+- *How to reason* reordered to start from the reasoning: list the candidate citations the Adjuster actually named; then flag only those absent from the chunks. The old ordering started from the chunks and asked what in the reasoning was unsupported.
+- "Regardless of how plausible it sounds" and "the only authoritative source" dropped from the system prompt (the template's heading keeps the latter, where it is correct for the narrower question).
+- The user template is byte-identical, so every recorded `prompt.user` stays comparable across the change.
+
+Deliberately given up: unnamed claims about policy substance are no longer the LLM check's business. The rule engine (`_CITATION_CANDIDATE_RE`, untouched) and the Coral Bay must-flag case cover named provisions. `policy.yaml` untouched.
+
+### Replay regression fixture
+
+- `backend/tests/guardrail_replay_fixture.py` — the fixture contract (`ReplayFixture`, Pydantic, `extra="forbid"`): correlation id, label, recorded time, source, `expected` (`pass` | `flag_hallucinated_citation`), the recorded outcome and system-prompt hash as provenance, and `inputs` — the four `guardrail_template` values. Values, not the recorded full prompt, so the test is forced through the current system prompt and template.
+- `backend/tests/test_guardrail_replay.py` — contract tests that always run (every fixture parses; the corpus contains the four required runs; a malformed fixture is refused by name) and live tests gated by `RUN_LLM_E2E_TESTS=1` + `ANTHROPIC_API_KEY`: each fixture replayed 3× through the current prompt, built and parsed exactly as `Guardrail._invoke_llm` does; `pass` means no `hallucinated_citation` flag in any repetition, `flag` means one in every repetition; the failure message lists every repetition's flags. Plus the Coral Bay case with the pre-detected findings replaced by the agent's own sentinel, so the model must find the invented endorsement without the rule engine's help.
+- `scripts/extract-guardrail-replay-fixture.py` — read-only extraction from a deployed database. Reads only `REPLAY_SOURCE_DATABASE_URL` (never `DATABASE_URL` / `TEST_DATABASE_URL`), sets the psycopg connection read-only, prints the hostname only, refuses to overwrite. Recovers the four values by matching the recorded `llm_call.prompt.user` against the template itself (each `{placeholder}` becomes a capture group, the literal text is escaped), then proves the recovery lossless: re-rendering the template must reproduce the recorded prompt byte for byte, and the recovered reasoning and settlement must equal the `settlement_estimate` row's. Runs the Guardrail's PII patterns over the file text before writing. The client-name guard is `test_anonymisation.py`, which scans the fixture directory in CI.
+- **Corpus so far:** `ded5557b-harborline-render-21-september.json` — the fifth (optional) fixture from the Render / Neon database, extracted today; round-trip and Adjuster-row checks passed. The four Azure fixtures (`08d514f2`, `8590b47e`, `f02fb888`, `b35b146b`) are extracted in the Azure session. Until then `test_corpus_contains_the_four_required_runs` fails by design — it is the tripwire that the corpus is incomplete.
+
+### Mutation proof — what has been observed so far
+
+| Case | Old prompt (28 Oct) | New prompt (28 Oct) |
+|---|---|---|
+| `test_guardrail_prompts::test_system_prompt_judges_named_citations_and_not_coverage` | **fails** (neither statement present) | passes |
+| `ded5557b` Harborline, Render, 21 September (expected `pass`) | **passed 3 / 3 — did not reproduce the finding** | passed 3 / 3 |
+| `08d514f2`, `8590b47e`, `f02fb888` Harborline (Azure; expected `pass`) | pending Azure session | pending |
+| `b35b146b` Coral Bay (Azure; expected `flag`), as recorded and with the rule findings blanked | pending Azure session | pending |
+
+Recorded as observed: the 21 September text, which says *"moderate-severity range"* rather than *"moderate-severity band"* / *"market range"*, passed under the old prompt today. It is not one of the three runs that failed on 26 October, so it neither confirms nor contradicts the finding; the four Azure runs are the proof. For their "before" run the old prompt is taken from git (`2d6ad0c:backend/app/prompts/system/guardrail.md`) into the working tree for the duration of the run, then restored.
+
+### Adjuster temperature — option (a)
+
+`LLM__ADJUSTER_TEMPERATURE=0` on the deployed stacks only; the committed default stays `0.2`. Azure: new `adjusterTemperature` parameter in `infra/bicep/modules/containerapps.bicep` and `main.bicep` (default `'0'`), value `'0'` in `main.bicepparam` with the reason, env entry `LLM__ADJUSTER_TEMPERATURE` on the Container App. `az bicep build` and `lint` clean. **Not yet deployed.** Render: Dermot sets the variable in the dashboard. The comments on `_DEFAULT_ADJUSTER_TEMPERATURE` in `settings.py` and on `adjuster_temperature` in `settings.yaml.template` say where the deployed value lives.
+
+### Change governance
+
+*Normal.* The placeholders did not change (Standard on structure alone) but the change moves an eval result — the auto-approve scenario from `awaiting_human` to `settled` — which is the taxonomy's boundary. Trigger: vendor behaviour change under a pinned model id, detected by the audit trail (26 October). Approver: Dermot, as the AI Change Control Board, at the plan's approval gate (28 October). Tests: the replay fixture before and after, the golden-shape test, the full suite. Gate: CI green → deploy on push, then the three-scenario verification on both stacks. Post-deploy: the fixture is the pre-demo check (`README.md`, *Live demo*). `change-governance.md` and the DORA register carry the control-response note.
+
+### Tests
+
+Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three contract tests, one golden-shape), +2 gated live tests; the one failure is the corpus tripwire above. `ruff check .` and `uv run mypy backend` clean (114 files). Bicep build and lint clean.
+
+### Pending — the Azure session (Dermot present)
+
+1. `scripts/azure-start.sh`; record the Postgres state (stopped 26 October; self-restart due about 2 November). Optional: measure cold start from zero replicas on the `2b662da` image.
+2. Extract the four Azure fixtures with `scripts/extract-guardrail-replay-fixture.py` (`REPLAY_SOURCE_DATABASE_URL` from the Key Vault `database-url` secret; read-only; hostname only). Firewall: if this machine's public IP has changed since 26 October the connection is refused and the fix is a Bicep redeploy with the new `DEPLOYER_CLIENT_IP`.
+3. Replay the four against the **old** prompt (from git) and the **new** prompt; fill the table above with per-repetition flags.
+4. `scripts/azure-deploy.sh what-if` (expect one real modify: the env entry) then `deploy`. Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render.
+5. Commit the fixtures and the table; push. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
+6. Three scenarios on Azure through the UI, then on Render with `scripts/verify-demo-scenarios.py --backend <render-url>`. Expected `settled` / `awaiting_human` (`settlement_over_ceiling`) / `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), seven entries each, chain `ok`. Halt and diagnose if Harborline still escalates.
+7. Remove the README known-issue note; close the two backlog items; finish this entry, the report and `CLAUDE.md`; commit; push; `scripts/azure-stop.sh` last.

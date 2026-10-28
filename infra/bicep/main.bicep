@@ -90,6 +90,9 @@ param githubRepository string
 @description('Region for the Static Web App; the service is not offered in every region.')
 param staticWebAppLocation string = 'eastus2'
 
+@description('Adjuster sampling temperature for the deployed backend (LLM__ADJUSTER_TEMPERATURE).')
+param adjusterTemperature string = '0'
+
 // Deterministic per resource group, so redeploys produce the same names.
 var suffix = take(uniqueString(resourceGroup().id), 5)
 var base = '${namePrefix}-${environmentName}'
@@ -210,6 +213,7 @@ module containerApps 'modules/containerapps.bicep' = {
     mistralApiKeySecretUri: keyVault.outputs.mistralApiKeySecretUri
     corsAllowedOrigins: corsOrigins
     appInsightsConnectionString: appInsights.outputs.connectionString
+    adjusterTemperature: adjusterTemperature
     deployerPrincipalId: deployerIdentity.outputs.principalId
     cpu: containerCpu
     memory: containerMemory

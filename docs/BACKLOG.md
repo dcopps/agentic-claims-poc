@@ -42,6 +42,8 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 ## Findings from the 26 October 2026 verification (demo-visible — before the next demo)
 
+**Status (28 October 2026): both items are being resolved by Phase 9.2.1** — plan [`prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md). The prompt change, the replay fixture (`backend/tests/test_guardrail_replay.py`, corpus under `backend/tests/fixtures/guardrail_replay/`), the extraction script and the Bicep temperature parameter are built; the four Azure fixtures, the before/after replay on them, the Bicep deploy and the deployed verification wait for the Azure session. Close both items when the build-log entry records the deployed verification.
+
 Found in Phase 9.2's second verification pass. **Both affect the Render / Vercel / Neon demo as well as Azure**: the same model id and prompts run on both. Until they are addressed, the $85k Harborline auto-approve scenario cannot be relied on to settle. Evidence is in the *Recorded exception* of the Phase 9.2 entry in [`build-log.md`](build-log.md).
 
 ### Guardrail false positives on Harborline
@@ -65,7 +67,7 @@ Scope notes:
 
 ## Phase 9 — Azure deployment (in progress; 9.1 verified 1 October 2026, 9.2 deployed and verified 26 October 2026)
 
-Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19–21): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (**complete** 26 October 2026; pass two passed with the Harborline terminal state as a recorded exception — see the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19, 20 and 22; prompt 21 is the 9.2.1 point release): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (**complete** 26 October 2026; pass two passed with the Harborline terminal state as a recorded exception — see the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
 
 ### Decision: retire Render / Neon? (open since 26 October 2026)
 
@@ -182,7 +184,7 @@ Suggested in the Phase 8.5.3 plan by Claude Code; logged, not built.
 
 ### Render environment-variable inventory in `render.yaml`
 
-Risk 1 of the Phase 8.5.2 plan (*"is there an `LLM__MISTRAL__*` override on Render?"*) needed a dashboard visit to answer. Render's Blueprint format supports an `envVars` block where `sync: false` declares a variable's *name* without its value, so the inventory of what the deployed backend expects (`ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`, and any future `LLM__*` overrides) can live in the repo with no secrets. Turns the check into a file read and documents the deployment contract. Would also have shortened the July CORS diagnosis.
+Risk 1 of the Phase 8.5.2 plan (*"is there an `LLM__MISTRAL__*` override on Render?"*) needed a dashboard visit to answer. Render's Blueprint format supports an `envVars` block where `sync: false` declares a variable's *name* without its value, so the inventory of what the deployed backend expects (`ANTHROPIC_API_KEY`, `CORS_ALLOWED_ORIGINS`, `DATABASE_URL`, `MISTRAL_API_KEY`, `LLM__ADJUSTER_TEMPERATURE` — the first non-secret override, set to `0` in Phase 9.2.1 — and any future `LLM__*` overrides) can live in the repo with no secrets. Turns the check into a file read and documents the deployment contract. Would also have shortened the July CORS diagnosis.
 
 Suggested in the Phase 8.5.2 report by Claude Code; logged, not built. Considered again at the Phase 9.1 approval gate (1 October 2026) and kept here: Phase 9.1 forbids changes on Render, and the Azure side now documents the same four-variable contract in `infra/bicep/modules/containerapps.bicep`.
 
