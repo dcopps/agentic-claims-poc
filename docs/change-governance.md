@@ -124,6 +124,16 @@ and the recorded runs were kept as a gated regression fixture that is run before
 each demo — the prototype's stand-in for the scheduled live-model eval. Record in
 the Phase 9.2.1 entry of the [build log](build-log.md).
 
+**Outcome (29 October 2026).** Partially effective. The change shipped to both
+stacks as `0.9.1.1`; the scenario settled through the Azure frontend but escalated
+again through the verification script against Render, on an Adjuster text outside
+the fixture corpus. The eval did its job — it recorded the miss — and the lesson is
+that a prompt is not a control one can rely on against vendor drift: the verdict
+stayed sensitive to wording. Phase 9.2.2 moves the control into code (an LLM
+citation flag counts only when the phrase it quotes is present in the reasoning
+and has the shape of a named provision), which is a *Normal* change with the same
+record. The closed phase is *partially verified*, not *verified*.
+
 ## What the prototype has vs. what production adds
 
 The prototype ships the *mechanisms* this taxonomy governs — `variants.yaml`,

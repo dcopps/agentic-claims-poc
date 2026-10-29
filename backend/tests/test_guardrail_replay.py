@@ -15,8 +15,12 @@ Two layers:
   - Contract tests (always run, no network): every fixture file parses against
     `ReplayFixture`, and the corpus contains the four runs the phase requires.
   - Live tests, gated like every other real-LLM test (`RUN_LLM_E2E_TESTS=1` plus
-    `ANTHROPIC_API_KEY`; never in CI). Each run makes 3 calls per case; with five
-    fixtures and the no-rule-engine case that is 18 Haiku calls, a few cents.
+    `ANTHROPIC_API_KEY`; never in CI). Each run makes 3 calls per case; with six
+    fixtures and the no-rule-engine case that is 21 Haiku calls, a few cents.
+
+A fixture the current prompt does not satisfy stays in the corpus on purpose: the
+pre-demo check must fail until the behaviour is fixed, not describe the subset that
+happens to pass. `8e886c66` (Render, 29 October 2026) is that case until Phase 9.2.2.
 """
 
 from __future__ import annotations
