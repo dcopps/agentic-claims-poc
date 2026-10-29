@@ -1315,7 +1315,7 @@ The probe-order category is gone (the Bicep now declares Azure's order). The 5 u
 **Prompt:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix.md)
 **Plan:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md) — approved 28 October 2026; decisions in its *Approval* section
 **Version:** `0.9.1 → 0.9.1.1`
-**Status:** built and locally verified; the four Azure fixtures are extracted and committed; the before/after replay is recorded below. **The approved system-prompt text alone does not meet the must-pass bar** (two of three Harborline runs still flag on *market range*); a template-side variant does, on two samples, and adopting it revises decision D5 — awaiting Dermot. Not deployed, not pushed.
+**Status:** built and locally verified; the four Azure fixtures are extracted and committed; the before/after replay is recorded below. The approved system-prompt text alone did not meet the must-pass bar (two of three Harborline runs still flagged on *market range*); **template variant v3 adopted 29 October 2026 (D5 revised, reason in the plan's *Approval* section)**. Deploy and verification follow in part two of the Azure session.
 
 ### What was broken
 
@@ -1330,7 +1330,7 @@ The prompt, not the model, was the thing we could change. `guardrail.md` defined
 - A new section, *What is, and is not, a policy citation*: **coverage has already been decided** upstream and is not re-judged; a citation is a provision named by title or number (*"Endorsement Coastal Surge Rider"*, *"Section 4.2"*, *"the Debris Removal sub-limit"*); an explicit list of what is **not** a citation — peril descriptions and paraphrases, settlement-method vocabulary (*market range*, *market band*, *moderate-severity band*, *mid-range*, *lookup table*, …, "any wording about where a value sits in a range"), severity labels, third-party findings, the recommended amount, references to the validator's decision.
 - *How to reason* reordered to start from the reasoning: list the candidate citations the Adjuster actually named; then flag only those absent from the chunks. The old ordering started from the chunks and asked what in the reasoning was unsupported.
 - "Regardless of how plausible it sounds" and "the only authoritative source" dropped from the system prompt (the template's heading keeps the latter, where it is correct for the narrower question).
-- The user template is byte-identical, so every recorded `prompt.user` stays comparable across the change.
+- The user template was to stay byte-identical (D5). **Revised 29 October:** two edits to `backend/app/prompts/user/guardrail_template.md` — the chunks heading loses *"(the only authoritative source)"*, and the *Task* paragraph tells the model to apply the system instructions (list the provisions the reasoning names by title or number; flag only those absent; settlement vocabulary and peril descriptions are not citations) before the PII and bias scan. Placeholders unchanged. See *Template-side experiment* below for why.
 
 Deliberately given up: unnamed claims about policy substance are no longer the LLM check's business. The rule engine (`_CITATION_CANDIDATE_RE`, untouched) and the Coral Bay must-flag case cover named provisions. `policy.yaml` untouched.
 
@@ -1374,7 +1374,7 @@ Azure rows recorded 28–29 October 2026, 3 repetitions each at temperature 0; t
 | `b35b146b` rule findings blanked | flag | flagged 3 / 3, 3 / 3 | flagged 3 / 3 | flagged 3 / 3, 3 / 3 |
 | `ded5557b` Render 21 Sep | pass | pass 3 / 3, 3 / 3 | pass 3 / 3 | pass 3 / 3, 3 / 3 |
 
-**Reading.** The heading is the dominant lever: removing *"(the only authoritative source)"* alone clears two of the three Harborline runs and leaves the model visibly torn on the third. Rewriting the *Task* line while the heading stays brings coverage re-adjudication back on all three (*"supply line" is not a covered component*), worse than the approved text. Only the two edits together meet the phase's bar: all three Harborline runs pass and Coral Bay still flags without the rule engine, on two independent samples (36 calls). Adopting v3 revises decision D5 (template byte-identical), so it waits for Dermot. The swing between three different failure modes on single-sentence template edits is itself a finding: the LLM check's verdict is not robust to wording, which argues for code verifying the model's claim (proposed Phase 9.2.2 in `docs/BACKLOG.md`) whichever prompt ships.
+**Reading.** The heading is the dominant lever: removing *"(the only authoritative source)"* alone clears two of the three Harborline runs and leaves the model visibly torn on the third. Rewriting the *Task* line while the heading stays brings coverage re-adjudication back on all three (*"supply line" is not a covered component*), worse than the approved text. Only the two edits together meet the phase's bar: all three Harborline runs pass and Coral Bay still flags without the rule engine, on two independent samples (36 calls). **Decision (Dermot, 29 October 2026): v3 adopted; D5 revised**, reason recorded in the plan's *Approval* section. The template committed in the repo is byte-identical to the v3 variant tested (`ee22f213d9fc`). The swing between three different failure modes on single-sentence template edits is itself a finding: the LLM check's verdict is not robust to wording, which argues for code verifying the model's claim (proposed Phase 9.2.2 in `docs/BACKLOG.md`) whichever prompt ships.
 
 ### Adjuster temperature — option (a)
 
@@ -1390,7 +1390,7 @@ Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three con
 
 ### Pending — the Azure session, part two (Dermot present)
 
-0. **Decision:** adopt template variant v3 (revises D5; the replay corpus is then re-run through the committed files as the proof), or stop here and schedule the proposed Phase 9.2.2. Steps 1–3 of the original list are done (above).
+0. ~~Decision~~ — v3 adopted. Steps 1–3 of the original list are done (above). **Confirmation run through the committed files:** see *Confirmation replay* below once recorded.
 4. `scripts/azure-deploy.sh what-if` (expect one real modify: the env entry) then `deploy`. Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render.
 5. Commit the fixtures and the table; push. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
 6. Three scenarios on Azure through the UI, then on Render with `scripts/verify-demo-scenarios.py --backend <render-url>`. Expected `settled` / `awaiting_human` (`settlement_over_ceiling`) / `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), seven entries each, chain `ok`. Halt and diagnose if Harborline still escalates.

@@ -5,7 +5,7 @@
 
 {adjuster_reasoning}
 
-# Retrieved policy chunks (the only authoritative source)
+# Retrieved policy chunks
 
 {retrieved_chunks}
 
@@ -15,4 +15,4 @@
 
 # Task
 
-Scan the adjuster's reasoning for additional PII leakage, hallucinated policy citations, and bias not already raised by the rule engine. Return the JSON object specified in your system instructions — `flags: []` if nothing new was found.
+Apply your system instructions to the adjuster's reasoning above. For citations: first list every policy provision the reasoning names by title or number; flag only those absent from the retrieved chunks. Settlement-method vocabulary, severity or market bands and descriptions of the peril are not citations and are not flagged. Also report PII leakage and bias not already raised by the rule engine. Return the JSON object specified in your system instructions — `flags: []` if nothing new was found.
