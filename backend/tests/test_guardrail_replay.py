@@ -159,11 +159,25 @@ def _describe(label: str, runs: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def _assert_verdict(expected: ExpectedVerdict, label: str, runs: list[list[str]]) -> None:
-    """`pass` means no citation flag in any repetition; `flag` means one in every repetition."""
+def _assert_verdict(
+    expected: ExpectedVerdict,
+    label: str,
+    runs: list[list[str]],
+    *,
+    rule_engine_already_flagged: bool = False,
+) -> None:
+    """
+    `pass` means no citation flag in any repetition; `flag` means one in every repetition.
+
+    A `flag` fixture whose recorded pre-detected findings already carry the rule
+    engine's citation flag is judged as the agent judges it — rule flags and LLM
+    flags combined — so a model that correctly declines to duplicate the rule
+    engine does not fail the test. The LLM-alone assertion for that case is
+    `test_invented_endorsement_is_caught_without_the_rule_engine`.
+    """
     if expected == "pass":
         assert all(not details for details in runs), _describe(label, runs)
-    else:
+    elif not rule_engine_already_flagged:
         assert all(details for details in runs), _describe(label, runs)
 
 
@@ -175,12 +189,28 @@ def test_recorded_input_gets_expected_verdict(
     db_settings: Settings,
     prompt_loader: PromptLoader,
 ) -> None:
-    """The current prompt reaches the expected verdict on each recorded run, 3 of 3."""
+    """
+    The current prompt reaches the expected verdict on each recorded run, 3 of 3.
+
+    Every replay must parse as the agent would parse it; the verdict rule is in
+    `_assert_verdict`.
+    """
     fixture = load_replay_fixture(path)
     runs = _replay(
         fixture.inputs, provider=live_provider, settings=db_settings, loader=prompt_loader
     )
-    _assert_verdict(fixture.expected, fixture.label, runs)
+    _assert_verdict(
+        fixture.expected,
+        fixture.label,
+        runs,
+        rule_engine_already_flagged=_rule_engine_flagged_a_citation(fixture),
+    )
+
+
+def _rule_engine_flagged_a_citation(fixture: ReplayFixture) -> bool:
+    return any(
+        flag.get("kind") == "hallucinated_citation" for flag in fixture.recorded_outcome.rule_flags
+    )
 
 
 @_LIVE

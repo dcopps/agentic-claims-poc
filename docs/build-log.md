@@ -1311,11 +1311,11 @@ The probe-order category is gone (the Bicep now declares Azure's order). The 5 u
 
 ## Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)
 
-**Date:** 28 October 2026 (prompt, fixture, script, infra; **Azure session pending**)
+**Date:** 28 October 2026 (prompt, fixture, script, infra); 29 October 2026 (Azure session part one: fixtures, replay, template experiment — **decision pending, nothing deployed**)
 **Prompt:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix.md)
 **Plan:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md) — approved 28 October 2026; decisions in its *Approval* section
 **Version:** `0.9.1 → 0.9.1.1`
-**Status:** built and locally verified; stopped before the Azure steps (fixture extraction from the Azure database, the before/after replay on those fixtures, the Bicep deploy, the push and the deployed verification) so Dermot can be present.
+**Status:** built and locally verified; the four Azure fixtures are extracted and committed; the before/after replay is recorded below. **The approved system-prompt text alone does not meet the must-pass bar** (two of three Harborline runs still flag on *market range*); a template-side variant does, on two samples, and adopting it revises decision D5 — awaiting Dermot. Not deployed, not pushed.
 
 ### What was broken
 
@@ -1347,10 +1347,34 @@ Deliberately given up: unnamed claims about policy substance are no longer the L
 |---|---|---|
 | `test_guardrail_prompts::test_system_prompt_judges_named_citations_and_not_coverage` | **fails** (neither statement present) | passes |
 | `ded5557b` Harborline, Render, 21 September (expected `pass`) | **passed 3 / 3 — did not reproduce the finding** | passed 3 / 3 |
-| `08d514f2`, `8590b47e`, `f02fb888` Harborline (Azure; expected `pass`) | pending Azure session | pending |
-| `b35b146b` Coral Bay (Azure; expected `flag`), as recorded and with the rule findings blanked | pending Azure session | pending |
+| `08d514f2` Harborline pass one, 1 October (expected `pass`) | **flagged 3 / 3** — *"market band / market range as policy-based settlement framework"* | **flagged 3 / 3** — *"moderate-severity market range and market band as policy provisions, but these are settlement methodology terms"* |
+| `8590b47e` Harborline pass two, 26 October 17:08 (expected `pass`) | **flagged 3 / 3** — *"sudden failure as covered basis … rupture excluded"* | passed 3 / 3 |
+| `f02fb888` Harborline pass two, 26 October 17:28 (expected `pass`) | **flagged 3 / 3** — market vocabulary **and** *"no policy section authorizing the amount"* | **flagged 3 / 3** — market vocabulary only; the amount flag is gone |
+| `b35b146b` Coral Bay as recorded (expected `flag`) | flagged 3 / 3 (duplicated the rule engine's flag) | no LLM flag 3 / 3 — correctly declines to duplicate; the combined verdict still fails on the rule flag |
+| `b35b146b` Coral Bay with the rule findings blanked (expected `flag`) | flagged 3 / 3 | flagged 3 / 3 (*"Endorsement Coastal Surge Rider named but absent"*) |
 
-Recorded as observed: the 21 September text, which says *"moderate-severity range"* rather than *"moderate-severity band"* / *"market range"*, passed under the old prompt today. It is not one of the three runs that failed on 26 October, so it neither confirms nor contradicts the finding; the four Azure runs are the proof. For their "before" run the old prompt is taken from git (`2d6ad0c:backend/app/prompts/system/guardrail.md`) into the working tree for the duration of the run, then restored.
+Azure rows recorded 28–29 October 2026, 3 repetitions each at temperature 0; the model was fully deterministic across repetitions in every cell. The "before" run used the old prompt from git (`2d6ad0c:backend/app/prompts/system/guardrail.md`) in the working tree for the duration of the run, then restored (sha `62f037e34e51` → `c44d05b12988`). The 21 September Render text, which says *"moderate-severity range"* rather than *"market range"*, passed under the old prompt too; it is not one of the three runs that failed on 26 October, so it neither confirms nor contradicts the finding.
+
+**Reading.** The approved text removed the two failure modes the diagnosis attributed to the old step 2 — coverage re-adjudication (*"sudden failure"*) and the amount-needs-a-citation flag — and the invented endorsement is still caught without the rule engine. It did **not** remove the market-vocabulary flag. **The trigger is the literal phrase *market range*:** the two texts that contain it (`08d514f2`, `f02fb888`) flag under both prompts; the three that say *market band* or *moderate-severity range* instead (`8590b47e`, `ded5557b`, and the Coral Bay text) do not. The model flags the phrase while conceding in the same `detail` that it is *"settlement methodology"*, and its summary reads *"the reasoning conflates internal market-data settlement bands with policy language"*. A tightened system-only revision (citation must contain a provision word or a number; worked examples; never committed) produced the identical detail text. The system prompt's definition is not where this verdict is decided.
+
+### Azure session part one — 29 October 2026 (observed)
+
+- `scripts/azure-start.sh`: Postgres was `Stopped` (parked 26 October) and started cleanly; 3 min 27 s; one warm replica on `2b662da`, `/health` `0.9.1`. **Cold start from zero replicas, first `/health` on the current image with telemetry on: 34.2 s** (9.1 baseline 28.0 s). Closes the backlog measurement.
+- Fixtures `08d514f2`, `8590b47e`, `f02fb888`, `b35b146b` extracted read-only through `scripts/extract-guardrail-replay-fixture.py`; the firewall accepted this machine's IP; round-trip and Adjuster-row checks passed on all four; the recorded flags match the 26 October diagnosis word for word. Committed.
+- Test rule corrected: a `flag` fixture whose recorded pre-detected findings already carry the rule engine's citation flag is judged as the agent judges it, rule and LLM flags combined (`_assert_verdict(…, rule_engine_already_flagged=True)`), so the as-recorded Coral Bay case no longer fails when the model correctly declines to duplicate. The LLM-alone assertion stays in `test_invented_endorsement_is_caught_without_the_rule_engine`.
+
+**Template-side experiment (scratchpad only, nothing in the repo changed; HEAD system prompt `c44d05b12988` in all three).** Hypothesis: the user template's heading *"Retrieved policy chunks (the only authoritative source)"* and its *Task* line *"scan … for hallucinated policy citations"* sit next to the chunks and outweigh the system definition. Variants: **v1** drops the parenthesis from the heading, nothing else; **v2** keeps the heading and replaces only the *Task* paragraph with *"Apply your system instructions to the adjuster's reasoning above. For citations: first list every policy provision the reasoning names by title or number; flag only those absent from the retrieved chunks. Settlement-method vocabulary, severity or market bands and descriptions of the peril are not citations and are not flagged. Also report PII leakage and bias not already raised by the rule engine. Return the JSON object specified in your system instructions — `flags: []` if nothing new was found."*; **v3** makes both edits. 3 repetitions per case; v1 and v3 run twice.
+
+| Case | Expected | v1 heading only | v2 task line only | v3 both |
+|---|---|---|---|---|
+| `08d514f2` pass one | pass | pass 3 / 3, 3 / 3 | **flagged 3 / 3** — *"'supply line' as a covered peril; policy covers only sprinkler systems, plumbing/HVAC …"* | pass 3 / 3, 3 / 3 |
+| `8590b47e` pass two a | pass | pass 3 / 3, 3 / 3 | **flagged 3 / 3** — *"'supply line' is not defined or cited as a covered component"* | pass 3 / 3, 3 / 3 |
+| `f02fb888` pass two b | pass | **flagged, then self-corrected, both runs**: the reply held a flagged JSON object, the words *"Actually, let me reconsider"*, and a second clean object; `_extract_json_block` takes first `{` to last `}`, so the agent would record a parse failure and fail closed | **flagged 3 / 3** — *"'sudden pipe rupture' as covered peril, but policy covers only 'plumbing system' leakage"* | pass 3 / 3, 3 / 3 |
+| `b35b146b` as recorded | flag | no duplicate 3 / 3 | no duplicate 3 / 3 | no duplicate 3 / 3 |
+| `b35b146b` rule findings blanked | flag | flagged 3 / 3, 3 / 3 | flagged 3 / 3 | flagged 3 / 3, 3 / 3 |
+| `ded5557b` Render 21 Sep | pass | pass 3 / 3, 3 / 3 | pass 3 / 3 | pass 3 / 3, 3 / 3 |
+
+**Reading.** The heading is the dominant lever: removing *"(the only authoritative source)"* alone clears two of the three Harborline runs and leaves the model visibly torn on the third. Rewriting the *Task* line while the heading stays brings coverage re-adjudication back on all three (*"supply line" is not a covered component*), worse than the approved text. Only the two edits together meet the phase's bar: all three Harborline runs pass and Coral Bay still flags without the rule engine, on two independent samples (36 calls). Adopting v3 revises decision D5 (template byte-identical), so it waits for Dermot. The swing between three different failure modes on single-sentence template edits is itself a finding: the LLM check's verdict is not robust to wording, which argues for code verifying the model's claim (proposed Phase 9.2.2 in `docs/BACKLOG.md`) whichever prompt ships.
 
 ### Adjuster temperature — option (a)
 
@@ -1364,11 +1388,9 @@ Recorded as observed: the 21 September text, which says *"moderate-severity rang
 
 Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three contract tests, one golden-shape), +2 gated live tests; the one failure is the corpus tripwire above. `ruff check .` and `uv run mypy backend` clean (114 files). Bicep build and lint clean.
 
-### Pending — the Azure session (Dermot present)
+### Pending — the Azure session, part two (Dermot present)
 
-1. `scripts/azure-start.sh`; record the Postgres state (stopped 26 October; self-restart due about 2 November). Optional: measure cold start from zero replicas on the `2b662da` image.
-2. Extract the four Azure fixtures with `scripts/extract-guardrail-replay-fixture.py` (`REPLAY_SOURCE_DATABASE_URL` from the Key Vault `database-url` secret; read-only; hostname only). Firewall: if this machine's public IP has changed since 26 October the connection is refused and the fix is a Bicep redeploy with the new `DEPLOYER_CLIENT_IP`.
-3. Replay the four against the **old** prompt (from git) and the **new** prompt; fill the table above with per-repetition flags.
+0. **Decision:** adopt template variant v3 (revises D5; the replay corpus is then re-run through the committed files as the proof), or stop here and schedule the proposed Phase 9.2.2. Steps 1–3 of the original list are done (above).
 4. `scripts/azure-deploy.sh what-if` (expect one real modify: the env entry) then `deploy`. Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render.
 5. Commit the fixtures and the table; push. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
 6. Three scenarios on Azure through the UI, then on Render with `scripts/verify-demo-scenarios.py --backend <render-url>`. Expected `settled` / `awaiting_human` (`settlement_over_ceiling`) / `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), seven entries each, chain `ok`. Halt and diagnose if Harborline still escalates.

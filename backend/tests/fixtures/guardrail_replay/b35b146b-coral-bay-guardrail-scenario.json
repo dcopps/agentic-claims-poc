@@ -1,0 +1,31 @@
+{
+  "correlation_id": "b35b146b-e528-4af6-b010-805783eb4157",
+  "label": "coral-bay-guardrail-scenario",
+  "recorded_at": "2026-10-26T17:27:41.374061Z",
+  "source": "Azure deployment, Phase 9.2 verification pass two (26 October 2026, through the Static Web App), audit step output_check",
+  "expected": "flag_hallucinated_citation",
+  "recorded_outcome": {
+    "passed": false,
+    "rule_flags": [
+      {
+        "kind": "hallucinated_citation",
+        "detail": "endorsement 'Coastal Surge Rider' not in retrieved chunks",
+        "source": "rule"
+      }
+    ],
+    "llm_flags": [
+      {
+        "kind": "hallucinated_citation",
+        "detail": "reasoning assumes coverage under 'Endorsement Coastal Surge Rider' but settlement contradicts own statement that endorsement 'does not appear in the carrier's retrieved policy text'",
+        "source": "llm"
+      }
+    ]
+  },
+  "recorded_system_prompt_sha256": "62f037e34e51ac226fa70ab895766a556edd03fa4cd1b91f3a74336c53e6f30e",
+  "inputs": {
+    "adjuster_settlement": "1400000.00",
+    "adjuster_reasoning": "Severe storm produced wind damage to the headquarters roof followed by consequential internal water ingress; business operations were suspended at the site. The recommended settlement assumes coverage extended under Endorsement Coastal Surge Rider, which the claimant cited but which does not appear in the carrier's retrieved policy text.",
+    "retrieved_chunks": "[section=Exclusions]\nThe insurer will not pay for loss or damage caused directly or indirectly by any of the following, regardless of any other cause or event that contributes concurrently or in any sequence to the loss.\n\nFlood. Surface water, waves, tides, tidal waves, overflow of any body of water, or spray therefrom, whether or not driven by wind. Coverage for flood, where required, is provided only under a separate flood endorsement, which is NOT attached to this policy.\n\nEarthquake, volcanic eruption, landslide, mudslide, or other earth movement. Coverage for earth movement, where required, is provided only under a separate earth-movement endorsement, which is NOT attached to this policy.\n\nWar, invasion, hostilities (whether war is declared or not), civil war, rebellion, insurrection, military or usurped power, and any weapon of war employing atomic fission, atomic fusion, or radioactive material.\n\nTerrorism, whether certified or non-certified, is excluded. Coverage for certified acts of terrorism, where required, is provided only under a Terrorism Risk Insurance Act endorsement, which is NOT attached to this policy.\n\nWear and tear, gradual deterioration, rust, corrosion, latent defect, inherent vice, or any quality in property that causes it to damage or destroy itself.\n\n[section=Named Perils Covered]\nSubject to the exclusions and conditions of this policy, the insurer will pay for direct physical loss of or damage to insured property caused by any of the following covered causes of loss.\n\nFire. Hostile fire, including damage from heat, smoke, and the action of firefighting, but excluding loss from a fire intentionally set by the named insured or by a person acting at the named insured's direction.\n\nLightning. Direct strike to insured property or to objects on the insured premises, including damage from the resulting power surge to electrical equipment present at the time of the strike.\n\nWindstorm and hail. Loss caused by the direct action of wind or hail on the insured property. Wind-driven rain, snow, sand, or dust is covered only where wind first damages the building such that an opening is created through which precipitation enters.\n\nExplosion. Sudden and violent release of pressure or chemical reaction. Excluded: explosion of steam boilers, steam pipes, steam turbines, or steam engines owned by, leased by, or operated under the control of the named insured (covered separately under a boiler and machinery endorsement when one is attached).\n\nSmoke. Sudden and accidental damage from smoke, other than smoke from agricultural smudging or industrial operations.\n\nVandalism. Wilful and malicious damage to or destruction of the insured property by a person other than the named insured, an officer of the named insured, or a person acting at the named insured's direction.\n\n[section=Exclusions]\nDishonest, fraudulent, or criminal acts by the named insured, an officer of the named insured, or any person to whom the named insured has entrusted the property, whether acting alone or in collusion with others.\n\nMechanical breakdown, including rupture or bursting caused by centrifugal force. Coverage for mechanical breakdown, where required, is provided only under a separate equipment-breakdown endorsement.\n\nLoss of market, loss of use, delay, or any other consequential loss, except as expressly provided under the Business Interruption section of this policy.",
+    "rule_flags_already_found": "1. [hallucinated_citation] endorsement 'Coastal Surge Rider' not in retrieved chunks"
+  }
+}

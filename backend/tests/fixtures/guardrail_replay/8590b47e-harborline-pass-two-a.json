@@ -1,0 +1,25 @@
+{
+  "correlation_id": "8590b47e-c296-4764-b069-62afb914de9c",
+  "label": "harborline-pass-two-a",
+  "recorded_at": "2026-10-26T17:08:48.683639Z",
+  "source": "Azure deployment, Phase 9.2 verification pass two (26 October 2026, through the Static Web App), audit step output_check",
+  "expected": "pass",
+  "recorded_outcome": {
+    "passed": false,
+    "rule_flags": [],
+    "llm_flags": [
+      {
+        "kind": "hallucinated_citation",
+        "detail": "References 'sudden failure' as covered basis, but policy covers 'accidental discharge or leakage' from plumbing systems, not mechanical rupture/bursting which is explicitly excluded.",
+        "source": "llm"
+      }
+    ]
+  },
+  "recorded_system_prompt_sha256": "62f037e34e51ac226fa70ab895766a556edd03fa4cd1b91f3a74336c53e6f30e",
+  "inputs": {
+    "adjuster_settlement": "82500.00",
+    "adjuster_reasoning": "The loss involves a sudden, accidental rupture of a supply line causing water damage to inventory on a warehouse mezzanine. The plumbing contractor's verification of sudden failure and the claimant's claimed amount of $85,000 both suggest a well-documented, moderate-scope loss affecting a defined inventory area rather than a total loss or multi-structure event. The damage is localized to one floor section with clear causation, positioning the settlement in the upper-mid range of the market band. A value near the claimed amount reflects the specificity of the loss while remaining conservative within the moderate-severity classification.",
+    "retrieved_chunks": "[section=Named Perils Covered]\nSprinkler leakage. Leakage or discharge of any substance from an automatic sprinkler system, including collapse of a tank that is part of the system. Loss caused by freezing of the system is covered only where the named insured used reasonable care to maintain heat in the building.\n\nWater damage from plumbing systems. Accidental discharge or leakage from a plumbing, heating, or air-conditioning system, or from a domestic appliance, that results in direct physical damage to the insured property. Loss to the appliance or system itself is excluded; the resulting water damage to other property is covered.\n\nCivil commotion. Loss caused by riot, civil commotion, or strike, including pillage and looting that occurs in the course of and at the location of the disturbance, but excluding loss caused by war, warlike action, insurrection, rebellion, or revolution.\n\n[section=Exclusions]\nDishonest, fraudulent, or criminal acts by the named insured, an officer of the named insured, or any person to whom the named insured has entrusted the property, whether acting alone or in collusion with others.\n\nMechanical breakdown, including rupture or bursting caused by centrifugal force. Coverage for mechanical breakdown, where required, is provided only under a separate equipment-breakdown endorsement.\n\nLoss of market, loss of use, delay, or any other consequential loss, except as expressly provided under the Business Interruption section of this policy.\n\n[section=Sub-Limits]\nThe following sub-limits apply within, and not in addition to, the overall limit of insurance. Each sub-limit is the maximum the insurer will pay regardless of the number of items, locations, or occurrences.\n\nDebris removal. The insurer will pay the reasonable cost to remove debris of insured property caused by a covered cause of loss, up to twenty-five percent of the amount paid for direct damage. Debris removal is included within the limit of insurance and is not in addition to it, except where the limit is exhausted; in that case, an additional amount of up to ten thousand currency units is available for debris removal only.\n\nOrdinance or law. The insurer will pay the increased cost of repair, rebuilding, or demolition required by the enforcement of any ordinance or law regulating the construction, use, or repair of the insured property, up to ten percent of the amount paid for direct damage. The named insured must, in fact, repair or replace the damaged property within twenty-four months of the loss for the ordinance-or-law sub-limit to apply.\n\nValuable papers and records. The insurer will pay up to twenty-five thousand currency units for direct physical loss of or damage to valuable papers, records, drawings, manuscripts, or other documents, including the cost of reconstructing the information they contain. Data held only in electronic form is excluded under this sub-limit.",
+    "rule_flags_already_found": "(none — rule engine reported no findings)"
+  }
+}
