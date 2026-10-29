@@ -1315,7 +1315,7 @@ The probe-order category is gone (the Bicep now declares Azure's order). The 5 u
 **Prompt:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix.md)
 **Plan:** [`docs/prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](prompts/21-phase-9.2.1-guardrail-false-positive-fix-plan.md) — approved 28 October 2026; decisions in its *Approval* section
 **Version:** `0.9.1 → 0.9.1.1`
-**Status:** built and locally verified; the four Azure fixtures are extracted and committed; the before/after replay is recorded below. The approved system-prompt text alone did not meet the must-pass bar (two of three Harborline runs still flagged on *market range*); **template variant v3 adopted 29 October 2026 (D5 revised, reason in the plan's *Approval* section)**. Deploy and verification follow in part two of the Azure session.
+**Status:** built and locally verified; the four Azure fixtures are extracted and committed; the before/after replay is recorded below. The approved system-prompt text alone did not meet the must-pass bar (two of three Harborline runs still flagged on *market range*); **template variant v3 adopted 29 October 2026 (D5 revised, reason in the plan's *Approval* section)**; deployed to both stacks as `077f670` / `0.9.1.1`. **Deployed verification: Azure through the UI passed all three scenarios; the Render script pass failed on Harborline** (the LLM check flagged *"supply line"* as a covered peril on a reasoning text not in the corpus — details under *Deployed verification*). Halted for diagnosis per plan §7; the phase is not closed.
 
 ### What was broken
 
@@ -1401,7 +1401,25 @@ Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three con
 
 ### Pending — the Azure session, part two (continued)
 
-4. ~~what-if + deploy~~ done (above). **Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render (next).**
-5. Commit the fixtures and the table; push. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
+4. ~~what-if + deploy~~ done (above). ~~Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render~~ done (Render redeployed on `85252e4` with the variable, then on `077f670`).
+
+### Push and deployed verification — 29 October 2026
+
+- **Push `077f670`** (five commits). CI green (Backend, Frontend). `deploy-backend` green end to end — the second real backend change through the corrected *Verify the rollout* step: image `claims-backend:077f670`, revision `--0000011`, `minReplicas` 1 preserved, `LLM__ADJUSTER_TEMPERATURE=0` present, `/health` `0.9.1.1`. `deploy-frontend` green; the Static Web App serves 200 on `/` and `/audit`. Render auto-deployed the same commit: `/health` `0.9.1.1`.
+- **Azure, through the frontend (Dermot, SSE events arriving live) — passed, all three as designed, the first time since 1 October.** Verified read-only through the API:
+
+| Run | Status | Fired rules | Adjuster | Guardrail |
+|---|---|---|---|---|
+| Harborline `9b0ad8d5` | `settled` | none | $78,000, confidence 0.85, Haiku | passed, no flags |
+| Northwood `39ad7c5e` | `awaiting_human` | `settlement_over_ceiling` ($950,000) | $950,000, confidence 0.78, Haiku | passed, no flags |
+| Coral Bay `5329ea7b` | `awaiting_human` | `guardrail_failed`, `settlement_over_ceiling` ($1,400,000) | $1,400,000, demo fixture (`provider = "demo_fixture"`, no prompt, no `requested_model`) | failed — rule-engine `hallucinated_citation` *"endorsement 'Coastal Surge Rider' not in retrieved chunks"*; the LLM check correctly added nothing |
+
+  Seven entries per run in chain order (`pipeline_started` → `doc_extract` → `coverage_check` → `settlement_estimate` → `output_check` → `escalation_decision` → terminal); every model call `provider = "anthropic"`, `requested_model` = `model` = `claude-haiku-4-5-20251001`, `llm_call.prompt` recorded; the recorded `output_check` user prompt is the v3 template (no *"authoritative"* heading). **Chain `ok` over 70 rows** (49 + 21); 19 claims.
+- **Render, `scripts/verify-demo-scenarios.py` — 1 of 3 failed.** `threshold_escalation` and `guardrail_escalation` as expected (`55a201c0`: `settlement_over_ceiling`, $950,000; `3cdb53e7`: `guardrail_failed` + `settlement_over_ceiling`, rule-engine flag, demo fixture). **`auto_approve` (`8e886c66`) ended `awaiting_human` on `guardrail_failed`**, from the LLM check alone (rule engine: none): *"references 'supply line' as a covered peril; policy covers plumbing/heating/AC systems and sprinkler systems, not generic supply lines"*. Seven entries, chain `ok` over 62 rows, 12 claims; same model, same v3 template, same three chunks (*Named Perils Covered*, *Exclusions*, *Sub-Limits*) as the passing Azure run.
+
+**Diagnosis.** The input differs, not the deployment. The script's Harborline narrative (*"burst supply line … flooded a warehouse"*) and the UI's seeded claim (*"pipe rupture … inventory on a warehouse mezzanine"*) give the temperature-0 Adjuster different texts, and today's Render text — *"a sudden, accidental burst supply line that flooded a warehouse … within the market range … within the $50,000–$200,000 band"* — is in none of the five fixtures. Extracted read-only from Neon as `8e886c66-harborline-render-29-october.json` (expected `pass`, **not yet committed**) and replayed through the committed prompts: **flagged 6 / 6, identical detail every time.** This is the coverage re-adjudication failure mode the system prompt forbids in so many words, on a text that contains *"supply line"* exactly as `08d514f2` does (which passes 6 / 6). Prompt wording has now been shown to move this verdict in both directions on single phrases, which is the case for the proposed Phase 9.2.2 (`docs/BACKLOG.md`: a code-verified quote), not a further prompt iteration. **Halted here per plan §7.** Decision for Dermot: commit the sixth fixture as the honest pre-demo tripwire; close 9.2.1 as *partially verified* (Azure UI path settles; Render script path does not) with the README note narrowed rather than removed; schedule 9.2.2.
+
+### Pending — close-out (after Dermot's decision)
+5. ~~Commit the fixtures and the table; push.~~ done. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
 6. Three scenarios on Azure through the UI, then on Render with `scripts/verify-demo-scenarios.py --backend <render-url>`. Expected `settled` / `awaiting_human` (`settlement_over_ceiling`) / `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), seven entries each, chain `ok`. Halt and diagnose if Harborline still escalates.
 7. Remove the README known-issue note; close the two backlog items; finish this entry, the report and `CLAUDE.md`; commit; push; `scripts/azure-stop.sh` last.
