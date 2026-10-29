@@ -1390,8 +1390,18 @@ Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three con
 
 ### Pending — the Azure session, part two (Dermot present)
 
-0. ~~Decision~~ — v3 adopted. Steps 1–3 of the original list are done (above). **Confirmation run through the committed files:** see *Confirmation replay* below once recorded.
-4. `scripts/azure-deploy.sh what-if` (expect one real modify: the env entry) then `deploy`. Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render.
+0. ~~Decision~~ — v3 adopted. Steps 1–3 of the original list are done (above).
+
+### Confirmation replay, what-if and deploy — 29 October 2026 (done)
+
+- **Confirmation replay through the committed files** (`7c2bc9a`: system `c44d05b12988`, template `ee22f213d9fc`), via the gated test itself — `RUN_LLM_E2E_TESTS=1 pytest backend/tests/test_guardrail_replay.py` — run twice: **6 passed, 6 passed**. That is every Harborline run (`08d514f2`, `8590b47e`, `f02fb888`, `ded5557b`) clean 6 / 6, Coral Bay flagged 6 / 6 with the rule findings blanked and not duplicated 6 / 6 as recorded. 36 Haiku calls.
+- **what-if:** `6 to modify, 14 no change, 5 unsupported, 1 to ignore`. One real change — `+ env[7] LLM__ADJUSTER_TEMPERATURE = "0"` on the Container App — plus the known categories (unresolved `reference()` values for the registry server, CORS origins and the App Insights connection string; server-defaulted properties shown as deletions on the app, environment, registry, Postgres, App Insights and Static Web App; `minReplicas` 1 → 0 drift from `azure-start.sh`; five unsupported role assignments). Matches plan §7.
+- **Deploy:** `scripts/azure-deploy.sh deploy` → `claimsai-dev-7c2bc9a-20261029T092213Z` succeeded (09:22–09:27 UTC; the Container App module took 24 s). Revision `--0000009`, image unchanged (`2b662da`), `LLM__ADJUSTER_TEMPERATURE=0` present on the running revision, `/health` `0.9.1`. The deploy reset `minReplicas` to 0 as the what-if said; `scripts/azure-start.sh` re-run (21 s, Postgres already Ready) → revision `--0000010`, `minReplicas` 1, env entry intact.
+- Suite after the template change: **390 passed, 0 failed, 13 skipped** (+5 contract tests from the four new fixtures and the corpus tripwire now passing; +4 skipped are the gated live cases). `ruff check .` and `mypy backend` clean.
+
+### Pending — the Azure session, part two (continued)
+
+4. ~~what-if + deploy~~ done (above). **Dermot sets `LLM__ADJUSTER_TEMPERATURE=0` on Render (next).**
 5. Commit the fixtures and the table; push. CI → `deploy-backend` (the first real backend change through the corrected *Verify the rollout* step) and Render auto-deploy; wait for `/health` `0.9.1.1` on both.
 6. Three scenarios on Azure through the UI, then on Render with `scripts/verify-demo-scenarios.py --backend <render-url>`. Expected `settled` / `awaiting_human` (`settlement_over_ceiling`) / `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), seven entries each, chain `ok`. Halt and diagnose if Harborline still escalates.
 7. Remove the README known-issue note; close the two backlog items; finish this entry, the report and `CLAUDE.md`; commit; push; `scripts/azure-stop.sh` last.
