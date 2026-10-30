@@ -1438,7 +1438,7 @@ Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three con
 
 ## Phase 9.2.2 — the LLM citation flag must quote its evidence, and code verifies it (30 October 2026)
 
-**Prompt:** `docs/prompts/22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`; plan `…-plan.md` (approved 30 October 2026, D1–D5 as recommended); report `…-report.md`. **Version** `0.9.1.1 → 0.9.1.2`. **Status:** coded and proven locally; deployed verification pending (recorded below when run).
+**Prompt:** `docs/prompts/22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`; plan `…-plan.md` (approved 30 October 2026, D1–D5 as recommended); report `…-report.md`. **Version** `0.9.1.1 → 0.9.1.2`. **Status: complete — verified on all three deployed surfaces on 30 October 2026.**
 
 ### Why
 
@@ -1478,6 +1478,20 @@ Before: 7 passed, 1 failed. After: **8 passed**.
 
 *Normal* (moves an eval result). *Change* — `quote` on the LLM citation flag; code-side verification; two additive audit keys. *Trigger* — the 9.2.1 outcome. *Evidence* — the table above, the mutation proof, the deployed runs below. *Interface* — the audit extension above. *Rollback* — revert the commit; no migration. `change-governance.md` and the DORA register's Anthropic row record the control response as completed.
 
-### Deployed verification
+### Deployed verification — 30 October 2026, all three surfaces as designed
 
-_Pending — push, then Azure UI (`azure-start.sh` first), Vercel UI, Render script, with Dermot present; Harborline `output_check` read back for `llm_flags_discarded`; `azure-stop.sh` last. Recorded here when run._
+Push `94b7527`: CI green; `deploy-backend` green end to end (ACR build, revision `--0000016`, image `claims-backend:94b7527`, `/health` `0.9.1.2` after 6 attempts); `deploy-frontend` green; Render auto-deployed, `/health` `0.9.1.2`. Postgres was `Stopped` from the 29 October park and `azure-start.sh` brought it to `Ready` with one warm replica.
+
+| Surface | Harborline (auto-approve) | Northwood (threshold) | Coral Bay (guardrail) |
+|---|---|---|---|
+| **Azure frontend** | `00011dad` **settled**, Guardrail passed, $82,500, no LLM claim raised | `fd9b5c20` `awaiting_human` (`settlement_over_ceiling`), $950,000 | `c0618c74` `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), rule-engine flag, demo fixture |
+| **Vercel frontend → Render** | `0cdfa114` **settled**, $82,500 — the model claimed *"inventory valuation and depreciation"* as a provision, **refused `quote_not_a_provision`**; a second run `4142f33b` **settled**, claim *"sudden, verified pipe rupture causing water damage"* **refused `quote_not_a_provision`** | `6197d116` `awaiting_human` (`settlement_over_ceiling`), $920,000 — claim *"the $1.5M ceiling"* **refused `quote_not_a_provision`** (under `0.9.1.1` this run would also have shown `guardrail_failed`) | `cdf20928` `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), rule-engine flag, demo fixture |
+| **`verify-demo-scenarios.py` → Render** | `e215acf9` **settled**, $82,500, no LLM claim | `96bb2a0c` `awaiting_human` (`settlement_over_ceiling`), $1,100,000 | `fe4b1736` `awaiting_human` (`guardrail_failed`, `settlement_over_ceiling`), rule-engine flag, demo fixture; script reported `OK: all three demo scenarios reproduced the expected outcomes` |
+
+Read-only checks on all ten runs: seven audit entries each; every LLM call `provider = "anthropic"`, `requested_model` = `model` = `claude-haiku-4-5-20251001`; `output_check` carries `llm_flags_counted` and `llm_flags_discarded` on every row (both `[]` where nothing was claimed); Coral Bay's `output.flags` is the rule-engine flag alone and the model correctly declined to duplicate it (`llm_flags_counted` empty). Chain `ok`: Azure over 91 rows (22 claims); Render over 118 rows (19 claims, after the script's three).
+
+**The demo talking point, observed three times on the Vercel path:** the model's claim sits in `llm_flags_discarded` with its quote and `quote_not_a_provision`, and the claim settled anyway. Three new phrases in one afternoon (*inventory valuation and depreciation*, *pipe rupture causing water damage*, *the $1.5M ceiling*) — each would have escalated under `0.9.1.1`; none can under `0.9.1.2`, because none contains a provision keyword followed by a name.
+
+**Coral Bay Adjuster latency (Dermot's check).** The Azure frontend showed 159 ms and the Vercel frontend 3.7 s for the Adjuster step. The audit settles it: on both stacks `settlement_estimate` records `demo_fixture: true`, `llm_call.provider = "demo_fixture"`, `latency_ms: 0` and *"no model call; deterministic demo fixture"* — **no model call was made on Render**. The UI figure is the agent step's wall clock as the orchestrator measures it, which on Render includes round trips to the Neon database in Frankfurt (connection open, claim read, audit append); on Azure the database is in the same region. The Harborline runs show the same shape: about 7 s between the `coverage_check` and `settlement_estimate` rows on Render against a 2.4 s model call. Hosting topology, not a model call.
+
+**Close-out:** README known-issue note removed and *Before a demo* line updated (seven cases expected green); backlog section closed; report completed; `change-governance.md` and the DORA register already carried the completed control response; `CLAUDE.md` *Demo status* back to usable without caveat, *Locked interface extensions* entry in place, *What's next* → prompt 23 (documentation) then 24 (Foundry). `azure-stop.sh` run last.
