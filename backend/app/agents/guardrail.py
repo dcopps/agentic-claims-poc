@@ -16,13 +16,20 @@ Step-for-step:
      to find subtler failures the rule engine missed —
      particularly semantic-bias and citation cases the
      regex-only floor cannot catch.
-  4. Parse the LLM's JSON `flags` list, label the source as
-     `"llm"` on each, and merge with the rule engine's flags.
+  4. Parse the LLM's JSON `flags` list into *claims*, then
+     verify them (Phase 9.2.2, `guardrail_llm_flags.py`): a
+     `hallucinated_citation` claim counts only when its `quote`
+     is found in the Adjuster's reasoning and that span has the
+     shape of a named provision by the rule engine's own test.
+     Refused claims are recorded, not counted. Counted claims
+     are labelled `source="llm"` and merged with the rule
+     engine's flags.
   5. Decide `passed`: `True` iff the combined flag list is
      empty. This is the *fail-closed* contract — any single
      flag from either detector aborts the auto-approve path.
   6. Write a complete audit-log entry under the supplied
-     correlation id.
+     correlation id, including the verified and refused LLM
+     claims with their evidence.
 
 `evaluate(...)` takes the upstream Adjuster output and the
 retrieved chunks directly. The orchestrator (Phase 4) supplies
@@ -35,6 +42,7 @@ import json
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -59,6 +67,11 @@ from backend.app.agents._shared import (
     new_correlation_id as _new_correlation_id,
 )
 from backend.app.agents.adjuster_models import AdjusterOutput, AdjusterResult
+from backend.app.agents.guardrail_llm_flags import (
+    LLMCheckOutcome,
+    LLMFlagClaim,
+    verify_llm_flags,
+)
 from backend.app.agents.guardrail_models import (
     GuardrailFlag,
     GuardrailOutput,
@@ -88,6 +101,23 @@ _AUDIT_STEP_NAME = "output_check"
 # across runs that produced equivalent flag sets.
 _SUMMARY_PASS = "No additional issues found beyond the rule-engine pre-scan."
 _SUMMARY_FAIL_TEMPLATE = "Guardrail flagged {count} issue(s): {kinds}."
+
+
+@dataclass(frozen=True)
+class _LLMCall:
+    """
+    Everything one LLM check produced, on every exit path.
+
+    `request` is built before the call, so it is present even when the provider
+    raised. `outcome` is present only when the reply parsed; on the error paths
+    it is `None` and `error` carries the cause.
+    """
+
+    response: ProviderResponse | None
+    outcome: LLMCheckOutcome | None
+    error: BaseException | None
+    latency_ms: int
+    request: CapturedRequest
 
 
 class Guardrail:
@@ -141,14 +171,14 @@ class Guardrail:
         """
         with self._connection_factory() as conn:
             rule_flags = self._run_rule_checks(adjuster_result, retrieved_chunks)
-            response, llm_flags, error, latency_ms, request = self._invoke_llm(
+            call = self._invoke_llm(
                 adjuster_result=adjuster_result,
                 retrieved_chunks=retrieved_chunks,
                 rule_flags=rule_flags,
             )
             output = (
-                _combine_and_decide(rule_flags, llm_flags)
-                if error is None
+                _combine_and_decide(rule_flags, call.outcome.counted)
+                if call.outcome is not None
                 else None
             )
             self._write_audit(
@@ -158,23 +188,20 @@ class Guardrail:
                 adjuster_result=adjuster_result,
                 retrieved_chunks=retrieved_chunks,
                 rule_flags=rule_flags,
-                response=response,
+                call=call,
                 output=output,
-                latency_ms=latency_ms,
-                error=error,
-                request=request,
             )
 
-            if error is not None:
-                raise error
+            if call.error is not None:
+                raise call.error
             assert output is not None
-            assert response is not None
+            assert call.response is not None
             return GuardrailResult(
                 claim_id=claim_id,
                 correlation_id=correlation_id,
                 output=output,
-                model=response.model,
-                latency_ms=latency_ms,
+                model=call.response.model,
+                latency_ms=call.latency_ms,
             )
 
     def check(
@@ -205,16 +232,17 @@ class Guardrail:
             latency_ms=0,
         )
         rule_flags = self._run_rule_checks(synthetic, retrieved_chunks)
-        response, llm_flags, error, latency_ms, _request = self._invoke_llm(
+        call = self._invoke_llm(
             adjuster_result=synthetic,
             retrieved_chunks=retrieved_chunks,
             rule_flags=rule_flags,
         )
-        if error is not None:
-            raise error
-        assert response is not None
-        output = _combine_and_decide(rule_flags, llm_flags)
-        return output, probe_metadata(response, latency_ms)
+        if call.error is not None:
+            raise call.error
+        assert call.response is not None
+        assert call.outcome is not None
+        output = _combine_and_decide(rule_flags, call.outcome.counted)
+        return output, probe_metadata(call.response, call.latency_ms)
 
     # ------------------------------------------------------------------ #
     # Pipeline steps
@@ -236,21 +264,14 @@ class Guardrail:
         adjuster_result: AdjusterResult,
         retrieved_chunks: list[RetrievedChunk],
         rule_flags: list[GuardrailFlag],
-    ) -> tuple[
-        ProviderResponse | None,
-        list[GuardrailFlag],
-        BaseException | None,
-        int,
-        CapturedRequest,
-    ]:
+    ) -> _LLMCall:
         """
-        Build the prompt, call the provider, parse the LLM's flags.
+        Build the prompt, call the provider, parse the LLM's claims, verify them.
 
-        Returns `(response, llm_flags, error, latency_ms, request)`. On
-        success `llm_flags` may be empty (clean scan); on failure
-        it is empty and `error` carries the cause. `request` is the literal prompt
-        and model sent — built before the call, so returned on every path including
-        the provider-exception path.
+        On success `outcome.counted` may be empty (clean scan, or every claim
+        refused); on failure `outcome` is `None` and `error` carries the cause.
+        The verification oracle is the rule engine this agent holds, so a test
+        engine with a custom citation pattern is honoured here too.
         """
         system_prompt = self._prompt_loader.system("guardrail")
         user_prompt = self._prompt_loader.user(
@@ -281,13 +302,19 @@ class Guardrail:
                 timeout_s=self._settings.llm.request_timeout_s,
             )
         except LLMProviderError as exc:
-            return None, [], exc, int((time.perf_counter() - t0) * 1000), request
+            return _LLMCall(None, None, exc, int((time.perf_counter() - t0) * 1000), request)
+        latency_ms = int((time.perf_counter() - t0) * 1000)
 
         try:
-            llm_flags = _parse_llm_flags(response.text)
+            claims = _parse_llm_flags(response.text)
         except ValueError as exc:
-            return response, [], exc, int((time.perf_counter() - t0) * 1000), request
-        return response, llm_flags, None, int((time.perf_counter() - t0) * 1000), request
+            return _LLMCall(response, None, exc, latency_ms, request)
+        outcome = verify_llm_flags(
+            claims,
+            reasoning=adjuster_result.output.reasoning,
+            citation_pattern=self._rule_engine.citation_pattern,
+        )
+        return _LLMCall(response, outcome, None, latency_ms, request)
 
     def _write_audit(
         self,
@@ -298,23 +325,17 @@ class Guardrail:
         adjuster_result: AdjusterResult,
         retrieved_chunks: list[RetrievedChunk],
         rule_flags: list[GuardrailFlag],
-        response: ProviderResponse | None,
+        call: _LLMCall,
         output: GuardrailOutput | None,
-        latency_ms: int,
-        error: BaseException | None,
-        request: CapturedRequest | None,
     ) -> None:
         payload = _build_audit_payload(
             claim_id=claim_id,
             adjuster_result=adjuster_result,
             retrieved_chunks=retrieved_chunks,
             rule_flags=rule_flags,
-            response=response,
+            call=call,
             output=output,
-            latency_ms=latency_ms,
-            error=error,
             provider_label=self._provider.vendor,
-            request=request,
         )
         event = AuditEvent(
             correlation_id=correlation_id,
@@ -365,9 +386,9 @@ def _format_rule_flags_for_prompt(flags: list[GuardrailFlag]) -> str:
     return "\n".join(lines)
 
 
-def _parse_llm_flags(response_text: str) -> list[GuardrailFlag]:
+def _parse_llm_flags(response_text: str) -> list[LLMFlagClaim]:
     """
-    Pull the LLM's `flags` array out of the JSON response.
+    Pull the LLM's `flags` array out of the JSON response as unverified claims.
 
     Failure modes, surfaced as `ValueError` with diagnostic context:
       - No `{...}` block.
@@ -375,8 +396,11 @@ def _parse_llm_flags(response_text: str) -> list[GuardrailFlag]:
       - Non-object JSON.
       - Missing `flags` key.
       - `flags` is not a list.
-      - Any item fails `GuardrailFlag` schema validation when
-        decorated with `source="llm"`.
+      - Any item fails `LLMFlagClaim` schema validation (unknown keys, a
+        `quote` of the wrong type, an unknown `kind`).
+
+    A missing `quote` is *not* a parse failure: `verify_llm_flags` refuses the
+    claim with `no_quote`, which is the recordable finding.
     """
     raw = _extract_json_block(response_text, agent_name="Guardrail")
     try:
@@ -406,24 +430,23 @@ def _parse_llm_flags(response_text: str) -> list[GuardrailFlag]:
             f"got type={type(flags_raw).__name__}"
         )
 
-    flags: list[GuardrailFlag] = []
+    claims: list[LLMFlagClaim] = []
     for index, item in enumerate(flags_raw):
         if not isinstance(item, dict):
             raise ValueError(
                 f"Guardrail: model response 'flags[{index}]' must be an object; "
                 f"got type={type(item).__name__}"
             )
-        # The LLM is asked not to emit `source`; we stamp it here so
-        # the merged flag list distinguishes detector provenance.
-        payload = {**item, "source": "llm"}
+        # The LLM is asked not to emit `source`; the claim model forbids it and
+        # `verify_llm_flags` stamps `source="llm"` on promotion.
         try:
-            flags.append(GuardrailFlag.model_validate(payload))
+            claims.append(LLMFlagClaim.model_validate(item))
         except PydanticValidationError as exc:
             raise ValueError(
                 f"Guardrail: model response 'flags[{index}]' failed schema "
                 f"validation; errors={exc.errors()} item={item!r}"
             ) from exc
-    return flags
+    return claims
 
 
 def _combine_and_decide(
@@ -457,12 +480,9 @@ def _build_audit_payload(
     adjuster_result: AdjusterResult,
     retrieved_chunks: list[RetrievedChunk],
     rule_flags: list[GuardrailFlag],
-    response: ProviderResponse | None,
+    call: _LLMCall,
     output: GuardrailOutput | None,
-    latency_ms: int,
-    error: BaseException | None,
     provider_label: str,
-    request: CapturedRequest | None,
 ) -> dict[str, Any]:
     """Assemble the locked guardrail-step audit payload.
 
@@ -470,9 +490,14 @@ def _build_audit_payload(
     (`self._provider.vendor`), per the Phase 5 truthful-provider rule extended to
     every agent in Phase 8.6 — the Guardrail's provider is a settings choice.
 
-    `request` carries the literal prompt (Phase 8.3) and requested model (Phase
-    8.5.3) sent to the model, attached to the `llm_call` block when a call was made.
+    `call.request` carries the literal prompt (Phase 8.3) and requested model
+    (Phase 8.5.3) sent to the model, attached to the `llm_call` block when a call
+    was made. The two Phase 9.2.2 keys (`llm_flags_counted`, `llm_flags_discarded`)
+    are built by `_llm_verification_block` and are always present.
     """
+    response, latency_ms, error, request = (
+        call.response, call.latency_ms, call.error, call.request
+    )
     payload: dict[str, Any] = {
         "input": {
             "claim_id": str(claim_id),
@@ -528,5 +553,29 @@ def _build_audit_payload(
             if error is not None
             else None
         ),
+        **_llm_verification_block(call.outcome),
     }
     return payload
+
+
+def _llm_verification_block(outcome: LLMCheckOutcome | None) -> dict[str, Any]:
+    """
+    The Phase 9.2.2 additive audit keys, always present.
+
+    Both lists are empty when nothing was verified — a clean reply, or the error
+    paths where no reply was parsed (the `error` block says why) — so the shape
+    is stable across every row written from `0.9.1.2` on. `llm_flags_counted`
+    carries the reasoning's own span that promoted each citation flag; without it
+    the audit would hold the evidence for every refusal and none for any
+    acceptance.
+    """
+    if outcome is None:
+        return {"llm_flags_counted": [], "llm_flags_discarded": []}
+    return {
+        "llm_flags_counted": [
+            flag.model_dump(mode="json") for flag in outcome.counted_evidence
+        ],
+        "llm_flags_discarded": [
+            flag.model_dump(mode="json") for flag in outcome.discarded
+        ],
+    }

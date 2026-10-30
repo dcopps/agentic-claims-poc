@@ -1433,3 +1433,51 @@ Suite **385 passed, 1 failed, 9 skipped** (was 382 / 0 / 7): +4 tests (three con
 - **Observed (Dermot, Vercel frontend against Render, 16:19 UTC):** Harborline `2c42cf40-9f7d-451e-b6a3-1f36d082b5d4` ended `awaiting_human` on `guardrail_failed`; Adjuster $82,500 (real call, not the fixture); the only flag is from the LLM check: *"references '$200,000 ceiling' as a policy limit; no such limit appears in retrieved chunks"*. The phrase is the Adjuster's own market-band ceiling, the third distinct trigger seen (*market range*, *supply line*, now the band ceiling). Verified read-only through the Render API: seven entries, every LLM call `anthropic` / `claude-haiku-4-5-20251001`, chain `ok` over 69 rows.
 - **Seventh fixture:** `2c42cf40-harborline-vercel-30-october.json`, extracted read-only from Neon with the committed script (round-trip and Adjuster-row checks passed, PII scan clean), expected `pass`. Replayed through the committed prompts: **flagged 3 / 3**, identical detail text each time. Both tripwires (`8e886c66`, `2c42cf40`) stay red until 9.2.2.
 - **Docs:** README known-issue note and `CLAUDE.md` *Demo status* now say plainly that the auto-approve scenario is not reliable on any surface until Phase 9.2.2; the 9.2.2 acceptance in the backlog names both cases. No Azure session (nothing to verify there); no prompt or code change. The push still rebuilt the Azure image (a fixture under `backend/` changed): `deploy-backend` green, revision `--0000014` on `claims-backend:c76bd22`, `/health` `0.9.1.1` after 3 attempts with Postgres stopped throughout (one replica woken from zero by the check; `minReplicas` stays 0, Postgres stays `Stopped`). Suite **392 passed, 0 failed, 15 skipped** (+1 contract test, +1 gated case); `ruff` and `mypy` clean.
+
+---
+
+## Phase 9.2.2 — the LLM citation flag must quote its evidence, and code verifies it (30 October 2026)
+
+**Prompt:** `docs/prompts/22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`; plan `…-plan.md` (approved 30 October 2026, D1–D5 as recommended); report `…-report.md`. **Version** `0.9.1.1 → 0.9.1.2`. **Status:** coded and proven locally; deployed verification pending (recorded below when run).
+
+### Why
+
+Phase 9.2.1 narrowed the question the Guardrail's LLM check is asked and left the answer unreliable: three runs on three surfaces, each 3/3 at temperature 0, flagged three different pieces of the Adjuster's own vocabulary (*market range*, *supply line*, *$200,000 ceiling*). The regex the rule engine already uses, run over all seven fixture reasonings, matches nothing in the six Harborline texts and exactly one span in Coral Bay (`Endorsement Coastal Surge Rider`). That is the finding the design rests on: the line between "a provision" and "the Adjuster's words" is already drawn deterministically in code; the LLM check just was not held to it.
+
+### What changed
+
+- **Prompt** (`backend/app/prompts/system/guardrail.md`): *Output format* gains `"quote"` on `hallucinated_citation` flags; one rule added — the quote is required on every citation flag, copied verbatim, a flag whose quote is not found does not count, omit on `pii` / `bias`. The citation definition, *How to reason* and the user template are byte-identical to 9.2.1.
+- **Code** (`backend/app/agents/guardrail_llm_flags.py`, new): `LLMFlagClaim` (kind, detail, `quote: str | None`; `extra="forbid"`), `DiscardedLLMFlag`, `CountedLLMFlag`, `LLMCheckOutcome`, and `verify_llm_flags(claims, *, reasoning, citation_pattern)`. Per citation claim, sanitise → validate → abort → execute: strip and remove one layer of wrapping quotes, straighten curly glyphs; `no_quote` if empty; locate the quote in the reasoning (tokens joined by `\s+`, `re.IGNORECASE`, both sides glyph-straightened — no other folding) else `quote_not_in_reasoning`; run `citation_pattern.search` **on the reasoning's own span** else `quote_not_a_provision`; otherwise promote to `GuardrailFlag(source="llm")`. First failing check names the reason. Refusals are appended and logged at INFO (quote truncated to 200 chars), never raised. `pii` / `bias` promote unchanged with any quote dropped.
+- **Agent** (`guardrail.py`): `_parse_llm_flags` validates into claims (all six guards kept); `_invoke_llm` verifies with `self._rule_engine.citation_pattern` (the oracle is the instance's pattern, so a custom-pattern engine is honoured) and returns a frozen `_LLMCall`; `_build_audit_payload` adds `**_llm_verification_block(outcome)`. `_CITATION_CANDIDATE_RE`, the rule engine, `policy.yaml`, `GuardrailFlag`, `runs/repository.py`, the probe endpoint and the frontend are untouched.
+- **Audit (locked interface extension, recorded in `CLAUDE.md`):** `output_check` gains top-level `llm_flags_counted: [{kind, detail, quote}]` and `llm_flags_discarded: [{kind, detail, quote, reason}]`, always present, `[]` when empty, including on the error paths. `output.flags[]` unchanged; no HTTP or SSE change.
+
+### Tests
+
+New `backend/tests/test_guardrail_llm_flags.py` (29 cases: every discard reason with the reason string, the five real-world phrases parametrised under `quote_not_a_provision`, promotion with surrounding words, six normalisation cases, shape judged on the reasoning's span, `pii` / `bias` pass-through with the quote dropped, mixed lists, a custom pattern, schema rejections, the INFO log with truncation). `test_guardrail.py` +6 agent-level tests (verdict and both audit keys on the refused, counted, `pii`-with-quote, clean and provider-error paths). `test_guardrail_prompts.py` +1 golden-shape test. `test_guardrail_replay.py` now parses *and verifies* each reply and prints refused claims in the failure message. **Suite 429 passed, 0 failed, 15 skipped** (+37 from 392); `ruff check .` and `mypy backend` clean.
+
+**Mutation proof.** (a) Verifier neutered (every claim promoted): 18 tests fail — all discard-reason tests, the span test, the oracle test, the log test and both agent-level refusal tests. (b) 9.2.1 prompt restored: `test_system_prompt_requires_a_verbatim_quote_on_citation_flags` fails. Both reverted before commit.
+
+### Replay outcomes (live model, temperature 0, 3 repetitions per case)
+
+| Case | Expected | Before (shipped `0.9.1.1`, 30 October) | After (`0.9.1.2`) |
+|---|---|---|---|
+| `08d514f2` Harborline, 1 Oct | pass | pass 3/3 | **pass 3/3** |
+| `8590b47e` Harborline, 26 Oct | pass | pass 3/3 | **pass 3/3** |
+| `f02fb888` Harborline, 26 Oct | pass | pass 3/3 | **pass 3/3** |
+| `ded5557b` Harborline, Render 21 Sep | pass | pass 3/3 | **pass 3/3** |
+| `8e886c66` Harborline, Render script 29 Oct | pass | pass 3/3 (**failed 6/6 on 29 October** — the model moved again in a day) | **pass 3/3** |
+| `2c42cf40` Harborline, Vercel 30 Oct | pass | **flag 3/3** (*"$200,000 ceiling"*) | **pass 3/3** |
+| `b35b146b` Coral Bay, as recorded | flag | flag (rule engine) | **flag** (rule engine) |
+| `b35b146b` Coral Bay, rule findings blanked | flag via LLM | flag 3/3 | **flag 3/3, quote-verified** |
+
+Before: 7 passed, 1 failed. After: **8 passed**.
+
+**What the model did under the quote requirement** (one evidence call per case, `llm_flags_counted` / `llm_flags_discarded`): six must-pass cases produced **no flag at all** — asked to quote a provision, the model found none to quote; its summaries name *market range*, *severity band* and the peril as settlement methodology. `f02fb888` produced one claim — a coverage re-adjudication (*"pipe rupture … falls under the Mechanical Breakdown exclusion"*) with quote *"sudden pipe rupture causing water damage"* — **refused `quote_not_a_provision`**: exactly the side-by-side the phase was built for. Coral Bay without the rule engine counted on quote *"Endorsement Coastal Surge Rider"* (located; the span matches the regex), so the accepted no-keyword risk did not materialise on the day.
+
+### Change governance
+
+*Normal* (moves an eval result). *Change* — `quote` on the LLM citation flag; code-side verification; two additive audit keys. *Trigger* — the 9.2.1 outcome. *Evidence* — the table above, the mutation proof, the deployed runs below. *Interface* — the audit extension above. *Rollback* — revert the commit; no migration. `change-governance.md` and the DORA register's Anthropic row record the control response as completed.
+
+### Deployed verification
+
+_Pending — push, then Azure UI (`azure-start.sh` first), Vercel UI, Render script, with Dermot present; Harborline `output_check` read back for `llm_flags_discarded`; `azure-stop.sh` last. Recorded here when run._

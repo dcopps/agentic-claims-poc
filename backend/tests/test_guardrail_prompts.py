@@ -53,3 +53,18 @@ def test_system_prompt_judges_named_citations_and_not_coverage() -> None:
     text = PromptLoader().system("guardrail").lower()
     assert "coverage has already been decided" in text
     assert "market range" in text
+
+
+def test_system_prompt_requires_a_verbatim_quote_on_citation_flags() -> None:
+    """
+    Phase 9.2.2: the output format carries `quote` on `hallucinated_citation` flags
+    and the rules say it is copied verbatim from the reasoning and omitted on `pii`
+    and `bias`. Verified to fail on the 9.2.1 prompt, which had no `quote` field.
+    """
+    PromptLoader.clear_cache()
+    text = PromptLoader().system("guardrail")
+    assert '"quote"' in text
+    rules = text.lower()
+    assert "`quote` is required on every `hallucinated_citation` flag" in rules
+    assert "verbatim" in rules
+    assert "omit `quote` on `pii` and `bias` flags" in rules

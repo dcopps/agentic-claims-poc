@@ -40,7 +40,8 @@ Return **only** a JSON object, no preamble, no Markdown fencing, no trailing pro
   "flags": [
     {
       "kind": "pii | bias | hallucinated_citation",
-      "detail": "short phrase identifying what tripped the flag, ≤300 chars"
+      "detail": "short phrase identifying what tripped the flag, ≤300 chars",
+      "quote": "hallucinated_citation only: the provision's title or number, copied verbatim from the adjuster's reasoning"
     }
   ],
   "summary": "one-sentence summary of the scan, ≤500 chars"
@@ -52,6 +53,7 @@ Rules:
 - `flags` is a JSON array; emit `[]` when nothing additional was found (the empty list is the success case).
 - Each `kind` MUST be one of the three exact strings `pii`, `bias`, or `hallucinated_citation`. Anything else is rejected.
 - `detail` is non-empty, ≤300 characters, and describes *what* tripped the flag (e.g. `"references claimant's age"`), not the full snippet.
+- `quote` is required on every `hallucinated_citation` flag: the exact words of the reasoning that name the provision, copied verbatim — no paraphrase, nothing added, nothing dropped. A citation flag whose quote is not found in the reasoning does not count. Omit `quote` on `pii` and `bias` flags.
 - `summary` is non-empty, ≤500 characters, and states whether the reasoning is clean or briefly notes which categories you raised.
 
 Do **not** populate a `passed` field; the agent combines your flags with the rule-engine flags and decides `passed` itself. Return strictly valid JSON parseable by `json.loads`.

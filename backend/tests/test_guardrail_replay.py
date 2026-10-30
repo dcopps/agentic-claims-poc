@@ -18,16 +18,22 @@ Two layers:
     `ANTHROPIC_API_KEY`; never in CI). Each run makes 3 calls per case; with seven
     fixtures and the no-rule-engine case that is 24 Haiku calls, a few cents.
 
-A fixture the current prompt does not satisfy stays in the corpus on purpose: the
+Since Phase 9.2.2 each replay is judged as the agent judges it: the model's claims
+are parsed *and verified* (`verify_llm_flags`, with the default rule engine's
+citation pattern as the oracle), and the verdict is read from the counted flags.
+A failure message prints the refused claims with their reasons as well, so a red
+case can be diagnosed from the output alone.
+
+A fixture the current code does not satisfy stays in the corpus on purpose: the
 pre-demo check must fail until the behaviour is fixed, not describe the subset that
-happens to pass. `8e886c66` (Render via the script, 29 October 2026) and `2c42cf40`
-(Render via the Vercel frontend, 30 October 2026) are those cases until Phase 9.2.2.
+happens to pass.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -37,7 +43,8 @@ from backend.app.agents.guardrail import (
     _format_rule_flags_for_prompt,
     _parse_llm_flags,
 )
-from backend.app.agents.guardrail_models import GuardrailFlag
+from backend.app.agents.guardrail_llm_flags import LLMCheckOutcome, verify_llm_flags
+from backend.app.agents.guardrail_rules import GuardrailRuleEngine
 from backend.app.llm.provider import LLMProvider
 from backend.app.prompts import PromptLoader
 from backend.settings import Settings
@@ -126,8 +133,8 @@ def _replay_once(
     provider: LLMProvider,
     settings: Settings,
     loader: PromptLoader,
-) -> list[GuardrailFlag]:
-    """One call, built exactly as `Guardrail._invoke_llm` builds it, parsed the same way."""
+) -> LLMCheckOutcome:
+    """One call, built as `Guardrail._invoke_llm` builds it, parsed and verified the same way."""
     response = provider.complete(
         system=loader.system("guardrail"),
         user=loader.user("guardrail_template", **inputs.model_dump()),
@@ -140,7 +147,11 @@ def _replay_once(
         response_format="text",
         timeout_s=settings.llm.request_timeout_s,
     )
-    return _parse_llm_flags(response.text)
+    return verify_llm_flags(
+        _parse_llm_flags(response.text),
+        reasoning=inputs.adjuster_reasoning,
+        citation_pattern=GuardrailRuleEngine.with_defaults().citation_pattern,
+    )
 
 
 def _replay(
@@ -149,30 +160,51 @@ def _replay(
     provider: LLMProvider,
     settings: Settings,
     loader: PromptLoader,
-) -> list[list[str]]:
-    """Replay `_REPLAY_REPETITIONS` times; return each repetition's citation-flag details."""
-    runs: list[list[str]] = []
+) -> list[Repetition]:
+    """Replay `_REPLAY_REPETITIONS` times; return what counted and what was refused each time."""
+    runs: list[Repetition] = []
     for _ in range(_REPLAY_REPETITIONS):
-        flags = _replay_once(inputs, provider=provider, settings=settings, loader=loader)
-        runs.append([f.detail for f in flags if f.kind == "hallucinated_citation"])
+        outcome = _replay_once(inputs, provider=provider, settings=settings, loader=loader)
+        runs.append(
+            Repetition(
+                counted=[
+                    f.detail for f in outcome.counted if f.kind == "hallucinated_citation"
+                ],
+                refused=[
+                    f"[{d.reason}] quote={d.quote!r} detail={d.detail!r}"
+                    for d in outcome.discarded
+                ],
+            )
+        )
     return runs
 
 
-def _describe(label: str, runs: list[list[str]]) -> str:
-    lines = [f"{label}: hallucinated_citation details per repetition:"]
-    lines += [f"  {index}: {details or '(none)'}" for index, details in enumerate(runs, 1)]
+@dataclass(frozen=True)
+class Repetition:
+    """One replay: the counted citation details and the claims the code refused."""
+
+    counted: list[str]
+    refused: list[str]
+
+
+def _describe(label: str, runs: list[Repetition]) -> str:
+    lines = [f"{label}: counted hallucinated_citation details per repetition:"]
+    for index, run in enumerate(runs, 1):
+        lines.append(f"  {index}: {run.counted or '(none)'}")
+        lines += [f"     refused {entry}" for entry in run.refused]
     return "\n".join(lines)
 
 
 def _assert_verdict(
     expected: ExpectedVerdict,
     label: str,
-    runs: list[list[str]],
+    runs: list[Repetition],
     *,
     rule_engine_already_flagged: bool = False,
 ) -> None:
     """
-    `pass` means no citation flag in any repetition; `flag` means one in every repetition.
+    `pass` means no *counted* citation flag in any repetition; `flag` means one in
+    every repetition. A refused claim never counts either way.
 
     A `flag` fixture whose recorded pre-detected findings already carry the rule
     engine's citation flag is judged as the agent judges it — rule flags and LLM
@@ -181,9 +213,9 @@ def _assert_verdict(
     `test_invented_endorsement_is_caught_without_the_rule_engine`.
     """
     if expected == "pass":
-        assert all(not details for details in runs), _describe(label, runs)
+        assert all(not run.counted for run in runs), _describe(label, runs)
     elif not rule_engine_already_flagged:
-        assert all(details for details in runs), _describe(label, runs)
+        assert all(run.counted for run in runs), _describe(label, runs)
 
 
 @_LIVE
@@ -232,6 +264,13 @@ def test_invented_endorsement_is_caught_without_the_rule_engine(
     recorded inputs proves nothing about the LLM check. With the sentinel in place
     the model must find "Endorsement Coastal Surge Rider" on its own. This is the
     assertion that narrowing the citation definition did not loosen the check.
+
+    Since Phase 9.2.2 the flag must also survive verification: the model has to
+    quote the provision with its keyword so the quote has the shape the rule
+    engine recognises. A model that quotes "Coastal Surge Rider" alone is refused
+    (`quote_not_a_provision`) and this test goes red — the trade-off accepted at
+    the 9.2.2 approval gate, to be reported if observed, not patched by widening
+    the regex.
     """
     fixture = _coral_bay_fixture()
     inputs = fixture.inputs.model_copy(

@@ -134,6 +134,20 @@ citation flag counts only when the phrase it quotes is present in the reasoning
 and has the shape of a named provision), which is a *Normal* change with the same
 record. The closed phase is *partially verified*, not *verified*.
 
+**The control response completed (Phase 9.2.2, 30 October 2026).** Classified
+*Normal* again (it moves the same eval result). The model keeps its job of
+*finding* a suspicious reference and loses the authority to *decide* that it
+counts: a `hallucinated_citation` flag from the LLM check must quote the words it
+objects to, and code counts it only when the quote is present in the Adjuster's
+reasoning and the reasoning's own span has the shape of a named provision by the
+rule engine's test. Refused claims are recorded in the audit (`llm_flags_discarded`,
+with the reason) and logged, so the model's claim and the code's refusal sit side
+by side on every run. Proven by the seven-fixture replay before and after (all
+green after; the Coral Bay invented endorsement still counts), a mutation proof,
+and the deployed runs recorded in the Phase 9.2.2 entry of the
+[build log](build-log.md). A deterministic check in code is the first control in
+this sequence that vendor drift cannot move.
+
 ## What the prototype has vs. what production adds
 
 The prototype ships the *mechanisms* this taxonomy governs — `variants.yaml`,

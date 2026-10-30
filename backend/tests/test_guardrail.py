@@ -711,6 +711,207 @@ def test_market_vocabulary_is_not_flagged(
 
 
 # --------------------------------------------------------------------------- #
+# Phase 9.2.2 — an LLM citation flag counts only when code verifies its quote.
+#
+# The verifier itself is tested in `test_guardrail_llm_flags.py`; these prove the
+# agent wiring: the verdict, and the two additive audit keys, on each path.
+# --------------------------------------------------------------------------- #
+
+
+def _audit_payload(conn: psycopg.Connection, claim_id: UUID) -> dict[str, object]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT payload FROM audit_log WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+    assert row is not None
+    payload: dict[str, object] = row[0]
+    return payload
+
+
+def _llm_citation_response(quote: str | None, detail: str) -> str:
+    flag: dict[str, str] = {"kind": "hallucinated_citation", "detail": detail}
+    if quote is not None:
+        flag["quote"] = quote
+    return json.dumps({"flags": [flag], "summary": "One citation concern raised."})
+
+
+def test_llm_citation_claim_without_provision_shape_does_not_fail_the_claim(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """The 26 October finding, replayed through the wiring: the model flags
+    'market range', the code refuses it, the claim passes, and the audit shows
+    the claim and the refusal side by side."""
+    claim_id = _insert_claim_stub(clean_db)
+    detail = "references 'market range' as a policy concept; it is settlement methodology"
+    mock_provider.response_text = _llm_citation_response("market range", detail)
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    result = guardrail.evaluate(
+        claim_id,
+        uuid4(),
+        adjuster_result=_adjuster_result(
+            "The value sits at the midpoint of the moderate-severity market range."
+        ),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    assert result.output.passed is True
+    assert result.output.flags == []
+    payload = _audit_payload(clean_db, claim_id)
+    assert payload["llm_flags_discarded"] == [
+        {
+            "kind": "hallucinated_citation",
+            "detail": detail,
+            "quote": "market range",
+            "reason": "quote_not_a_provision",
+        }
+    ]
+    assert payload["llm_flags_counted"] == []
+    assert payload["output"] == {
+        "passed": True, "flag_count": 0, "flags": [], "summary": result.output.summary
+    }
+
+
+def test_llm_citation_claim_without_quote_is_refused_as_no_quote(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _llm_citation_response(None, "cites a section not in the chunks")
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    result = guardrail.evaluate(
+        claim_id, uuid4(), adjuster_result=_adjuster_result("clean reasoning"),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    assert result.output.passed is True
+    discarded = _audit_payload(clean_db, claim_id)["llm_flags_discarded"]
+    assert isinstance(discarded, list)
+    assert [d["reason"] for d in discarded] == ["no_quote"]
+    assert discarded[0]["quote"] is None
+
+
+def test_llm_citation_claim_with_verified_quote_fails_the_claim(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """The LLM-only path that still works.
+
+    The reasoning cites `section Named Perils Covered`, which the rule engine
+    *allows* (the name is a retrieved section), so the rule engine is silent. The
+    model disagrees and quotes it with its keyword: the quote is in the reasoning
+    and has the shape of a provision, so it counts, and the audit carries the
+    reasoning's own span as the evidence.
+    """
+    claim_id = _insert_claim_stub(clean_db)
+    detail = "the cited section does not say what the reasoning claims"
+    mock_provider.response_text = _llm_citation_response("'section named perils covered'", detail)
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    result = guardrail.evaluate(
+        claim_id,
+        uuid4(),
+        adjuster_result=_adjuster_result(
+            "Aligned with section Named Perils Covered, which lists water damage."
+        ),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    assert result.output.passed is False
+    assert [(f.kind, f.source) for f in result.output.flags] == [("hallucinated_citation", "llm")]
+    payload = _audit_payload(clean_db, claim_id)
+    assert payload["rule_checks"] == {"flag_count": 0, "flags": []}
+    assert payload["llm_flags_counted"] == [
+        {"kind": "hallucinated_citation", "detail": detail, "quote": "section Named Perils Covered"}
+    ]
+    assert payload["llm_flags_discarded"] == []
+    # The locked flag shape is untouched: no `quote` on the flag itself.
+    output = payload["output"]
+    assert isinstance(output, dict)
+    assert output["flags"] == [{"kind": "hallucinated_citation", "detail": detail, "source": "llm"}]
+
+
+def test_quote_on_pii_flag_is_ignored(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = json.dumps(
+        {
+            "flags": [{"kind": "pii", "detail": "a phone number", "quote": "555-0100"}],
+            "summary": "PII found.",
+        }
+    )
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    result = guardrail.evaluate(
+        claim_id, uuid4(), adjuster_result=_adjuster_result("clean reasoning"),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    assert result.output.passed is False
+    assert [(f.kind, f.detail, f.source) for f in result.output.flags] == [
+        ("pii", "a phone number", "llm")
+    ]
+    payload = _audit_payload(clean_db, claim_id)
+    assert payload["llm_flags_counted"] == [
+        {"kind": "pii", "detail": "a phone number", "quote": None}
+    ]
+    assert payload["llm_flags_discarded"] == []
+
+
+def test_audit_records_empty_verification_lists_on_the_clean_path(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Both keys are always present, `[]` when the model raised nothing."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.response_text = _llm_clean_response()
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    guardrail.evaluate(
+        claim_id, uuid4(), adjuster_result=_adjuster_result("clean reasoning"),
+        retrieved_chunks=_retrieved_chunks(),
+    )
+    payload = _audit_payload(clean_db, claim_id)
+    assert (payload["llm_flags_counted"], payload["llm_flags_discarded"]) == ([], [])
+
+
+def test_audit_records_empty_verification_lists_on_the_error_path(
+    clean_db: psycopg.Connection,
+    db_settings: Settings,
+    prompt_loader: PromptLoader,
+    mock_provider: MockProvider,
+) -> None:
+    """Both keys are present as `[]` when no reply was parsed; `error` says why."""
+    claim_id = _insert_claim_stub(clean_db)
+    mock_provider.raise_on_call = LLMProviderError("AnthropicProvider: rate limited")
+    guardrail = _build_guardrail(
+        conn=clean_db, provider=mock_provider, db_settings=db_settings, prompt_loader=prompt_loader
+    )
+    with pytest.raises(LLMProviderError):
+        guardrail.evaluate(
+            claim_id, uuid4(), adjuster_result=_adjuster_result("clean reasoning"),
+            retrieved_chunks=_retrieved_chunks(),
+        )
+    payload = _audit_payload(clean_db, claim_id)
+    assert (payload["llm_flags_counted"], payload["llm_flags_discarded"]) == ([], [])
+    assert payload["output"] is None
+
+
+# --------------------------------------------------------------------------- #
 # Phase 8.6.1 — citation keyword case-insensitivity is scoped to the keyword.
 #
 # These exercise `GuardrailRuleEngine` directly rather than through the agent:
