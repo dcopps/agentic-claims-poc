@@ -163,3 +163,5 @@ At each stop the entries are presented **in full** in the reply, not summarised.
 ## Approval
 
 **Approved 30 October 2026 (Dermot).** D1–D6 as recommended: nineteen register entries; pre-8.4 amendments stay in the build story; the stale index table is removed; HTML anchors; the glossary repeated in both documents; both preambles reviewed at stop 1. Neither optional enhancement. Work proceeds one phase per stop, beginning with prompt 01.
+
+**Stop 1 approved as written, with one addition to the format (Dermot, 30 October 2026):** every build-story entry and every register entry opens with a single bold sentence labelled *In one line:*, and at the end of the build the build story gets an at-a-glance table at the top listing every phase with that one line. Forward references: the build story may reach forward where it helps the reader; register entries stay in their own moment. Also requested: a backlog item for an MCP server in front of the prototype's API (recorded under *Future work*).

@@ -115,6 +115,11 @@ Each should be visited before Phase 8.7 lands, and any items found folded into t
 
 ## Future work (queued, not next)
 
+### An MCP server in front of the prototype's API (requested by Dermot, 30 October 2026)
+
+**Let a claims manager or auditor ask, in natural language, why a claim settled or escalated, and get an answer drawn only from the audit trail — never from re-deciding.** A Model Context Protocol server that sits in front of the existing HTTP API and exposes read-only tools over claims, runs, the audit trail and chain verification (the `/api/claims`, `/api/runs/{correlation_id}`, `/api/audit?correlation_id=` and `/api/audit/verify/{correlation_id}` surfaces), plus one action: run a scripted scenario. The answering assistant reads the recorded `output_check`, `escalation_decision` and `llm_call` payloads and explains them; it has no tool that re-runs an agent on a claim or alters anything. About a day's work with FastMCP; additive; no backend change. Placement before or after Phase 9.3 (Azure AI Foundry) is Dermot's choice.
+
+
 ### Guardrail rule-engine test corpus from more than one model
 
 *Raised by Phase 8.6.1 — the lesson from the citation-regex false positive.*
