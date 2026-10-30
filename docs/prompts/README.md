@@ -60,6 +60,17 @@ This phase set out to lay down everything the agents would later write to and re
 
 *Technical detail:* prompt [`02-phase-1-data-layer.md`](02-phase-1-data-layer.md), plan [`02-phase-1-data-layer-plan.md`](02-phase-1-data-layer-plan.md), report [`02-phase-1-data-layer-report.md`](02-phase-1-data-layer-report.md); build log, entry *2026-05-08 — Phase 1: Data layer and settings infrastructure*.
 
+<a name="entry-03"></a>
+### 03 — Phase 2: the first agent, and the door every model call goes through
+
+**TL;DR:** This phase connected the system to the outside AI models for the first time, through a single doorway that every future agent would also use, so that each call is logged the same way and the provider can be swapped without rewriting the agents. It then built the first agent, the Validator, which finds the relevant passages of the policy and asks the model whether the loss is covered. Every call writes to the audit trail, including the ones that fail. Finished on 11 May 2026.
+
+**Technologies:** Anthropic's Claude and Mistral's models as the two providers behind one gateway, pgvector similarity search for retrieving policy passages, Markdown files for the externalised prompts, structured JSON logging for every model call.
+
+This phase set out to build the gateway through which every agent talks to a language model, with two providers behind it; a logger that writes one structured record per model call, with the cost when the price is known; a loader that keeps every prompt in a plain text file outside the code, so that what the model is told can be read and reviewed without reading the program; and the Validator, the agent that turns the claim narrative into a search, fetches the three most relevant passages of the policy, asks the model for a coverage verdict, and refuses any verdict that cites a passage it was not shown. It delivered all of that with 59 new tests, and one real call to the Mistral service confirmed the whole chain worked end to end. Dermot approved the plan as proposed. Two design rules that shaped the rest of the build were fixed here: the model's role and format instructions always travel separately from the per-claim content, and an audit entry is written on every exit path, so a failed call leaves as full a record as a successful one. The surprises were all in the tooling, six of them, including two places where the vendor libraries differed from their documentation; each was fixed and noted.
+
+*Technical detail:* prompt [`03-phase-2-llm-gateway-and-validator.md`](03-phase-2-llm-gateway-and-validator.md), plan [`03-phase-2-llm-gateway-and-validator-plan.md`](03-phase-2-llm-gateway-and-validator-plan.md), report [`03-phase-2-llm-gateway-and-validator-report.md`](03-phase-2-llm-gateway-and-validator-report.md); build log, entry *2026-05-11 — Phase 2: LLM Gateway and Validator agent*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
