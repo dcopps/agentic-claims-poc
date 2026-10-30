@@ -46,7 +46,7 @@ Suite **391 passed, 0 failed, 14 skipped** (from 382 / 0 / 7). New: contract tes
 - **D5 revised** (29 October, Dermot): the user template changed in two places. Reason and evidence in the plan's *Approval* section. Consequence: recorded `prompt.user` values are not byte-comparable across the change; the fixture stores inputs, so the replay is unaffected, and the extraction script's round-trip proof holds under either template.
 - **The phase closes as partially verified**, not verified: plan §7's "halt and diagnose if Harborline still escalates" fired on the Render script pass. The diagnosis is the case for 9.2.2.
 - The fifth (Render) fixture was extracted before the Azure session; the sixth was not in the plan at all — it is the failing run itself.
-- The Vercel-frontend-against-Render path was not observed after the fix (no run found in the Render audit log at close-out); recorded as such.
+- The Vercel-frontend-against-Render path was not observed at close-out; Dermot ran it on 30 October 2026 (after close-out) and it escalated too (`2c42cf40`, *"$200,000 ceiling"* flagged as a policy limit). Extracted as the seventh fixture; reproduces 3 / 3. The auto-approve scenario is unreliable on every surface until 9.2.2.
 
 ## Guard clauses added beyond the spec
 
