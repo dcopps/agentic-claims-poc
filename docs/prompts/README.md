@@ -181,6 +181,17 @@ This phase set out to close a hazard present since Phase 1 and exposed by the Ph
 
 *Technical detail:* prompt [`13-phase-8.5-test-isolation-fix.md`](13-phase-8.5-test-isolation-fix.md), plan [`13-phase-8.5-test-isolation-fix-plan.md`](13-phase-8.5-test-isolation-fix-plan.md), report [`13-phase-8.5-test-isolation-fix-report.md`](13-phase-8.5-test-isolation-fix-report.md); build log, entry *Phase 8.5 — Test-isolation Fix*.
 
+<a name="entry-14"></a>
+### 14 — Phase 8.5.1: a test that passed while breaking the database
+
+**TL;DR:** The first run of the tests against the new local test database showed two failures that had never appeared on the shared build server. One test was proving a safety property by temporarily breaking the database, and relied on an automatic undo that an earlier phase had removed. It passed the first time, left the damage behind, and every later run failed. This small release fixed the test so the undo is explicit and checked. Finished on 14 September 2026. The first "point release" in the numbering.
+
+**Technologies:** PostgreSQL schema constraints and transactions; pytest.
+
+This release arose from an investigation rather than a pre-written brief, so its archive holds the prompt, diagnosis and plan in one file. Running the suite against the persistent test database created in Phase 8.5 gave two failures in the migration tests. The failing test deliberately drops a database constraint and tries to re-add a narrower one, expecting a refusal; it had relied on both steps sharing one implicit transaction so the refusal would undo the drop. Phase 8.4 had abolished that implicit transaction, so the drop now stuck. The fix wraps the surgery in an explicit transaction and adds an assertion that the constraint is present again afterwards, which is what turns the test from one that cannot tell "refused correctly" from "destroyed, then refused" into one that can. Three lessons were written into the record: the fault was invisible on the shared build server, which starts from a fresh database every time; the test passed on the very run that did the damage; and clearing rows between tests does not undo changes to the schema. Dermot commissioned the fix; the record does not name a separate approval gate. The decision register records this as [R-03](../decision-register.md#r-03).
+
+*Technical detail:* prompt and plan [`14-phase-8.5.1-migration-test-autocommit-fix.md`](14-phase-8.5.1-migration-test-autocommit-fix.md) (combined), report [`14-phase-8.5.1-migration-test-autocommit-fix-report.md`](14-phase-8.5.1-migration-test-autocommit-fix-report.md); build log, entry *Phase 8.5.1 — Migration-test Autocommit Fix (point release)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised

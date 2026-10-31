@@ -92,4 +92,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.5 — Test-isolation Fix* and *Phase 9.1 — Azure Foundation* (test guard); plan `13-phase-8.5-test-isolation-fix-plan.md`; report `13-phase-8.5-test-isolation-fix-report.md`; the resolver is `_resolve_test_database_url` in `backend/tests/conftest.py`, the tests in `backend/tests/test_db_isolation.py`.
 
+<a name="r-03"></a>
+### R-03 — A migration test passed while leaving the database broken, invisibly in CI
+
+**TL;DR:** A test that checks a safety property worked by temporarily breaking the database and expecting it to be put back automatically. An earlier fix had removed the automatic undo. The test still passed, but left the database broken for every test run after it. The shared build server never noticed because it starts from a clean database each time.
+
+**Technologies:** PostgreSQL constraints and transactions; the pytest harness.
+
+**Date and phase.** 14 September 2026, Phase 8.5.1.
+
+**What happened.** Running the full suite for the first time against the persistent local test database gave two failures in the migration tests. One test proves a documented hazard of undoing a migration: it drops a constraint and re-adds a narrower one, expecting the database to refuse. It had relied on both statements sharing one implicit transaction, so the refusal would roll back the drop. Phase 8.4 had removed that implicit transaction to fix the audit-trail loss (R-01). The drop now stood, the test passed, and the constraint was gone for every run that followed.
+
+**Why it mattered.** Three properties made this dangerous. It was permanently invisible on the shared build server, which provisions a fresh database per run. The test passed on exactly the run that did the damage and failed on every innocent run afterwards, so blame would land on whoever ran next. And the harness's row-clearing between tests does not touch the schema, so nothing in the framework could notice. A test suite that can poison its own database while green is not a safety net.
+
+**What was decided, and by whom.** Dermot commissioned a point release to fix it. The record does not describe a separate approval gate; the prompt, diagnosis and plan were one document produced from the investigation.
+
+**What was done.** The test's schema surgery was wrapped in an explicit transaction that rolls back on exit, and a check was added afterwards that the constraint is present again. The local test database was repaired with one statement. This release also established the point-release numbering for small fixes.
+
+**How it was proven.** The old form of the test was deliberately reinstated with the new check kept, and it failed, showing the check can tell the difference. The fix was restored, the suite passed, and the migration tests were run twice in a row to show nothing leaked between runs. The constraint was confirmed present afterwards.
+
+**Status.** Resolved. A suggestion for a broader guard, a snapshot of all constraints before and after a run, is recorded in the backlog and not built.
+
+*Technical detail:* build log, *Phase 8.5.1 — Migration-test Autocommit Fix (point release)*; combined prompt and plan `14-phase-8.5.1-migration-test-autocommit-fix.md`; report `14-phase-8.5.1-migration-test-autocommit-fix-report.md`; the test is `backend/tests/test_migration_0002.py`.
+
 _Entries follow, in build order._
