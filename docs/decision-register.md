@@ -230,4 +230,50 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.6* amendment *Deployed verification outcome (21 September 2026)*, findings F1 to F3; backlog, *Findings from the 21 September 2026 verification*; runs `765f1ad2` (abort on lookup) and `74513bca` (denial path).
 
+<a name="r-09"></a>
+### R-09 — Azure foundation decisions: the service's own identity, building the image in the cloud registry, and baking the embedding model into the image
+
+**TL;DR:** Standing the prototype up on Azure forced four design choices before anything was built. The service gets an identity of its own kind that can be referenced before it exists; the container image is built inside Azure's registry rather than on a laptop; the language-understanding model the service needs is packed into the image so the running service never fetches anything from the internet; and database sign-in by password is accepted for now with the stronger option deferred.
+
+**Technologies:** Azure user-assigned managed identity; Azure Container Registry builds; a Docker image with the BGE embedding model baked in; Azure Key Vault secret references.
+
+**Date and phase.** 1 October 2026, Phase 9.1, approval gate.
+
+**What happened.** The brief described the service with a system-assigned identity, the simpler kind that is created with the service. Investigation before planning showed that the platform validates the service's references to Key Vault secrets and to the registry at deployment time, and a system-assigned identity does not yet exist at that moment, so the references cannot be created in the same pass. Separately, the embedding model, which turns text into the numbers used to search the policy, is normally downloaded at first use; a service in a regulated environment should not depend on reaching the model's publisher at runtime.
+
+**Why it mattered.** Each choice is a one-way door for the deployment. The identity type decides whether the whole environment can be created in one description or needs manual steps between passes. Where the image is built decides whether a developer's machine is part of the production path. Whether the model is fetched or baked decides whether the service has an undeclared network dependency.
+
+**What was decided, and by whom.** Dermot approved the plan with four numbered decisions: a user-assigned identity instead of the brief's wording; the processor library pinned to a CPU-only build on Linux, with confirmation that the Mac's resolution was unchanged; sign-in to the database by password with the connection string in the vault, the directory-based option deferred and recorded as a gap; and the model baked into the image with network access to its publisher switched off at runtime, so a missing model fails loudly rather than being silently fetched. The image is built by the registry's own build service, never on a laptop; the record presents this as the plan from the start and says nothing about a free-trial restriction forcing it.
+
+**What was done.** The Bicep files, the two-stage image build, the start and stop scripts and the pinned processor library were built as approved. The platform preview and two deployment passes were run, the database bootstrapped under a hostname check, and the three scenarios verified.
+
+**How it was proven.** The deployment succeeded in two passes with the service resolving its vault references at start; the processor pin was proven not to change the Mac's resolution by comparing exported dependency lists; the baked model served the scenarios with external access disabled. Cold start from zero was measured at 28 seconds.
+
+**Status.** Resolved. The deferred directory-based database sign-in and the absence of private network endpoints are recorded gaps in the architecture reference.
+
+*Technical detail:* build log, *Phase 9.1 — Azure Foundation* (*What was built*, *Deployment*, *Issues and deviations*); plan `19-phase-9.1-azure-foundation-bicep-container-apps-plan.md` (§0 findings, §5 identity, *Approval*); report `19-phase-9.1-azure-foundation-bicep-container-apps-report.md`; `infra/bicep/`, `Dockerfile`.
+
+<a name="r-10"></a>
+### R-10 — Parking the Azure stack: the replica that outlived the stop, and the database that restarts itself after seven days
+
+**TL;DR:** To keep costs down, the Azure installation is switched off between demonstrations by a script. Two things about switching off turned out not to be what the script's own description claimed. The last running copy of the service stayed up for several minutes after the database had stopped. And the platform silently restarts a stopped database after seven days, so "parked" does not stay parked.
+
+**Technologies:** Azure Container Apps scale-to-zero; Azure Database for PostgreSQL Flexible Server stop and start.
+
+**Date and phase.** 1 October 2026, Phase 9.1 (the replica); 26 October 2026, Phase 9.2 (the restart).
+
+**What happened.** On 1 October the stop script set the service's minimum copies to zero and then stopped the database. Setting the minimum to zero permits the service to scale down but does not stop a copy that is already running; the one that had served the scenarios stayed up for its five-minute cooling-off period and outlived the database by about that long. It was idle and nothing failed, but the script's header said the service went down first, which was not true. On 26 October the database was found running although it had been stopped on 1 October; the platform's log showed the stop had succeeded and the platform itself had restarted the server around 8 October, as it does to any Flexible Server stopped for seven days.
+
+**Why it mattered.** A parking procedure whose description does not match its behaviour will mislead the next person to run it, and a database that quietly restarts itself incurs cost and leaves the system in a state the handbook does not predict.
+
+**What was decided, and by whom.** The script's description was corrected at once in Phase 9.1, and making the script wait for the last copy to drain was recorded as a follow-on rather than changed on the spot, because it is a behaviour change. In Phase 9.2 Dermot directed that the database be left running for the session and that the stop script be the last act of every Azure session, and the seven-day restart was written into the handbook as something to check at the start of each session. The wait-for-drain was built in Phase 9.2.
+
+**What was done.** The stop script now polls until no copy of the service is running, for up to seven minutes, and aborts leaving the database running if the copy never drains. Every session since records the parked time and the expected auto-restart date in the handbook and the build log.
+
+**How it was proven.** Observed directly: the 1 October stop and start round trip recorded the timings and resulting states; the 26 October session found the database running and the platform log explained why; the stop script's drain wait has been observed completing in later sessions, for example after 285 seconds on 30 October.
+
+**Status.** Resolved for the script; the seven-day restart is a platform behaviour that is worked around, not removed.
+
+*Technical detail:* build log, *Phase 9.1* (*Issues and deviations*, *Stop/start round trip*) and *Phase 9.2* (*Findings that shaped the work*, *Parking*); `scripts/azure-stop.sh`, `wait_for_zero_replicas` in `scripts/azure-common.sh`.
+
 _Entries follow, in build order._

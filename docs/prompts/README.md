@@ -236,6 +236,17 @@ This release set out to make only the citation keyword case-insensitive, so that
 
 *Technical detail:* prompt [`18-phase-8.6.1-guardrail-citation-regex-fix.md`](18-phase-8.6.1-guardrail-citation-regex-fix.md), plan [`18-phase-8.6.1-guardrail-citation-regex-fix-plan.md`](18-phase-8.6.1-guardrail-citation-regex-fix-plan.md), report [`18-phase-8.6.1-guardrail-citation-regex-fix-report.md`](18-phase-8.6.1-guardrail-citation-regex-fix-report.md); build log, entry *Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)* and the *Deployed verification outcome (21 September 2026)* amendment to the Phase 8.6 entry.
 
+<a name="entry-19"></a>
+### 19 — Phase 9.1: a second home on Azure, built from a written description
+
+**TL;DR:** The prototype had lived on three small hosting services. This phase stood up a second, complete installation on Microsoft Azure, the kind of platform a regulated insurer would actually use, described entirely in infrastructure files so it can be recreated from the repository. The same code, the same database layout and the same settings ran there unchanged. The three scenarios passed on it the same day. Finished on 1 October 2026.
+
+**Technologies:** Azure Container Apps for the service, Azure Database for PostgreSQL with pgvector, Azure Key Vault for secrets, Azure Container Registry for the built image, a managed identity in place of stored passwords, Bicep for describing all of it, Docker image built in the cloud registry with the embedding model baked in.
+
+This phase set out to give the prototype a second deployment target without changing the first: the service in a container, the database as a managed PostgreSQL server in North Europe, secrets in a vault read by an identity the service holds rather than by a stored credential, and everything provisioned by Bicep files with start and stop scripts for demonstration windows. It delivered that, with two deployment passes because the service needs an image that must be built after the registry exists, and the three scenarios passed on Azure with seven audit entries each and the chain verified. Dermot ran the first pass from his own shell and approved four decisions at the gate, recorded as [R-09](../decision-register.md#r-09). Notable along the way: the platform's change preview never reports "no changes" for this template, and the record lists the three categories of harmless noise so a later reader can tell them from a real change; and the stop script left the service's last replica running for a cooling-off period after the database had stopped, recorded as [R-10](../decision-register.md#r-10). The test harness's refusal to run against a live database was extended to the Azure host.
+
+*Technical detail:* prompt [`19-phase-9.1-azure-foundation-bicep-container-apps.md`](19-phase-9.1-azure-foundation-bicep-container-apps.md), plan [`19-phase-9.1-azure-foundation-bicep-container-apps-plan.md`](19-phase-9.1-azure-foundation-bicep-container-apps-plan.md), report [`19-phase-9.1-azure-foundation-bicep-container-apps-report.md`](19-phase-9.1-azure-foundation-bicep-container-apps-report.md); build log, entry *Phase 9.1 — Azure Foundation: Bicep, Postgres Flexible Server, Container Apps, Key Vault, Managed Identity*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
