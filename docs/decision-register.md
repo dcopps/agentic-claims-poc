@@ -46,4 +46,27 @@ Every entry has the same ten parts, in the same order, and runs to about ten lin
 
 The register begins with Phase 8.4 in June 2026, the first phase in the build that was itself a response to an incident. Earlier phases had approval-gate amendments but no incidents; those amendments are noted in the build story, phase by phase. Each entry stays in its own moment: it describes what was known at the time, and later developments are recorded in their own entries.
 
+<a name="r-01"></a>
+### R-01 — The audit trail was silently losing three of every seven entries on the live system
+
+**TL;DR:** The audit trail is the record that is supposed to explain every decision the system makes. On the live system it was quietly dropping most of each run's entries, while the screen showed everything as fine. The cause was one database setting. It was fixed, and tests were added that would have caught it.
+
+**Technologies:** PostgreSQL transactions through the psycopg database driver.
+
+**Date and phase.** 26 June 2026, Phase 8.4.
+
+**What happened.** While rehearsing the demonstration on the deployed system, a threshold-escalation run showed all four agents completing on screen, but the audit trail held entries for only the last agent and the orchestrator. The three earlier agents' entries, including the Validator's coverage verdict and the Adjuster's settlement reasoning, had never been written.
+
+**Why it mattered.** The project's central claim is that the audit trail alone is enough to reconstruct and explain any past decision. A run whose record is two-sevenths complete cannot be explained, and nothing on screen said anything was wrong. Had it gone unnoticed, every live run since the connection setting was introduced would have been unexplainable after the fact.
+
+**What was decided, and by whom.** Dermot commissioned the fix as its own phase and approved the plan at the gate with one amendment: two leftover commit calls in the data scripts, harmless but encoding the old behaviour, were brought into scope so the code would not mislead the next reader.
+
+**What was done.** The database connection had been opened in a mode where an agent's first read quietly began a transaction, and the audit write then nested inside it and was discarded when the connection closed. The mode was changed so each write stands on its own, a now-redundant commit was removed, and every place that writes was reviewed to confirm nothing depended on the old behaviour. Four regression tests were added, one per agent, each writing through the real connection and reading back through a separate one.
+
+**How it was proven.** The new tests were run against three connection states. Against the fix, all four passed. Against the original setting, three failed and one passed, reproducing the rehearsal exactly. Against the original setting with the redundant commit also removed, all four failed, which showed that commit had been holding the bug to three agents rather than four. The deployed verification was carried forward and discharged on 21 September 2026, when every run that reached a decision wrote exactly seven entries.
+
+**Status.** Resolved.
+
+*Technical detail:* build log, *Phase 8.4 — Audit-write Transaction Fix* (discriminator proof table); plan `12-phase-8.4-audit-write-fix-plan.md`; report `12-phase-8.4-audit-write-fix-report.md`; the fix is in `backend/db/connection.py`, the tests in `backend/tests/test_audit_persistence.py`.
+
 _Entries follow, in build order._

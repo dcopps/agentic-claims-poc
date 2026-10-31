@@ -159,6 +159,17 @@ This phase set out to make the explainability surfaces usable end to end: the pr
 
 *Technical detail:* prompt [`11-phase-8.3-explainability-panel-fixes.md`](11-phase-8.3-explainability-panel-fixes.md), plan [`11-phase-8.3-explainability-panel-fixes-plan.md`](11-phase-8.3-explainability-panel-fixes-plan.md), report [`11-phase-8.3-explainability-panel-fixes-report.md`](11-phase-8.3-explainability-panel-fixes-report.md); build log, entry *Phase 8.3 — Explainability Panel Fixes*.
 
+<a name="entry-12"></a>
+### 12 — Phase 8.4: the audit trail was losing entries on the live system
+
+**TL;DR:** During a rehearsal on the live system, three of the four agents showed as finished on screen but their audit entries were missing. The record that is meant to explain every decision was silently incomplete. This phase found the cause, a database connection setting that discarded writes under a particular sequence of operations, fixed it, and added tests that read back through a second connection to prove the entries really persist. Finished on 26 June 2026. The first entry in the decision register belongs to this phase.
+
+**Technologies:** PostgreSQL transaction handling through psycopg; no new dependency.
+
+This phase set out to fix a production-only data-loss bug found while rehearsing on the deployed system. Re-running the threshold scenario on the live build, the Doc-Parser, Validator and Adjuster showed as complete but had written nothing to the audit trail; only the Guardrail's and the orchestrator's entries survived. The cause was a connection opened in a mode where the first read quietly began a transaction that the audit write then nested inside, and that outer transaction was never committed. The fix changed the connection mode, removed a now-redundant commit, and reviewed every place that writes to make sure nothing depended on the old behaviour. Four new tests write through the real connection and read back through a separate one, the only arrangement that can observe whether a write was durable. Dermot approved the plan with one amendment: two leftover commit calls in the data scripts were folded into scope so the code would not mislead the next reader. Notable along the way: the fix was tested against three connection states, and the third showed that the "redundant" commit had been load-bearing under the old mode; removing it alone would have widened the bug to all four agents. The decision register records this as [R-01](../decision-register.md#r-01).
+
+*Technical detail:* prompt [`12-phase-8.4-audit-write-fix.md`](12-phase-8.4-audit-write-fix.md), plan [`12-phase-8.4-audit-write-fix-plan.md`](12-phase-8.4-audit-write-fix-plan.md), report [`12-phase-8.4-audit-write-fix-report.md`](12-phase-8.4-audit-write-fix-report.md); build log, entry *Phase 8.4 — Audit-write Transaction Fix*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
