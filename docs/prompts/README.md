@@ -104,6 +104,17 @@ This phase set out to decouple submission from processing, to record the claim's
 
 *Technical detail:* prompt [`06-phase-5-decoupling-and-replay.md`](06-phase-5-decoupling-and-replay.md), plan [`06-phase-5-decoupling-and-replay-plan.md`](06-phase-5-decoupling-and-replay-plan.md), report [`06-phase-5-decoupling-and-replay-report.md`](06-phase-5-decoupling-and-replay-report.md); build log, entry *Phase 5 — Decoupling and Replay*.
 
+<a name="entry-07"></a>
+### 07 — Phase 6: an interface a person can work in
+
+**TL;DR:** This phase turned the plain interface into the one the demonstration uses: separate pages for claims, for a live run with each agent's card filling in as it finishes, for the audit trail with a button that checks the whole chain has not been tampered with, for a person to approve or reject an escalated claim, and for trying each agent on its own. Finished on 14 June 2026.
+
+**Technologies:** React Router for the pages, TanStack Query for fetching and caching server data, a small design system of shared components and tokens, a second database migration.
+
+This phase set out to polish the Phase 5 interface into a routed application with a consistent design, live pipeline visualisation, an audit viewer with chain verification, a human-review panel and an agent test bench, together with the server endpoints those pages need. It delivered all of that with 34 new server tests and a rebuilt set of interface tests. Dermot approved the plan as written with two notes for the report: the chain-verification wording in the interface must say it checks the whole ledger, not one run; and the review panel assembles its evidence from the audit trail. Two things were notable. A person rejecting a claim needed a terminal state the database did not yet allow, so the schema gained it, and the audit trail gained a "human" actor so that a person's decision is recorded with the same rigour as an agent's. And the test bench needed to try an agent without writing to the audit trail, which was given its own path rather than a switch on the real one, so the real path stayed untouched.
+
+*Technical detail:* prompt [`07-phase-6-frontend-polish.md`](07-phase-6-frontend-polish.md), plan [`07-phase-6-frontend-polish-plan.md`](07-phase-6-frontend-polish-plan.md), report [`07-phase-6-frontend-polish-report.md`](07-phase-6-frontend-polish-report.md); build log, entry *Phase 6 — Frontend Polish (+ supporting backend endpoints)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
