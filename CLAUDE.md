@@ -117,7 +117,8 @@ agentic-claims-poc/
 │   ├── design-decisions.md        # Phase 7
 │   ├── build-log.md               # appended after every phase
 │   └── prompts/                   # every prompt archived in build order
-│       ├── README.md
+│       ├── README.md              # the build, phase by phase, in plain language (+ engineer sections)
+│       ├── README_TLDR.md         # regenerated from README.md's entries at every close-out
 │       └── NN-descriptive-name.md
 ├── diagrams/
 │   ├── 1-headline-agent-flow.mmd
@@ -179,7 +180,7 @@ Together these make the build reproducible end-to-end, and inspectable by a read
 
 **Decision register.** Every halt, deviation from a plan, incident, or decision taken at an approval gate produces an entry in `docs/decision-register.md`, in plain language per that document's standard (TL;DR, Technologies, the nine fixed parts, one *Technical detail* line), before the phase's closing commit. Where the record is silent on who decided or how something was proven, the entry says so.
 
-**Build story.** Every phase's close-out adds its entry to the plain-language index in `docs/prompts/README.md` (and its row in the at-a-glance table), and the new prompt, plan and report files carry the one-line signpost at the top: `> *Plain-language summary of this phase: see [the build story](README.md#entry-NN), entry NN.*`
+**Build story.** Every phase's close-out adds its entry to the plain-language index in `docs/prompts/README.md`, and the new prompt, plan and report files carry the one-line signpost at the top: `> *Plain-language summary of this phase: see [the build story](README.md#entry-NN), entry NN.*` Each entry's *TL;DR* ends with when the phase finished — weekday, full date and time in UTC, taken from the report's *Completed at* timestamp, or from the closing commit with a note in the *Technical detail* line when the report has none. **At every close-out the at-a-glance table at the top of `docs/prompts/README.md` and the whole of `docs/prompts/README_TLDR.md` are regenerated from the entries** (never edited by hand), so the three stay identical.
 
 **Anonymisation.** This is a generic prototype. The client name does not appear in code, comments, tests, fixtures, documentation, commit messages, or log output. If you find it, remove it.
 

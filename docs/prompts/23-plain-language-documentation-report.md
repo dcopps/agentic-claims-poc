@@ -27,6 +27,10 @@
 - `backend/tests/test_anonymisation.py` (scans `docs/`, `README.md`, `CLAUDE.md`): passed.
 - The code suite is unchanged by this phase: 429 passed, 0 failed, 15 skipped.
 
+## Addendum (31 October 2026)
+
+At Dermot's request after close-out: every TL;DR ends with the weekday, full date and time the phase finished (report timestamp where one exists, otherwise the closing commit, noted in the *Technical detail* line); `docs/prompts/README_TLDR.md` created and, with the at-a-glance table, regenerated from the entries; the standing rule for that regeneration added to `CLAUDE.md`.
+
 ## Suggestions (not in scope)
 
 - A plain-language *Start here* for the production-architecture column of `docs/architecture-stack-reference.md`, in the same standard.
