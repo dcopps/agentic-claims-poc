@@ -126,6 +126,17 @@ This phase set out to expand the README to its final form, to write the change-g
 
 *Technical detail:* prompt [`08-phase-7-demo-polish-and-documentation.md`](08-phase-7-demo-polish-and-documentation.md), plan [`08-phase-7-demo-polish-and-documentation-plan.md`](08-phase-7-demo-polish-and-documentation-plan.md), report [`08-phase-7-demo-polish-and-documentation-report.md`](08-phase-7-demo-polish-and-documentation-report.md); build log, entry *Phase 7 — Demo Polish and Documentation*.
 
+<a name="entry-09"></a>
+### 09 — Phase 8: six fixes from the first rehearsal
+
+**TL;DR:** A rehearsal of the demonstration found six things that got in the way, and this phase fixed them in one pass. The most visible was that the live run page was opening only after the run had finished, so nobody saw the agents work. The most consequential for later was a first attempt to stop the Guardrail treating the Adjuster's own market vocabulary as a policy citation, by telling it so in its instructions. Finished on 15 June 2026.
+
+**Technologies:** no new ones; changes to the React pages and to one agent's instructions.
+
+This phase set out to fix the six rehearsal findings: the run page must open before the run completes so the agents can be watched; a page asked for data before it exists must wait gracefully rather than error; each agent's card shows that it is running, with an expected duration; the three scenario narratives state their dollar figures in words so the Doc-Parser does not read zero; the Guardrail's instructions say that market-data vocabulary is settlement framing and not a policy citation; and a run that fails to start, or aborts mid-way, shows an error banner rather than nothing. It delivered all six with 12 new tests. Dermot approved the plan as written and asked that the reasoning behind three design choices be carried into the report, where it is. The Guardrail instruction, fix number five, deserves a forward look: it worked for the model in use at the time, and would turn out, in October, to be exactly the kind of fix that does not survive a change in the model's behaviour. Phases 9.2.1 and 9.2.2 tell that story.
+
+*Technical detail:* prompt [`09-phase-8-demo-polish-fixes.md`](09-phase-8-demo-polish-fixes.md), plan [`09-phase-8-demo-polish-fixes-plan.md`](09-phase-8-demo-polish-fixes-plan.md), report [`09-phase-8-demo-polish-fixes-report.md`](09-phase-8-demo-polish-fixes-report.md); build log, entry *Phase 8 — Demo Polish Fixes from Rehearsal Discoveries*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
