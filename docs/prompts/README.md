@@ -82,6 +82,17 @@ This phase set out to complete the set of agents on the plumbing laid in Phase 2
 
 *Technical detail:* prompt [`04-phase-3-remaining-agents.md`](04-phase-3-remaining-agents.md), plan [`04-phase-3-remaining-agents-plan.md`](04-phase-3-remaining-agents-plan.md), report [`04-phase-3-remaining-agents-report.md`](04-phase-3-remaining-agents-report.md); build log, entry *2026-05-11 — Phase 3: Remaining agents (Doc-Parser, Adjuster, Guardrail)*.
 
+<a name="entry-05"></a>
+### 05 — Phase 4: the agents become a pipeline, and the escalation rules are written down
+
+**TL;DR:** Until now the four agents worked alone. This phase connected them into one run, from reading the claim to a final outcome, under a single reference number that ties every step together in the audit trail. It also wrote the rules that decide when a claim must go to a person, in a plain configuration file rather than in code, so anyone can read them. Finished on 14 June 2026.
+
+**Technologies:** a YAML policy file for the escalation rules, Server-Sent Events for streaming progress to the browser, the asyncio event queue for delivering those events.
+
+This phase set out to wire the four agents into one end-to-end run and to add the escalation engine: four hard rules that always send a claim to a person (a failed Guardrail check, a watch-listed claim type or claimant, a cross-border claim) and three threshold rules (a settlement above two hundred and fifty thousand dollars, or either the Validator or the Adjuster being insufficiently confident). Any one rule firing is enough. It also exposed a way to start a run and a way to watch its progress live, and it fixed how failures end: a failure in the first three agents aborts the run; a failure in the Guardrail sends the claim to a person, because that check must fail safe. It delivered all of that with 47 new tests, and the three scripted scenarios ran end to end for the first time. Dermot approved the plan with one amendment at the gate: the word "and" was removed from the list of phrases that mark a claim as cross-border, because it would have caught place names such as Trinidad and Tobago. Notable along the way: the thresholds now lived in two places, the earlier settings and the new policy file, and the record says plainly which one is authoritative.
+
+*Technical detail:* prompt [`05-phase-4-pipeline-orchestrator.md`](05-phase-4-pipeline-orchestrator.md), plan [`05-phase-4-pipeline-orchestrator-plan.md`](05-phase-4-pipeline-orchestrator-plan.md), report [`05-phase-4-pipeline-orchestrator-report.md`](05-phase-4-pipeline-orchestrator-report.md); build log, entry *Phase 4 — Pipeline Orchestrator*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
