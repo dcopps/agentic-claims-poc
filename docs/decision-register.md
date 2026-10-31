@@ -161,4 +161,50 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.5.3 — Record `requested_model` in Agent Audit Payloads; Reset the Deployed DB (point release)*; plan `16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md`; report `16-phase-8.5.3-requested-model-audit-and-db-reset-report.md`; the live run is `56a0d5b2`; the mechanism is `CapturedRequest` / `attach_request` in `backend/app/agents/_shared.py`.
 
+<a name="r-06"></a>
+### R-06 — Mistral withdrew its large model from the free tier; Claude Haiku became the default for all four agents, Mistral kept switchable
+
+**TL;DR:** The second AI provider stopped letting the project's free account use its large model, under any name. Two of the four agents depended on it. The decision was to run all four on Claude by default and keep the Mistral route as a switch, so the system works today and the ability to swap providers stays demonstrable rather than theoretical.
+
+**Technologies:** Claude Haiku; Mistral Large; a per-agent provider setting; the variant mechanism.
+
+**Date and phase.** 14 to 15 September 2026, Phase 8.6.
+
+**What happened.** The Phase 8.5.2 verification (R-04) and the audit entry from Phase 8.5.3 (R-05) established together that the Mistral service refused the project's free account for the large model whether asked by alias or by dated release. The provider's account pages gave no catalogue of what the free tier allowed. The Validator and Adjuster, both on Mistral by default, could not complete a run.
+
+**Why it mattered.** The demonstration could not run end to end. Beyond that, the project's third-party register argues that any provider can be substituted through configuration; this was the first time that argument was tested by events rather than asserted.
+
+**What was decided, and by whom.** Dermot, on 14 September, chose the Claude default over adding a Mistral payment method. At the plan's approval gate on 15 September he set the shape: a provider selector for each of the four agents, defaulting to Anthropic; the Mistral route kept as a named variant that a setting can make the default; an older Claude-only variant retired; the truthful provider label made a locked audit rule for every agent.
+
+**What was done.** The selectors and the variant were built; the default build no longer constructs a Mistral client or requires its key. A finding during the work was fixed on the way: three agents had been writing a fixed provider name into the audit trail, so the swap alone would have labelled every Claude settlement as Mistral; all four now record the provider actually used. The production-target documents were annotated with the date and reason, not rewritten, because the target architecture still names Mistral.
+
+**How it was proven.** Nineteen new tests, including one that fails if the default wiring is made to need a Mistral key. On 21 September the retained Mistral route was exercised live and aborted with the expected refusal, recorded in full in the audit trail, which is the substitutability argument demonstrated in both directions.
+
+**Status.** Resolved. Re-enabling Mistral as the default is an open backlog item that needs only a setting.
+
+*Technical detail:* build log, *Phase 8.6 — Validator and Adjuster Default to Claude Haiku; Mistral Path Retained as a Variant*; plan `17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md` (*Plan decisions*); report `17-phase-8.6-validator-adjuster-on-claude-haiku-report.md`; the selectors are `llm.*_provider` in `backend/settings.py`; the variant is `v1_mistral` in `backend/app/orchestrator/variants.yaml`.
+
+<a name="r-07"></a>
+### R-07 — The live verification halted: a mis-written pattern treated ordinary prose as a policy citation
+
+**TL;DR:** The first scenario of the live check, a claim that should settle on its own, was sent to a person instead. The Guardrail's pattern check had read the everyday phrase "one floor section with inventory" as a citation of a policy section. The pattern had been wrong since Phase 3 and never showed because the earlier model never wrote that way. The check was halted, not retried, and a one-line fix followed.
+
+**Technologies:** the Guardrail's regular-expression check for policy citations; Claude Haiku as the new Adjuster.
+
+**Date and phase.** 15 September 2026, Phase 8.6 verification; fixed in Phase 8.6.1 on 21 September 2026.
+
+**What happened.** After the switch to Claude (R-06), the three scripted scenarios were run on the deployed system. The threshold and guardrail scenarios behaved as designed. The auto-approve scenario escalated, because the Guardrail's deterministic citation check flagged the Adjuster's sentence about the loss being contained to "one floor section with inventory and drying as primary components" as a reference to a policy section that did not exist. The pattern had been compiled case-insensitively as a whole, which also made the rule that a cited name must start with a capital letter match lowercase words, so any keyword followed by any word became a candidate.
+
+**Why it mattered.** A guardrail that fails clean claims is as much a defect as one that passes bad ones: it would send every claim whose reasoning used an ordinary word like "section" to a person. The defect had been latent since Phase 3; the previous model's phrasing had never triggered it, which is the general lesson that a check tuned against one model's prose can fail on another's.
+
+**What was decided, and by whom.** The halt rule was applied: no prompt change, no re-run, no adjustment, because the failure depended on phrasing and a pass on retry would have been false evidence. The deployed database was left as it stood, as the evidence. A narrow point release was recommended, and Dermot approved it with two decisions on the plan: scope the case-insensitivity to the keyword alone, and let a cited name begin with a digit as well as a capital, since numbered sections are the commonest shape of an invented citation.
+
+**What was done.** One line changed in the rule engine. Seven tests were added, including the verbatim paragraph from the deployed run and the demonstration's planted endorsement read from its own file so the two cannot drift apart. One existing test that had never actually exercised the check was corrected. The Phase 8.6 report had stated that a numbered section still flagged under the recommended fix; that was wrong, the correction is in the record, and the report stands unaltered as history.
+
+**How it was proven.** Reinstating the old pattern made the new tests fail with exactly the production flag text; restoring the fix made them pass. The full verification was then re-run from a fresh reset on 21 September 2026: all three scenarios as designed, seven audit entries each, and the chain verified end to end.
+
+**Status.** Resolved. The lesson is recorded as a backlog item: test the rule engine against real reasoning from more than one model.
+
+*Technical detail:* build log, *Phase 8.6* (*Deployed verification — HALTED*) and *Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)*; plan `18-phase-8.6.1-guardrail-citation-regex-fix-plan.md`; report `18-phase-8.6.1-guardrail-citation-regex-fix-report.md`; the halted run is `8bff04e2`; the pattern is `_CITATION_CANDIDATE_RE` in `backend/app/agents/guardrail_rules.py`.
+
 _Entries follow, in build order._

@@ -214,6 +214,17 @@ This release set out to close the gap the previous one exposed. Every agent's au
 
 *Technical detail:* prompt [`16-phase-8.5.3-requested-model-audit-and-db-reset.md`](16-phase-8.5.3-requested-model-audit-and-db-reset.md), plan [`16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md`](16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md), report [`16-phase-8.5.3-requested-model-audit-and-db-reset-report.md`](16-phase-8.5.3-requested-model-audit-and-db-reset-report.md); build log, entry *Phase 8.5.3 — Record `requested_model` in Agent Audit Payloads; Reset the Deployed DB (point release)*.
 
+<a name="entry-17"></a>
+### 17 — Phase 8.6: Claude for all four agents, Mistral kept as a switch; and a halt
+
+**TL;DR:** With the Mistral model withdrawn from the free tier, two agents could not run. Rather than pay for the provider or leave the system half-working, Dermot decided that all four agents would use Claude by default, with the Mistral route kept and switchable so the substitutability argument stays real. The code was built so that each agent's provider is a setting. Then the live verification halted on its first scenario, for a reason that turned out to be eight months old. Finished on 15 September 2026, verification halted the same day.
+
+**Technologies:** Claude Haiku for all four agents by default; a per-agent provider setting; the Mistral path retained as a named variant.
+
+This phase set out to resolve the provider question and to re-verify the deployment. Each agent gained its own provider selector, defaulting to Anthropic, and the retained Mistral route became a named variant that can be chosen for a replay or made the default by a setting, with no code change. One finding along the way mattered for the audit trail: three of the four agents had recorded a fixed provider label rather than the one actually in use, so swapping the wiring alone would have labelled every Claude settlement as Mistral; all four now record the truth, and this was locked as an audit rule. It delivered that with 19 new tests. Dermot approved the plan with named decisions: retire an older variant, name the Mistral one, renumber the interface-polish phase, and make the truthful label a locked extension. The deployed verification then halted at the first scenario: the auto-approve claim escalated because the Guardrail's pattern check mistook ordinary prose for a policy citation. The halt rule held: no re-run, no quiet adjustment, the live evidence left in place, and a narrow fix recommended. The decision register records the provider decision as [R-06](../decision-register.md#r-06) and the halt as [R-07](../decision-register.md#r-07).
+
+*Technical detail:* prompt [`17-phase-8.6-validator-adjuster-on-claude-haiku.md`](17-phase-8.6-validator-adjuster-on-claude-haiku.md), plan [`17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md), report [`17-phase-8.6-validator-adjuster-on-claude-haiku-report.md`](17-phase-8.6-validator-adjuster-on-claude-haiku-report.md); build log, entry *Phase 8.6 — Validator and Adjuster Default to Claude Haiku; Mistral Path Retained as a Variant*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
