@@ -71,6 +71,17 @@ This phase set out to build the gateway through which every agent talks to a lan
 
 *Technical detail:* prompt [`03-phase-2-llm-gateway-and-validator.md`](03-phase-2-llm-gateway-and-validator.md), plan [`03-phase-2-llm-gateway-and-validator-plan.md`](03-phase-2-llm-gateway-and-validator-plan.md), report [`03-phase-2-llm-gateway-and-validator-report.md`](03-phase-2-llm-gateway-and-validator-report.md); build log, entry *2026-05-11 — Phase 2: LLM Gateway and Validator agent*.
 
+<a name="entry-04"></a>
+### 04 — Phase 3: the other three agents
+
+**TL;DR:** With the first agent working, this phase built the remaining three. One reads the claim into structured fields. One proposes a settlement figure, and is held inside a published range for that kind of loss so it cannot invent a number. One checks the proposal for leaked personal data, bias and references to policy wording that is not there, and fails the claim if it finds any. Finished on 11 May 2026, with all four agents now writing to the audit trail.
+
+**Technologies:** Claude Haiku for reading claims and for the Guardrail, Mistral Large for the settlement proposal, a static market-data table in YAML for the settlement ranges, regular expressions for the Guardrail's deterministic checks.
+
+This phase set out to complete the set of agents on the plumbing laid in Phase 2. The Doc-Parser reads the claim narrative into a fixed set of fields. The Adjuster looks up the market range for the kind and severity of loss, asks the model for a figure inside it with reasons, and refuses any figure outside it rather than quietly correcting it. The Guardrail runs a fixed set of pattern checks first, for personal data, for protected characteristics, and for policy citations absent from the retrieved passages, then asks the model for anything subtler, and fails the claim if either finds anything; it cannot pass a claim that carries a flag. Each agent keeps its prompts in plain text files and writes a full audit entry on every path. It delivered all of that with 56 new tests. Dermot approved the plan as proposed. One finding is worth recording because it set a pattern: the first version of the bias check matched the word "age" inside "damage" and failed a clean claim, so the check was changed to match whole words only. The build also noticed, and would later rely on, the rule that the Adjuster's reasoning must not cite the policy at all, since coverage is the Validator's question.
+
+*Technical detail:* prompt [`04-phase-3-remaining-agents.md`](04-phase-3-remaining-agents.md), plan [`04-phase-3-remaining-agents-plan.md`](04-phase-3-remaining-agents-plan.md), report [`04-phase-3-remaining-agents-report.md`](04-phase-3-remaining-agents-report.md); build log, entry *2026-05-11 — Phase 3: Remaining agents (Doc-Parser, Adjuster, Guardrail)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
