@@ -137,6 +137,17 @@ This phase set out to fix the six rehearsal findings: the run page must open bef
 
 *Technical detail:* prompt [`09-phase-8-demo-polish-fixes.md`](09-phase-8-demo-polish-fixes.md), plan [`09-phase-8-demo-polish-fixes-plan.md`](09-phase-8-demo-polish-fixes-plan.md), report [`09-phase-8-demo-polish-fixes-report.md`](09-phase-8-demo-polish-fixes-report.md); build log, entry *Phase 8 — Demo Polish Fixes from Rehearsal Discoveries*.
 
+<a name="entry-10"></a>
+### 10 — Phase 8.2: the claim record is the source of truth, and the model only summarises
+
+**TL;DR:** The first agent had been asked to pull dates, amounts and places out of the claim's free text, and the model kept filling in placeholders that broke the run. This phase stopped asking it to. The structured facts now come straight from the claim as recorded, and the model is used only for what it is good at: a short summary of the narrative. The audit trail says so on every run. Finished on 15 June 2026.
+
+**Technologies:** no new ones; a change of design in one agent and its instructions.
+
+This phase set out to refactor the Doc-Parser after a rehearsal discovery: the model reliably defaulted the structured fields to placeholder values that failed validation and aborted the pipeline, and an earlier attempt to fix that by rewriting its instructions had not moved it. The architectural answer was to take the structured fields from the claim record, which already holds them, and to ask the model for a narrative summary only. The audit entry records that the fields came from the record. It delivered that with the agent's tests rewritten for the new contract. Dermot approved the plan as written, resolving one open question at the gate: a field the record cannot supply is filled with a fixed "unknown" marker rather than guessed. Notable along the way: several older tests had been proving behaviour the phase deliberately abandoned, including one that relied on garbled text to force an abort; with no parsing left, garbled text is a perfectly good summary, so the tests were redesigned to express the same guarantees differently.
+
+*Technical detail:* prompt [`10-phase-8.2-doc-parser-refactor.md`](10-phase-8.2-doc-parser-refactor.md), plan [`10-phase-8.2-doc-parser-refactor-plan.md`](10-phase-8.2-doc-parser-refactor-plan.md), report [`10-phase-8.2-doc-parser-refactor-report.md`](10-phase-8.2-doc-parser-refactor-report.md); build log, entry *Phase 8.2 — Doc-Parser Refactor (Claim Record as Source of Truth)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
