@@ -207,4 +207,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.6* (*Deployed verification — HALTED*) and *Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)*; plan `18-phase-8.6.1-guardrail-citation-regex-fix-plan.md`; report `18-phase-8.6.1-guardrail-citation-regex-fix-report.md`; the halted run is `8bff04e2`; the pattern is `_CITATION_CANDIDATE_RE` in `backend/app/agents/guardrail_rules.py`.
 
+<a name="r-08"></a>
+### R-08 — Three findings from the 21 September verification, ruled findings rather than halts and left open
+
+**TL;DR:** The live check that closed the Guardrail fix also found three problems nobody had seen: five of the six background claims cannot complete; a claim the Validator judges not covered aborts instead of going to a person; and the search for policy passages missed the right one for a theft claim. None was caused by the fix and none touches the three scripted scenarios. Dermot ruled them findings to record, not reasons to stop, and they remain open.
+
+**Technologies:** the market-data table; the orchestrator's handling of a coverage denial; vector retrieval over the policy passages.
+
+**Date and phase.** 21 September 2026, Phase 8.6.1 verification.
+
+**What happened.** Steps of the verification beyond the three scenarios exercised background claims for the first time. One background claim aborted at the Adjuster because its type of loss has no entry in the market-data table; five of the six background claims share that fate. On another, a stricter-Validator replay returned "not covered"; the orchestrator ran the Adjuster anyway, the model correctly proposed nothing, and the run aborted because a zero settlement is rejected, leaving the claim marked as if coverage had been confirmed. On the same claim, retrieval never fetched the passage that lists covered perils, which is what drove the denial.
+
+**Why it mattered.** In a demonstration, pressing the process button on most background claims aborts. A coverage denial is a decision a person must see, and the system turns it into an error. A status that says the opposite of the recorded verdict is a small falsehood in the record. None of these is hidden, but all are visible to anyone who strays from the three scripted claims.
+
+**What was decided, and by whom.** Dermot ruled during the verification that the abort was a new finding and not a halt on the release under test, because the halt rule covers the three scripted scenarios and the abort was a missing branch, not a regression. All three findings were written into the backlog with scope notes, including the instruction not to fix the denial path by accepting a zero settlement, which would turn a visible abort into a silent nothing.
+
+**What was done.** Nothing in code. The findings were recorded with the runs that exposed them, and the demonstration guidance says to stay off the background claims.
+
+**How it was proven.** Not applicable; these are open findings. Each is tied to a recorded run whose audit trail shows the behaviour.
+
+**Status.** Open. The denial path is noted as an interface-stability event for whichever phase takes it, since a run that skips two agents writes fewer audit entries.
+
+*Technical detail:* build log, *Phase 8.6* amendment *Deployed verification outcome (21 September 2026)*, findings F1 to F3; backlog, *Findings from the 21 September 2026 verification*; runs `765f1ad2` (abort on lookup) and `74513bca` (denial path).
+
 _Entries follow, in build order._

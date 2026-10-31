@@ -225,6 +225,17 @@ This phase set out to resolve the provider question and to re-verify the deploym
 
 *Technical detail:* prompt [`17-phase-8.6-validator-adjuster-on-claude-haiku.md`](17-phase-8.6-validator-adjuster-on-claude-haiku.md), plan [`17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md`](17-phase-8.6-validator-adjuster-on-claude-haiku-plan.md), report [`17-phase-8.6-validator-adjuster-on-claude-haiku-report.md`](17-phase-8.6-validator-adjuster-on-claude-haiku-report.md); build log, entry *Phase 8.6 — Validator and Adjuster Default to Claude Haiku; Mistral Path Retained as a Variant*.
 
+<a name="entry-18"></a>
+### 18 — Phase 8.6.1: one line fixed, the verification passed, and three findings left open on purpose
+
+**TL;DR:** This small release fixed the pattern that had halted the previous verification, with tests built from the real sentence that tripped it. The full live check was then re-run from a clean start and passed. Along the way it found three further problems that nobody had seen before, none caused by the fix, and Dermot ruled that they were findings to record rather than reasons to halt. Finished on 21 September 2026.
+
+**Technologies:** no new ones; one regular expression in the Guardrail's rule engine.
+
+This release set out to make only the citation keyword case-insensitive, so that a cited name must start with a capital letter or a digit, and to prove it. It delivered the one-line change with seven tests that exercise the rule engine directly, so a future failure points at the pattern and not at the surrounding machinery. The deployed verification then passed in full on 21 September: all three scenarios as designed with seven audit entries each, the retained Mistral route shown to abort with the expected refusal, a stricter-Validator replay driven from the interface, and the whole chain verified. Dermot approved the plan with two decisions on the pattern, triggered the auto-approve scenario himself from the interface, and made one ruling during verification that set a precedent: a newly discovered abort on a background claim was a finding, not a halt, because the halt rule covers the three scripted scenarios. The three findings, that most background claims cannot complete, that a coverage denial has no proper path and aborts instead of reaching a person, and that retrieval missed the governing passage for a theft claim, remain open in the backlog. The decision register records the fix as [R-07](../decision-register.md#r-07) and the findings as [R-08](../decision-register.md#r-08).
+
+*Technical detail:* prompt [`18-phase-8.6.1-guardrail-citation-regex-fix.md`](18-phase-8.6.1-guardrail-citation-regex-fix.md), plan [`18-phase-8.6.1-guardrail-citation-regex-fix-plan.md`](18-phase-8.6.1-guardrail-citation-regex-fix-plan.md), report [`18-phase-8.6.1-guardrail-citation-regex-fix-report.md`](18-phase-8.6.1-guardrail-citation-regex-fix-report.md); build log, entry *Phase 8.6.1 — Guardrail Citation-regex False Positive (point release)* and the *Deployed verification outcome (21 September 2026)* amendment to the Phase 8.6 entry.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
