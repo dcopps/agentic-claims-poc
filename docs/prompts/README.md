@@ -115,6 +115,17 @@ This phase set out to polish the Phase 5 interface into a routed application wit
 
 *Technical detail:* prompt [`07-phase-6-frontend-polish.md`](07-phase-6-frontend-polish.md), plan [`07-phase-6-frontend-polish-plan.md`](07-phase-6-frontend-polish-plan.md), report [`07-phase-6-frontend-polish-report.md`](07-phase-6-frontend-polish-report.md); build log, entry *Phase 6 — Frontend Polish (+ supporting backend endpoints)*.
 
+<a name="entry-08"></a>
+### 08 — Phase 7: ready to show, and the governance documents
+
+**TL;DR:** This phase made the prototype presentable and wrote the documents that explain how it is governed: how changes are classified and approved, which outside providers it depends on and how each could be replaced, and the reasons behind its main design choices. It also made the third scripted scenario, the one where the Guardrail must catch an invented endorsement, reproducible every time. Finished on 15 June 2026.
+
+**Technologies:** a deterministic demo fixture in place of a live model call for one scenario, an automated test that scans every shipped file for a forbidden client name, a reference pipeline definition for Azure DevOps, a verification script that runs the three scenarios against a live deployment.
+
+This phase set out to expand the README to its final form, to write the change-governance document, the third-party register, the design-decisions record and the walkthrough, to add the production pipeline reference, and to close one gap in the demonstration: the guardrail scenario depended on a live model happening to cite a made-up endorsement, which it did not do reliably. It delivered all of that with 15 new tests. The guardrail scenario now uses a fixed, pre-written Adjuster output that names an endorsement the policy does not have, and the audit trail records openly that a fixture was used rather than a model call, so the convenience is visible rather than hidden. Dermot approved the plan as written, with one gate decision worth recording: he would run a one-time manual search for the real client's name before the first public push, and the new automated scan would be the standing guard thereafter. That scan has run on every change since.
+
+*Technical detail:* prompt [`08-phase-7-demo-polish-and-documentation.md`](08-phase-7-demo-polish-and-documentation.md), plan [`08-phase-7-demo-polish-and-documentation-plan.md`](08-phase-7-demo-polish-and-documentation-plan.md), report [`08-phase-7-demo-polish-and-documentation-report.md`](08-phase-7-demo-polish-and-documentation-report.md); build log, entry *Phase 7 — Demo Polish and Documentation*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
