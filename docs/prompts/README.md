@@ -280,6 +280,17 @@ This release set out to make the model's citation flag count only when its evide
 
 *Technical detail:* prompt [`22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags.md), plan [`22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md), report [`22-phase-9.2.2-guardrail-quote-verified-citation-flags-report.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags-report.md); build log, entry *Phase 9.2.2 — the LLM citation flag must quote its evidence, and code verifies it (30 October 2026)*.
 
+<a name="entry-23"></a>
+### 23 — Prompt 23: the story told in plain language
+
+**TL;DR:** Everything in this build had been recorded, but only in places an engineer can read. This phase wrote two documents for everyone else: this one, which tells the build phase by phase, and the decision register, which records every incident and every decision taken at a gate. It also put signposts to them at the top of every technical file, and made writing them part of the routine for every future phase. Begun on 30 October 2026.
+
+**Technologies:** none; documentation only, with no change to code, instructions, tests or infrastructure.
+
+This phase set out to produce the two plain-language documents, backfilled from the technical record from the first phase onward, with the register beginning at Phase 8.4, the first phase that was itself a response to an incident; to add a short "start here" section to the project's front page and a one-line pointer at the top of every archived prompt, plan and report; and to add two standing rules so the documents are kept current at every future close-out. The method was Dermot's: entries were written one phase at a time, in build order, with the voice reviewed and corrected on the first phases before the rest were written in one pass. The format changed twice during that review, to a short plain opening paragraph and a line naming the technologies, and the plan records both changes. Nineteen register entries were found in the record, five more than the brief's minimum; the additions are flagged in the plan. Where the record does not say who decided or how something was proven, the entries say so. The end-of-build items are completed in this phase's close-out and recorded in its report.
+
+*Technical detail:* prompt [`23-plain-language-documentation.md`](23-plain-language-documentation.md), plan [`23-plain-language-documentation-plan.md`](23-plain-language-documentation-plan.md), report `23-plain-language-documentation-report.md` (written at close-out); build log, entry *Prompt 23 — Plain-language documentation*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
