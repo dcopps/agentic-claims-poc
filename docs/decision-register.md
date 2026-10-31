@@ -276,4 +276,142 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 9.1* (*Issues and deviations*, *Stop/start round trip*) and *Phase 9.2* (*Findings that shaped the work*, *Parking*); `scripts/azure-stop.sh`, `wait_for_zero_replicas` in `scripts/azure-common.sh`.
 
+<a name="r-11"></a>
+### R-11 — The build had been red since 15 June and nobody could have deployed from it; fixed in two steps, the first with the wrong tool version
+
+**TL;DR:** Every automatic check on the shared build server had been failing for four months, on the interface half only, because a list of dependencies had drifted out of step with its source. Nobody noticed because nothing depended on it. The new deploy-on-push feature would depend on it, so it had to be fixed first. The first fix used a newer tool than the server, and failed too.
+
+**Technologies:** GitHub Actions; the npm package manager and its lock file; Node.js versions 20 and 24.
+
+**Date and phase.** Found 26 October 2026 while planning Phase 9.2; red since 15 June 2026 (Phase 6).
+
+**What happened.** The interface's dependency lock file had been out of step with its manifest since Phase 6. The server's install step refuses such a mismatch, so the interface job failed on every run since June while the service job passed. The new deploy workflows were designed to run only after a green build, so a red build meant they could never fire. The lock file was regenerated, but with npm 11 on Node 24, which omits entries that the server's npm 10 on Node 20 requires; the build stayed red on that push and the next.
+
+**Why it mattered.** A continuous-integration check that is permanently red is worse than none, because it is ignored. Phase 0 had met the same class of problem on day one and fixed it; nothing had kept it fixed.
+
+**What was decided, and by whom.** Dermot approved the lock file regeneration as the first commit of Phase 9.2, before any Azure work, because the deploy gate would otherwise be meaningless.
+
+**What was done.** The lock file was regenerated a second time with the server's own npm version, verified locally under Node 20, and the rule written into the handbook: regenerate with npm 10 until the server's Node version changes.
+
+**How it was proven.** The build went green on the second regeneration and the interface deploy ran for the first time. The first, wrong regeneration is recorded as a correction so the mistake is not repeated.
+
+**Status.** Resolved.
+
+*Technical detail:* build log, *Phase 9.2* (*Findings that shaped the work*, *CI lockfile*); commits `dcc52bd` (npm 11, wrong), `3abad04` (npm 10, correct); `frontend/package-lock.json`.
+
+<a name="r-12"></a>
+### R-12 — The interface host was refused in West Europe; East US 2 accepted, holding only static files
+
+**TL;DR:** The hosting service for the web interface is not offered in the region where everything else lives, and the nearest alternative refused new customers. The interface was placed in a United States region instead. It holds only the static web pages, never any claim data, which stays in North Europe.
+
+**Technologies:** Azure Static Web Apps.
+
+**Date and phase.** 26 October 2026, Phase 9.2.
+
+**What happened.** The interface hosting service is offered to this subscription in five regions, none of them North Europe. A preview deployment to West Europe was refused with the message that the region was not accepting new customers. A preview to East US 2 was accepted.
+
+**Why it mattered.** The project's architecture keeps all data in one European region. Placing a component elsewhere needs a clear statement of what that component holds.
+
+**What was decided, and by whom.** Dermot approved East US 2 at the approval gate as the one resource outside North Europe, on the basis that it holds the compiled interface files and deployment metadata only, served from a global edge, and that every resource holding data stays in North Europe.
+
+**What was done.** The region was set as a parameter, the reason recorded in the infrastructure notes, and the handbook's description of the deployment states the exception.
+
+**How it was proven.** The deployment succeeded; the interface served from the new host and reached the service in North Europe across origins, which the second verification pass exercised through the browser.
+
+**Status.** Resolved, as a recorded exception to the single-region rule.
+
+*Technical detail:* build log, *Phase 9.2* (*Findings that shaped the work*); plan `20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md` (*Approval*, decision 4); `staticWebAppLocation` in `infra/bicep/main.bicepparam`.
+
+<a name="r-13"></a>
+### R-13 — How a push was allowed to deploy to Azure: no cloud-written workflow files, no stored credential, infrastructure kept out of the pipeline
+
+**TL;DR:** Letting a code push deploy itself to a cloud platform means giving an automated process the right to change that platform. Three decisions limited what it may do and how it proves who it is: the project writes and reviews its own deployment steps rather than accepting ones the platform generates; the process proves its identity with a short-lived token instead of a stored password; and it may update the running service but may not change the infrastructure around it.
+
+**Technologies:** GitHub Actions workflows; OpenID Connect federation to a second Azure managed identity; Azure role assignments scoped to the registry and the service.
+
+**Date and phase.** 26 October 2026, Phase 9.2, approval gate.
+
+**What happened.** The interface hosting service offers to connect itself to the repository and write a deployment workflow into it. The service deployment needs cloud rights from the build server. Both are conveniences that widen what an automated process can do without review.
+
+**Why it mattered.** A regulated insurer would ask exactly these questions of any deployment pipeline: who wrote the steps, how does the process authenticate, and what is the blast radius if it is compromised.
+
+**What was decided, and by whom.** Dermot approved three decisions. First, no platform-written workflow files: the interface host is created with no repository link, and both deploy workflows are written and reviewed in the repository; the one manual step is pasting the host's upload token into the repository's secrets. Second, the process proves itself by OpenID Connect to a second managed identity created for the purpose, with no application registration and no stored secret; the identifiers it needs are stored as plain variables because they are not secrets. Third, the service workflow does not run the infrastructure description: it builds the image in the registry and points the existing service at it, under exactly three rights scoped to the registry and the service; infrastructure changes stay an operational act from a developer's shell, because the parameter file reads its secrets from that shell. The deployer and the running service have disjoint rights.
+
+**What was done.** The second identity, its federation and its three role assignments were added to the infrastructure description; the two workflows were written to trigger only after a green build; the frontend workflow needs no cloud sign-in at all.
+
+**How it was proven.** The gate was shown working when a red build skipped both deploys; the service deploy ran green end to end on a later push; an additional right the plan had held in reserve turned out not to be needed and was not granted.
+
+**Status.** Resolved. Recorded as locked decisions in the handbook.
+
+*Technical detail:* build log, *Phase 9.2* (*What was built*, *Deployment*); plan `20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md` (*Approval*, decisions 1 to 3); `.github/workflows/deploy-backend.yml`, `deploy-frontend.yml`; `infra/bicep/modules/deployer-identity.bicep`.
+
+<a name="r-14"></a>
+### R-14 — A correct deployment reported as failed: the check read a two-line answer as one
+
+**TL;DR:** The first automatic deployment of the service to Azure succeeded, but the step that confirms success reported failure. The confirmation asked the platform two questions at once and received two lines back, but read only the first, so the second always looked blank and the check could never pass.
+
+**Technologies:** GitHub Actions; the Azure command-line tool's query output.
+
+**Date and phase.** 26 October 2026, Phase 9.2.
+
+**What happened.** On the first green build after the lock file fix (R-11), the service deploy workflow built the image, updated the service, and saw it healthy with full traffic on the new image. Its final verification step then failed. The step requested two revision names in one query and the tool printed them on two lines; the shell read them as one name and an empty one, so the equality it tested was always false.
+
+**Why it mattered.** A deployment check that fails when the deployment is good trains people to ignore it, which is the same failure as R-11 in a different place.
+
+**What was decided, and by whom.** Fixed as part of the phase, in the shared script the workflow calls, and verified from a shell against the live service before being pushed. The record does not name a separate decision.
+
+**What was done.** The query was changed to join the two names on one line. The fix was checked against the live service with a matching image, returning success, and a stale image, returning the expected mismatch message.
+
+**How it was proven.** The push carrying the fix changed nothing under the service's own files, so the workflow correctly reported nothing to deploy, which proved the change detection. The next real service change, the telemetry fix (R-15), ran the corrected step green end to end.
+
+**Status.** Resolved.
+
+*Technical detail:* build log, *Phase 9.2* (*Deployment*, *`require_active_image`*); commit `8d211ad`; `require_active_image` in `scripts/azure-common.sh`; workflow run 40362374360 (the false red).
+
+<a name="r-15"></a>
+### R-15 — Telemetry recorded nothing because of the order in which two pieces of code loaded
+
+**TL;DR:** Monitoring was switched on and showed the service's calls to the database and to the AI provider, but no incoming requests at all. The monitoring library works by swapping in an instrumented version of the web framework when it starts, but the service had already taken hold of the original version before that happened. A one-line change made the service pick up whichever version is current when it builds.
+
+**Technologies:** Azure Application Insights; the Azure Monitor OpenTelemetry distribution; FastAPI.
+
+**Date and phase.** 26 October 2026, Phase 9.2.
+
+**What happened.** After deployment, the monitoring workspace held outgoing dependency records but no request records. The monitoring distribution instruments the web framework by rebinding the framework's main class to an instrumented subclass. The service's entry module had imported the original class at load time, before the monitoring was configured, so every application it built was uninstrumented.
+
+**Why it mattered.** Request telemetry is the view an operator uses first; dependencies without the requests that caused them are hard to read, and a monitoring claim in the architecture document would have been false.
+
+**What was decided, and by whom.** Fixed within the phase; the record does not name a separate decision.
+
+**What was done.** The entry module now looks the framework class up at the moment it builds the application rather than at import time, with comments naming the real mechanism. A test rebinds the class the way the instrumentor does and asserts the application is built from the replacement; reinstating the import-time binding makes it fail.
+
+**How it was proven.** After the fix, a probe of the agent test bench appeared in the monitoring workspace as one request with its database and AI-provider calls as children, with route templates rather than raw identifiers and the health check excluded as configured.
+
+**Status.** Resolved.
+
+*Technical detail:* build log, *Phase 9.2* (*FastAPI request telemetry fix*, *Application Insights observation*); commit `2b662da`; `create_app` in `backend/app/main.py`; `backend/app/telemetry.py`; test `test_create_app_builds_the_class_the_distro_installs`.
+
+<a name="r-16"></a>
+### R-16 — The pinned model changed its verdict on identical input between 1 and 26 October; proven by replay; entered in the governance and third-party registers
+
+**TL;DR:** The claim that should settle on its own was sent to a person, twice, by the Guardrail's AI check. Nothing in the project had changed. Sending the exact recorded instructions from a run that had passed on 1 October back to the same named model showed it now failed them too. The model behind a fixed name had changed its behaviour. The audit trail is what made that provable.
+
+**Technologies:** Claude Haiku under a fixed model identifier; the recorded prompts in the audit trail; replay at temperature zero.
+
+**Date and phase.** 26 October 2026, Phase 9.2 second verification pass.
+
+**What happened.** Both auto-approve runs through the Azure interface ended in human review on a Guardrail failure raised by its AI check alone; the deterministic checks found nothing. The flags treated the Adjuster's own vocabulary, such as "moderate-severity band" and "market range", and a paraphrase of the loss as citations of policy wording. The exact instructions recorded in the audit trail were re-sent to the same model identifier from a laptop, without the new monitoring packages: that day's prompt failed five of five times, and the 1 October prompt, which had passed then, failed three of three.
+
+**Why it mattered.** A pinned model identifier is treated as a guarantee of stable behaviour. It is not. None of the project's change controls could have caught this, because there was no change on the project's side to classify. The same model and prompts serve the original demonstration platform, so the demonstration was affected everywhere.
+
+**What was decided, and by whom.** Dermot ruled the second pass passed for the deployment, with this as an explicit recorded exception, since the deployment itself behaved correctly. He directed that the finding be entered in the change-governance document as an observed case of third-party behaviour change, and in the third-party register against the provider, and that the response be its own phase.
+
+**What was done.** The investigation, replays and conclusion were written into the build log; the governance document gained a section on what production adds, a scheduled evaluation against the live model; the register's provider row gained the observed change; two backlog items were raised and became Phase 9.2.1.
+
+**How it was proven.** By the replays themselves: byte-identical recorded input, same model identifier, different verdict on two dates. The audit trail's recording of the exact prompt and the requested model, added in Phases 8.3 and 8.5.3, is what made the replay possible and ruled out the deployment as the cause.
+
+**Status.** Resolved as a finding; the response is R-17 and R-18.
+
+*Technical detail:* build log, *Phase 9.2* (*Recorded exception — the Guardrail's verdict changed under an unchanged model id*); `docs/change-governance.md` (*Observed in the prototype*); `docs/dora-third-party-register.md` (Anthropic row); runs `8590b47e`, `f02fb888` (26 October) and `08d514f2` (1 October).
+
 _Entries follow, in build order._

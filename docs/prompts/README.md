@@ -247,6 +247,17 @@ This phase set out to give the prototype a second deployment target without chan
 
 *Technical detail:* prompt [`19-phase-9.1-azure-foundation-bicep-container-apps.md`](19-phase-9.1-azure-foundation-bicep-container-apps.md), plan [`19-phase-9.1-azure-foundation-bicep-container-apps-plan.md`](19-phase-9.1-azure-foundation-bicep-container-apps-plan.md), report [`19-phase-9.1-azure-foundation-bicep-container-apps-report.md`](19-phase-9.1-azure-foundation-bicep-container-apps-report.md); build log, entry *Phase 9.1 — Azure Foundation: Bicep, Postgres Flexible Server, Container Apps, Key Vault, Managed Identity*.
 
+<a name="entry-20"></a>
+### 20 — Phase 9.2: the Azure installation completes itself, and the model changes its mind
+
+**TL;DR:** This phase finished the Azure installation: the web interface hosted there too, both halves deploying themselves whenever a change is pushed and passes its checks, with no stored cloud password, and monitoring switched on. The second full verification was run through the browser. It passed for the deployment, with one recorded exception that became the story of the next two phases: the AI model had changed its verdict on identical input between 1 and 26 October, with no change on the project's side. Finished on 26 October 2026.
+
+**Technologies:** Azure Static Web Apps for the interface, GitHub Actions with OpenID Connect for deploying without a stored credential, a second managed identity for the deployer, Azure Application Insights with OpenTelemetry for monitoring.
+
+This phase set out to host the interface on Azure, to deploy both tiers automatically on a green build, to add telemetry, and to run the second three-scenario verification through the browser so that it also proves the interface can reach the service. It delivered all of that, and six incidents and decisions along the way, each with its own register entry. The build had been red since June without anyone noticing, so nothing could have deployed automatically ([R-11](../decision-register.md#r-11)). West Europe refused to host the interface ([R-12](../decision-register.md#r-12)). Three gate decisions shaped how a push is allowed to deploy ([R-13](../decision-register.md#r-13)). A correct deployment reported as failed because of how a check read a two-line answer ([R-14](../decision-register.md#r-14)). Monitoring recorded nothing at first because of the order two pieces of code loaded ([R-15](../decision-register.md#r-15)). And the verification's auto-approve scenario escalated twice; replaying the exact recorded prompts showed the pinned model's verdict had moved ([R-16](../decision-register.md#r-16)). Dermot approved the plan with its decisions recorded in the plan's approval section, was present for the deployment, and ruled the second pass passed for the deployment with the exception recorded.
+
+*Technical detail:* prompt [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md), plan [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md), report [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights-report.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights-report.md); build log, entry *Phase 9.2 — Frontend on Static Web Apps, OIDC Deploy on Push, Application Insights, Second Verification Pass*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
