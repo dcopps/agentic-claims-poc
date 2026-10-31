@@ -269,6 +269,17 @@ This release set out to narrow what the Guardrail's AI check counts as a halluci
 
 *Technical detail:* prompt [`21-phase-9.2.1-guardrail-false-positive-fix.md`](21-phase-9.2.1-guardrail-false-positive-fix.md), plan [`21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](21-phase-9.2.1-guardrail-false-positive-fix-plan.md), report [`21-phase-9.2.1-guardrail-false-positive-fix-report.md`](21-phase-9.2.1-guardrail-false-positive-fix-report.md); build log, entry *Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)*.
 
+<a name="entry-22"></a>
+### 22 — Phase 9.2.2: the model may suspect, but code decides
+
+**TL;DR:** After two releases of adjusting the Guardrail's instructions, this one changed who makes the decision. The model must now quote the exact words it objects to. Code checks that the quote really is in the Adjuster's reasoning and that it looks like a named policy provision, using the same test the deterministic check already uses. If either fails, the objection is recorded in the audit trail with the reason and does not count. The auto-approve scenario passed on all three paths the same day. Finished on 30 October 2026.
+
+**Technologies:** no new ones; a new verification module in the Guardrail, two additive fields on its audit entry, one field added to the model's required output.
+
+This release set out to make the model's citation flag count only when its evidence can be verified in code, without changing the deterministic check, the escalation rules, the definition of a citation or any interface. It delivered that with 37 new tests, a mutation proof in which neutering the verifier made 18 tests fail, and the replay corpus green on all seven recorded runs including the two red tripwires. A conflict in the brief was found while planning and resolved at the gate: the brief expected the new field on the flag's data model and also forbade any change to the service's responses, but that model is part of those responses; the quote therefore lives in the audit trail only ([R-18](../decision-register.md#r-18)). Dermot also accepted a stated trade-off ([R-19](../decision-register.md#r-19)). The deployed verification on 30 October ran all three scenarios as designed through the Azure interface, through the original platform's interface and through the script. The interface path produced three new objections from the model, each refused by the code as not a provision and each recorded beside the model's words, which is the demonstration's talking point: what the model claimed and why the code declined it, side by side.
+
+*Technical detail:* prompt [`22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags.md), plan [`22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md), report [`22-phase-9.2.2-guardrail-quote-verified-citation-flags-report.md`](22-phase-9.2.2-guardrail-quote-verified-citation-flags-report.md); build log, entry *Phase 9.2.2 — the LLM citation flag must quote its evidence, and code verifies it (30 October 2026)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised

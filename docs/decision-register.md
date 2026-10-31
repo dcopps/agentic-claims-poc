@@ -437,4 +437,50 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)* (the mutation-proof table, the template experiment table, *Close-out*, *Addendum — 30 October 2026*); plan `21-phase-9.2.1-guardrail-false-positive-fix-plan.md` (*Approval*, D5 revised); report `21-phase-9.2.1-guardrail-false-positive-fix-report.md`; fixtures under `backend/tests/fixtures/guardrail_replay/`; runs `8e886c66` (script, 29 October) and `2c42cf40` (Vercel, 30 October).
 
+<a name="r-18"></a>
+### R-18 — Phase 9.2.2: the decision moved into code; the conflict in the brief and how it was resolved; verified on all three paths
+
+**TL;DR:** The Guardrail's AI check keeps its job of spotting a suspicious reference but loses the power to fail a claim on its own say-so. It must quote the words it objects to; code checks the quote is really in the Adjuster's reasoning and really looks like a named provision. Refusals are recorded, not hidden. The brief contained a contradiction about where the quote should be stored, which was found in planning and settled before any code was written. Verified on all three paths the same day.
+
+**Technologies:** a verification function reusing the rule engine's provision pattern; two additive fields on the Guardrail's audit entry; a quote field in the model's required output.
+
+**Date and phase.** 30 October 2026, Phase 9.2.2.
+
+**What happened.** Planning found that the brief expected the new quote field on the flag's data model and also forbade any change to the service's responses, but that data model is rebuilt from the audit trail for the runs interface, returned by the agent test bench and carried in the live event stream, so adding a field to it would change all three. Planning also found that the rule engine's own pattern, run over all seven recorded reasonings, matched nothing in the six that should pass and exactly one span in the invented-endorsement case, which meant a code check using that pattern would be deterministic for every known case.
+
+**Why it mattered.** Two prompt-only fixes had each held for the texts they were tested on and failed on the next. A check in code cannot be moved by the model changing its mind, and the audit trail gains the model's claim and the code's refusal side by side on every run, which is what an auditor would want to see.
+
+**What was decided, and by whom.** Dermot approved the plan with five decisions: the flag model untouched and the quote held in the audit trail only; the verified quote recorded for accepted flags as well as refused ones, so the audit holds the evidence for acceptances too; the normalisation rules for locating the quote; a new module rather than growing the existing one; and the replay test judging the agent's verdict rather than the model's raw claims. He asked to be present for the deployed verification on all three paths.
+
+**What was done.** A verification module was built: the quote is stripped of wrapping punctuation, located in the reasoning with tolerance only for case, whitespace and quote glyphs, and the reasoning's own span, not the model's string, is tested against the provision pattern; the first failing check names the reason, and refused claims are recorded and logged, never raised. The model's output format gained the quote field with one rule. Thirty-seven tests were added.
+
+**How it was proven.** Mutation proof: with the verifier neutered 18 tests failed; with the old instructions restored the output-format test failed. The replay corpus went from seven of eight to eight of eight. Deployed, all three scenarios ran as designed through the Azure interface, the original interface and the script; the original interface produced three new model objections, each refused as not a provision and each recorded with the model's own words and the reason.
+
+**Status.** Resolved. The audit extension is recorded as a locked interface change.
+
+*Technical detail:* build log, *Phase 9.2.2 — the LLM citation flag must quote its evidence, and code verifies it (30 October 2026)*; plan `22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md` (§0 findings, *Approval*); report `22-phase-9.2.2-guardrail-quote-verified-citation-flags-report.md`; `backend/app/agents/guardrail_llm_flags.py`; audit keys `llm_flags_counted`, `llm_flags_discarded`; refused runs `0cdfa114`, `4142f33b`, `6197d116`.
+
+<a name="r-19"></a>
+### R-19 — Phase 9.2.2's accepted trade-off: a citation written without a provision keyword no longer counts from the model's check alone
+
+**TL;DR:** Making the model's objection verifiable has a cost. If the Adjuster ever cited a non-existent provision without using one of the recognised words, such as "endorsement" or "section", the model's check could notice but could no longer fail the claim by itself. Dermot accepted this knowingly, and said where the fix would go if it ever mattered.
+
+**Technologies:** the rule engine's provision pattern, used as the oracle for the model's quotes.
+
+**Date and phase.** 30 October 2026, Phase 9.2.2, approval gate.
+
+**What happened.** The code check accepts a quote only if the span of reasoning it points at has the shape the deterministic check recognises: a provision keyword followed by a capitalised or numbered name. A quote such as "the coastal surge rider" in lower case, with no keyword, would be refused as not a provision even if the model were right that no such rider exists. The plan named this before any code was written, and named the one risk to the acceptance test: if the model quoted the demonstration's invented endorsement without its keyword, that test would go red for this reason.
+
+**Why it mattered.** A standing limitation should be findable on its own by a reviewer, not buried inside the entry for the release that introduced it.
+
+**What was decided, and by whom.** Dermot accepted the trade-off at the gate: if the risk materialised, report it as observed and do not widen the pattern within the release. He confirmed that the deterministic pattern is the place to widen if a real citation is ever missed, not the model's check, because a widening there is reviewable and testable where a looser model check is not.
+
+**What was done.** The limitation is recorded in the plan, the backlog and the handbook's description of the Guardrail.
+
+**How it was proven.** On the day, the risk did not materialise: the model quoted the invented endorsement with its keyword in every repetition, and the no-rule-engine test passed three of three. The limitation remains by design.
+
+**Status.** Open by design; a documented limitation, not a defect.
+
+*Technical detail:* plan `22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md` (§2 property, §5, *Approval*); backlog, the closed *Findings from the 26 October 2026 verification* section; `CLAUDE.md` → *Escalation policy*.
+
 _Entries follow, in build order._
