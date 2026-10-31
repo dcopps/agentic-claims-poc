@@ -192,6 +192,17 @@ This release arose from an investigation rather than a pre-written brief, so its
 
 *Technical detail:* prompt and plan [`14-phase-8.5.1-migration-test-autocommit-fix.md`](14-phase-8.5.1-migration-test-autocommit-fix.md) (combined), report [`14-phase-8.5.1-migration-test-autocommit-fix-report.md`](14-phase-8.5.1-migration-test-autocommit-fix-report.md); build log, entry *Phase 8.5.1 — Migration-test Autocommit Fix (point release)*.
 
+<a name="entry-15"></a>
+### 15 — Phase 8.5.2: the model that moved underneath us
+
+**TL;DR:** A live run failed because the second AI provider refused the request: the project's free account was no longer allowed to use the model. The system had been asking for "the latest large model", a name the provider can repoint at will, and it had been repointed at a paid release. This release pinned the exact release the prototype had been built against. It did not work, because that release had been withdrawn from the free tier too, and finding that out took the next release. Finished on 14 September 2026.
+
+**Technologies:** Mistral's large model; the project's settings files.
+
+This release set out to restore a failing Validator by pinning the Mistral model name from a moving alias to the dated release the prototype was built, tuned and demonstrated against in May. It was chosen over the two alternatives, adding a payment method or routing the two Mistral agents through Claude, as the cheapest fix, with both alternatives kept open. Every place the old name appeared was reviewed, including a pricing table where a stale name would silently have made every cost unknown, and the archive was deliberately left unchanged because rewriting it would falsify the history. The deployed verification then failed with the identical refusal: the dated release was gated too. That the system really had sent the pinned name could only be shown by elimination, because the audit trail recorded the model that answered, and a refusal has no answer. Closing exactly that gap became the next release. Dermot approved the plan and performed the deployed check himself. The decision register records this as [R-04](../decision-register.md#r-04).
+
+*Technical detail:* prompt [`15-phase-8.5.2-pin-mistral-model.md`](15-phase-8.5.2-pin-mistral-model.md), plan [`15-phase-8.5.2-pin-mistral-model-plan.md`](15-phase-8.5.2-pin-mistral-model-plan.md), report [`15-phase-8.5.2-pin-mistral-model-report.md`](15-phase-8.5.2-pin-mistral-model-report.md); build log, entry *Phase 8.5.2 — Pin Mistral Model to `mistral-large-2512` (point release)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised

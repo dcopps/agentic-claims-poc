@@ -115,4 +115,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.5.1 — Migration-test Autocommit Fix (point release)*; combined prompt and plan `14-phase-8.5.1-migration-test-autocommit-fix.md`; report `14-phase-8.5.1-migration-test-autocommit-fix-report.md`; the test is `backend/tests/test_migration_0002.py`.
 
+<a name="r-04"></a>
+### R-04 — Pinning the Mistral model to one named release
+
+**TL;DR:** The system had been asking its second AI provider for "the latest large model" by a name the provider is free to repoint. The provider repointed it at a release the project's free account could not use, and a live run failed. The decision was to ask for one exact, dated release instead. That restored the name the prototype had been built against, but the next step showed the free account could not use that release either.
+
+**Technologies:** Mistral's large model; the project's settings and settings template.
+
+**Date and phase.** 14 September 2026, Phase 8.5.2.
+
+**What happened.** A live run failed at the Validator with a refusal from the Mistral service: the requested model was not available on the account's tier. The configuration named a moving alias. When the project's key was first confirmed in May the alias pointed at a release the free tier allowed; the provider had since moved it to a newer release gated to paid accounts. Nothing on the project's side had changed.
+
+**Why it mattered.** Two of the four agents depended on this provider by default. A moving name means the system's behaviour, and even whether it runs at all, can change without any change in the repository, which defeats the project's claim to be reproducible.
+
+**What was decided, and by whom.** Dermot approved pinning both agents to the dated release the prototype was built and tuned against, as the cheapest of three options; adding a payment method and routing the two agents through Claude were both kept open. He also set the rule that archived prompts and plans naming the old alias stay unchanged, because rewriting them would falsify the record.
+
+**What was done.** The two model names were changed in the settings and the settings template, in the tests that assert the defaults, and in a pricing example where a stale name would have silently made every call's cost unknown. Audit entries written from then on carry the dated name. The deployed verification was run by Dermot with a fresh claim.
+
+**How it was proven.** The local suite passed unchanged. The deployed verification failed with the identical refusal: the dated release was gated on the free tier too. That the system had really sent the pinned name could be established only by elimination, because the audit entry records the model that answered and a refusal has no answer. That gap is the subject of R-05, and the provider question is settled in R-06.
+
+**Status.** Partially resolved at the time; superseded by R-06. The pinned name remains in place for the retained Mistral path.
+
+*Technical detail:* build log, *Phase 8.5.2 — Pin Mistral Model to `mistral-large-2512` (point release)*; plan `15-phase-8.5.2-pin-mistral-model-plan.md`; report `15-phase-8.5.2-pin-mistral-model-report.md`; the failing deployed run is `11f97ae8`.
+
 _Entries follow, in build order._
