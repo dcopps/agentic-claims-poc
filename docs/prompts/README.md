@@ -258,6 +258,17 @@ This phase set out to host the interface on Azure, to deploy both tiers automati
 
 *Technical detail:* prompt [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md), plan [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights-plan.md), report [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights-report.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights-report.md); build log, entry *Phase 9.2 — Frontend on Static Web Apps, OIDC Deploy on Push, Application Insights, Second Verification Pass*.
 
+<a name="entry-21"></a>
+### 21 — Phase 9.2.1: asking the model a narrower question, and finding it was not enough
+
+**TL;DR:** The Guardrail's AI check had started treating the Adjuster's ordinary words as policy citations. This release rewrote the check's instructions to define a citation precisely and to say that coverage is not its question, and it built a way to replay recorded runs against the live model before every demonstration. The rewrite cleared most cases but not all; a second wording change cleared the rest, until a new run on a different path escalated on yet another phrase. The release closed as partially verified, with the failing case kept as a deliberate red test. 28 to 30 October 2026.
+
+**Technologies:** the Guardrail's instruction files; a replay test corpus of recorded runs; an extraction script that reads a live database read-only; the Adjuster's temperature set to zero on both deployed stacks.
+
+This release set out to narrow what the Guardrail's AI check counts as a hallucinated citation, to prove the change by replaying the recorded prompts before and after, to keep those recorded runs as a pre-demonstration check, and to set the Adjuster's randomness to zero on the deployed systems so the check sees the same text each time. The instruction rewrite removed two of the three failure modes; the phrase "market range" still failed. A controlled experiment on the per-claim wording found a two-line change that cleared all recorded cases, and Dermot adopted it, revising one of his earlier decisions and recording why. Deployed, the three scenarios passed through the Azure interface. The verification script against the original platform then escalated on a new phrase, and the next day the original platform's own interface escalated on another. Dermot closed the release as partially verified, kept both failing runs as tests that are red on purpose, and scheduled the next release to move the decision out of the model's hands. The decision register records this as [R-17](../decision-register.md#r-17).
+
+*Technical detail:* prompt [`21-phase-9.2.1-guardrail-false-positive-fix.md`](21-phase-9.2.1-guardrail-false-positive-fix.md), plan [`21-phase-9.2.1-guardrail-false-positive-fix-plan.md`](21-phase-9.2.1-guardrail-false-positive-fix-plan.md), report [`21-phase-9.2.1-guardrail-false-positive-fix-report.md`](21-phase-9.2.1-guardrail-false-positive-fix-report.md); build log, entry *Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised

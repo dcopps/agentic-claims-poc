@@ -414,4 +414,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 9.2* (*Recorded exception — the Guardrail's verdict changed under an unchanged model id*); `docs/change-governance.md` (*Observed in the prototype*); `docs/dora-third-party-register.md` (Anthropic row); runs `8590b47e`, `f02fb888` (26 October) and `08d514f2` (1 October).
 
+<a name="r-17"></a>
+### R-17 — Phase 9.2.1: narrowing the Guardrail's question, the "market range" finding, a revised decision on the wording, new escalations on two other paths, and a close as partially verified
+
+**TL;DR:** The response to the model changing its mind (R-16) was to ask it a much narrower question: name only policy provisions cited by title or number, and never judge coverage. That removed most of the false alarms but not the one on the phrase "market range". A further change to the per-claim wording cleared every recorded case, and all three scenarios passed on Azure. Then two other paths to the same system escalated on phrases nobody had seen before. The release was closed as only partly successful, with the failing runs kept as tests that stay red until the real fix.
+
+**Technologies:** the Guardrail's system and per-claim instruction files; Claude Haiku at temperature zero; a corpus of seven recorded runs replayed live; a read-only extraction script against the Azure and Neon databases; an infrastructure parameter and a hosting-dashboard variable for the Adjuster's temperature.
+
+**Date and phase.** 28 to 30 October 2026, Phase 9.2.1.
+
+**What happened.** The instructions were rewritten to define a citation as a provision named by title or number, to list what is not a citation, and to state that coverage had already been decided upstream. Replaying the recorded runs showed two of the three failure modes gone and one remaining: texts containing the literal phrase "market range" still failed, with the model conceding in its own words that the phrase was settlement methodology and flagging it anyway. A scratch experiment on the per-claim wording found that removing a heading's claim that the retrieved passages were "the only authoritative source", together with a reworded task line, cleared every case while the invented-endorsement case still flagged. Deployed, all three scenarios passed through the Azure interface for the first time since 1 October. The same day the verification script against the original platform escalated on "supply line"; the next day the original platform's interface escalated on "$200,000 ceiling", the Adjuster's own market-band ceiling.
+
+**Why it mattered.** Each path produced a different Adjuster text, and the model's verdict was sensitive to wording that no instruction could anticipate. A fix that holds only for the texts one has seen is not a fix.
+
+**What was decided, and by whom.** Dermot approved the plan on 28 October with five decisions, one of which was that the per-claim wording would not change. On 29 October, shown the experiment's results, he revised that decision and adopted the two-line change, recording why in the plan's approval section. He chose to set the Adjuster's temperature to zero on both deployed systems through their configuration, leaving the committed default alone. On 29 October he closed the release as partially verified, directed that the failing run be committed as a test expected to pass and therefore red on purpose, and scheduled the next release. On 30 October he directed that the second failing run join it and that the documentation state plainly that the scenario was unreliable on every path.
+
+**What was done.** The two instruction files were changed; the replay corpus, its contract tests and the extraction script were built; the temperature was set on both stacks; the two failing runs were extracted read-only and committed as fixtures.
+
+**How it was proven.** Before and after replays, three repetitions each at temperature zero, recorded case by case; the model was deterministic across repetitions throughout. The deployed verification: three for three through the Azure interface, two of three through the script, and the second interface path failing too. The replay reproduced both new failures three of three.
+
+**Status.** Partially resolved; superseded by R-18, which made the corpus green.
+
+*Technical detail:* build log, *Phase 9.2.1 — Guardrail False Positives on the Auto-approve Scenario (point release)* (the mutation-proof table, the template experiment table, *Close-out*, *Addendum — 30 October 2026*); plan `21-phase-9.2.1-guardrail-false-positive-fix-plan.md` (*Approval*, D5 revised); report `21-phase-9.2.1-guardrail-false-positive-fix-report.md`; fixtures under `backend/tests/fixtures/guardrail_replay/`; runs `8e886c66` (script, 29 October) and `2c42cf40` (Vercel, 30 October).
+
 _Entries follow, in build order._
