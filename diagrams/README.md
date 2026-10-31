@@ -23,7 +23,7 @@
 
 ## Architecture diagram (interactive)
 
-The centrepiece of the design is the interactive **[Architecture Diagram](Architecture_Diagram.html)** — view it via GitHub Pages to render it in the browser. From the GitHub repo view this link shows HTML source only; the Pages-served version is what's meant for reading.
+The centrepiece of the design is the interactive **[Architecture Diagram](https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html)**, served by GitHub Pages from `Architecture_Diagram.html` in this folder. The source file in the repository view shows HTML only; the Pages address above is the one to open.
 
 ## 1 — Headline agent flow
 
