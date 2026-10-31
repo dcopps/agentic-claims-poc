@@ -93,6 +93,17 @@ This phase set out to wire the four agents into one end-to-end run and to add th
 
 *Technical detail:* prompt [`05-phase-4-pipeline-orchestrator.md`](05-phase-4-pipeline-orchestrator.md), plan [`05-phase-4-pipeline-orchestrator-plan.md`](05-phase-4-pipeline-orchestrator-plan.md), report [`05-phase-4-pipeline-orchestrator-report.md`](05-phase-4-pipeline-orchestrator-report.md); build log, entry *Phase 4 — Pipeline Orchestrator*.
 
+<a name="entry-06"></a>
+### 06 — Phase 5: a claim is recorded before anything runs, and any run can be replayed
+
+**TL;DR:** This phase separated two things that had been one: submitting a claim, and processing it. A claim is now saved first and processed later, as it would be in a real insurer. It also made every past run reconstructible from the audit trail alone, and added a way to re-run a claim with a different setting and compare the two outcomes side by side. A first, plain web interface arrived with it. Finished on 14 June 2026.
+
+**Technologies:** React for the first working interface, the browser's built-in event stream for live progress, a YAML registry for the named run variants.
+
+This phase set out to decouple submission from processing, to record the claim's status as the run moves through the agents, to add named variants (for example a stricter Validator) that can be chosen for a replay, to reconstruct any past run purely from the audit trail, and to expose runs and comparisons through the interface. It delivered all of that with 63 new tests. Dermot approved the plan with two amendments at the gate, both of which strengthened the audit trail: the Adjuster's full reasoning is recorded, not an excerpt, because the audit trail alone must be enough to explain any past decision; and the Validator's audit entry records the provider that was actually used rather than a fixed label, so that a run on a substitute provider is recorded truthfully. That second amendment is also what makes the project's third-party substitutability argument checkable. Notable along the way: the brief assumed a front-end library that was not yet installed, and the phase proceeded without it rather than add a dependency unasked.
+
+*Technical detail:* prompt [`06-phase-5-decoupling-and-replay.md`](06-phase-5-decoupling-and-replay.md), plan [`06-phase-5-decoupling-and-replay-plan.md`](06-phase-5-decoupling-and-replay-plan.md), report [`06-phase-5-decoupling-and-replay-report.md`](06-phase-5-decoupling-and-replay-report.md); build log, entry *Phase 5 — Decoupling and Replay*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
