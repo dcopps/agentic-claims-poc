@@ -29,7 +29,7 @@
 
 ## Addendum (31 October 2026)
 
-At Dermot's request after close-out: every TL;DR ends with the weekday, full date and time the phase finished (report timestamp where one exists, otherwise the closing commit, noted in the *Technical detail* line); `docs/prompts/README_TLDR.md` created and, with the at-a-glance table, regenerated from the entries; the standing rule for that regeneration added to `CLAUDE.md`.
+At Dermot's request after close-out: every TL;DR ends with the weekday, full date and time the phase finished (report timestamp where one exists, otherwise the closing commit, noted in the *Technical detail* line); `docs/prompts/README_TLDR.md` created and, with the at-a-glance table, regenerated from the entries; the standing rule for that regeneration added to `CLAUDE.md`. Later the same day: times of day removed from the TL;DRs (weekday and date only), rule updated and both copies regenerated; glossary term *Retrieval (and embedding)* added to both documents; two sentences on retrieval added to entry 02.
 
 ## Suggestions (not in scope)
 

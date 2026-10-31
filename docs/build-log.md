@@ -1518,4 +1518,6 @@ Read-only checks on all ten runs: seven audit entries each; every LLM call `prov
 
 **Addendum, 31 October 2026 (Dermot's request).** Every build-story *TL;DR* now ends with the weekday, full date and time (UTC) the phase finished, from the report's *Completed at* timestamp for prompts 02–10; for prompts 01 and 11–23, whose reports carry no timestamp (01's is marked approximate), from the closing commit, named in the entry's *Technical detail* line. New `docs/prompts/README_TLDR.md` — *The build in thirty seconds a phase* — holds the 23 TL;DRs in order, each heading linking to its entry; it and the at-a-glance table are regenerated from the entries, and `CLAUDE.md` *Build story* now requires both to be regenerated at every close-out so the three stay identical.
 
+**Addendum, 31 October 2026 (second).** Times of day removed from every TL;DR (weekday and full date only; the rule in `CLAUDE.md` updated; table and `README_TLDR.md` regenerated). Glossary term *Retrieval (and embedding)* added to both plain-language documents between *Prompt* and *Audit trail* (thirteen terms); two sentences added to build-story entry 02 recording that retrieval was built there, twelve passages from the policy excerpt.
+
 **Next:** prompt 24 — Phase 9.3, Azure AI Foundry as a third LLM provider.

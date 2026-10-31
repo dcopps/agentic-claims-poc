@@ -24,6 +24,8 @@ A handful of project terms recur throughout. They are defined here once, by what
 
 **Prompt.** The written instructions an agent sends to the model with each request. There are two kinds: the fixed instructions that define the agent's job, and the per-claim content that changes every time.
 
+**Retrieval (and embedding).** The policy text is cut into short passages. Each passage is turned into a long list of numbers by a small, fixed model, so that passages with similar meaning end up with similar numbers, and those numbers are stored in the database beside the text. When a claim arrives its description is turned into numbers the same way, and the database returns the few passages whose numbers are nearest, so the Validator sees the relevant part of the policy rather than the model's general memory of insurance. The same fixed model must be used for both steps, which is why it is pinned and packed into the deployed image.
+
 **Audit trail.** The tamper-evident record of everything each run did: every agent's input, its output and its call to the model, chained together so that any later alteration is detectable. The project's rule is that the audit trail alone must be enough to explain any past decision.
 
 **Human review**, or **escalation**. The outcome in which the prototype stops and hands the claim to a person, recording which rule sent it there.
