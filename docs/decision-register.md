@@ -138,4 +138,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.5.2 — Pin Mistral Model to `mistral-large-2512` (point release)*; plan `15-phase-8.5.2-pin-mistral-model-plan.md`; report `15-phase-8.5.2-pin-mistral-model-report.md`; the failing deployed run is `11f97ae8`.
 
+<a name="r-05"></a>
+### R-05 — Recording which model was asked, not only which answered; resetting the live database under a hostname check
+
+**TL;DR:** The audit trail recorded the model that answered each request. When a request is refused there is no answer, so the record could not say what had been asked. This release added that, on every path. The build also departed from the brief's preferred design, for reasons recorded at the time, and reset the live database to a known state before testing.
+
+**Technologies:** the audit entry format; the Neon hosted database; the project's seed script.
+
+**Date and phase.** 14 September 2026, Phase 8.5.3.
+
+**What happened.** The previous release's verification (R-04) could show which model the system had sent only by ruling out every other possibility, because the audit entry's model field is filled from the response and a refusal has no response. Separately, the deployed database had accumulated claims from failed runs and needed resetting to the nine seeded claims before a clean verification.
+
+**Why it mattered.** An audit trail that cannot say what was asked when a call fails cannot settle a dispute with a provider, and the project's claim is that the audit trail alone explains every run, failures included. Resetting a live database is a destructive act, and the Phase 8.5 incident (R-02) had shown what a mis-pointed command could do.
+
+**What was decided, and by whom.** Dermot approved the plan. The build then departed from the brief's stated preference, which was to pass the model name through as a separate value; the record explains why below. Dermot performed the deployed check himself through the live interface.
+
+**What was done.** Every agent's audit entry gained the requested model, captured before the call so it is present on success, on an unreadable answer and on a refusal, and absent only when no call was made. Instead of a new parameter, the existing object that already carries the exact prompt was widened to carry the model too, so the recorded value is the sent value by construction and no lines were added to functions already over the project's size limit. The deployed database was reset after resolving its address through the application's own settings, comparing the hostname with the expected host, and printing the hostname only.
+
+**How it was proven.** Nine new tests failed with the recording line temporarily removed and passed with it restored. Dermot's live run after the reset produced a Validator entry reading the pinned Mistral release beside the refusal, the evidence the previous release could not produce. The reset's before and after counts were recorded.
+
+**Status.** Resolved. The requested-model field is a locked audit extension.
+
+*Technical detail:* build log, *Phase 8.5.3 — Record `requested_model` in Agent Audit Payloads; Reset the Deployed DB (point release)*; plan `16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md`; report `16-phase-8.5.3-requested-model-audit-and-db-reset-report.md`; the live run is `56a0d5b2`; the mechanism is `CapturedRequest` / `attach_request` in `backend/app/agents/_shared.py`.
+
 _Entries follow, in build order._

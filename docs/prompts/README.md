@@ -203,6 +203,17 @@ This release set out to restore a failing Validator by pinning the Mistral model
 
 *Technical detail:* prompt [`15-phase-8.5.2-pin-mistral-model.md`](15-phase-8.5.2-pin-mistral-model.md), plan [`15-phase-8.5.2-pin-mistral-model-plan.md`](15-phase-8.5.2-pin-mistral-model-plan.md), report [`15-phase-8.5.2-pin-mistral-model-report.md`](15-phase-8.5.2-pin-mistral-model-report.md); build log, entry *Phase 8.5.2 — Pin Mistral Model to `mistral-large-2512` (point release)*.
 
+<a name="entry-16"></a>
+### 16 — Phase 8.5.3: record what was asked, not only what answered; and reset the live data
+
+**TL;DR:** When a model refuses a request, there is no answer to record, so the audit trail could not say which model had been asked. This release makes every agent record the model it asked for, on success and on failure alike. It also reset the live database to a clean, known state before testing, under a check that it was pointed at the right host. With the new field in place, the previous release's question was answered from the audit trail in one line. Finished on 14 September 2026.
+
+**Technologies:** no new ones; an additive field on every agent's audit entry; the project's seed script run against the live Neon database under a hostname check.
+
+This release set out to close the gap the previous one exposed. Every agent's audit entry now carries the model that was requested, written before the call is made, so it is present on success, on an unreadable answer and on a refusal; it is omitted only when no call was made at all, as in the guardrail scenario's fixed Adjuster output. The brief preferred passing the name through as a separate value; the build instead widened the existing object that already carries the exact prompt, so the recorded name is by construction the one that was sent and no lines were added to functions already over the project's size limit. That is a deviation from the brief's stated preference, recorded in the plan. The second half reset the deployed database to the nine seeded claims, after resolving the address through the application's own settings and showing the hostname only. Dermot approved the plan and processed a claim through the live interface afterwards; its audit entry read the pinned model name next to the refusal, which settled by evidence what the previous release had settled by elimination. The decision register records this as [R-05](../decision-register.md#r-05).
+
+*Technical detail:* prompt [`16-phase-8.5.3-requested-model-audit-and-db-reset.md`](16-phase-8.5.3-requested-model-audit-and-db-reset.md), plan [`16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md`](16-phase-8.5.3-requested-model-audit-and-db-reset-plan.md), report [`16-phase-8.5.3-requested-model-audit-and-db-reset-report.md`](16-phase-8.5.3-requested-model-audit-and-db-reset-report.md); build log, entry *Phase 8.5.3 — Record `requested_model` in Agent Audit Payloads; Reset the Deployed DB (point release)*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
