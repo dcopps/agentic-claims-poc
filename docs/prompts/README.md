@@ -148,6 +148,17 @@ This phase set out to refactor the Doc-Parser after a rehearsal discovery: the m
 
 *Technical detail:* prompt [`10-phase-8.2-doc-parser-refactor.md`](10-phase-8.2-doc-parser-refactor.md), plan [`10-phase-8.2-doc-parser-refactor-plan.md`](10-phase-8.2-doc-parser-refactor-plan.md), report [`10-phase-8.2-doc-parser-refactor-report.md`](10-phase-8.2-doc-parser-refactor-report.md); build log, entry *Phase 8.2 — Doc-Parser Refactor (Claim Record as Source of Truth)*.
 
+<a name="entry-11"></a>
+### 11 — Phase 8.3: the audit trail records exactly what each model was told
+
+**TL;DR:** When you opened an agent's card to see what it had asked the model, you saw a blank template with placeholders in it, not the real question. This phase made every agent record the exact, filled-in instructions it sent, and the interface now shows those. It also fixed a panel that said "waiting" forever and gave each run a link to its audit entries. Finished on 16 June 2026.
+
+**Technologies:** no new ones; an additive field on every agent's audit entry and matching changes to the React cards.
+
+This phase set out to make the explainability surfaces usable end to end: the prompt panel showed a template rather than the real prompt; the response panel never left its waiting state on finished runs; the run header truncated the reference number and offered no path to the audit view. It delivered all three fixes with 10 new tests. The lasting change is to the audit trail: every agent's entry now carries the literal instructions the model received, system and per-claim parts separately, present only when a call was actually made, so the absence of the field truthfully means no call. This was recorded as an additive extension to the locked audit contract. Dermot approved the plan as written and confirmed one design choice: the audit entry is passed down to the card rather than fetched by it, so there is one source of truth on the page. Notable along the way: the brief's diagnosis of the "waiting" fault was wrong, and the record says so; the real defect was that two different missing-data cases had been merged into one, and the fix separates them explicitly.
+
+*Technical detail:* prompt [`11-phase-8.3-explainability-panel-fixes.md`](11-phase-8.3-explainability-panel-fixes.md), plan [`11-phase-8.3-explainability-panel-fixes-plan.md`](11-phase-8.3-explainability-panel-fixes-plan.md), report [`11-phase-8.3-explainability-panel-fixes-report.md`](11-phase-8.3-explainability-panel-fixes-report.md); build log, entry *Phase 8.3 — Explainability Panel Fixes*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
