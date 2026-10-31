@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-19), entry 19.*
+
 # Phase 9.1 — Azure foundation: Bicep, Postgres Flexible Server, Container Apps, Key Vault, managed identity
 
 ## Why Phase 9 exists

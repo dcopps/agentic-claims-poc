@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-05), entry 05.*
+
 # Report 05 — Phase 4: Pipeline Orchestrator
 
 ## Summary

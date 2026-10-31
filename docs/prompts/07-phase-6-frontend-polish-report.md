@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-07), entry 07.*
+
 # Report 07 — Phase 6: Frontend Polish
 
 ## Summary

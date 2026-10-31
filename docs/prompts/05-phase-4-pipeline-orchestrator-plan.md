@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-05), entry 05.*
+
 # Plan 05 — Phase 4: Pipeline Orchestrator
 
 Wire the four Phase 2/3 agents into a single end-to-end pipeline, add a typed

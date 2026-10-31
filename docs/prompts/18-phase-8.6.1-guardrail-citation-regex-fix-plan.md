@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-18), entry 18.*
+
 # Phase 8.6.1 — Plan: Guardrail citation-regex false positive; re-run the Phase 8.6 verification
 
 Prompt: [`18-phase-8.6.1-guardrail-citation-regex-fix.md`](18-phase-8.6.1-guardrail-citation-regex-fix.md). Point release `0.8.6 → 0.8.6.1`.

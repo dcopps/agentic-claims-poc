@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-02), entry 02.*
+
 # Report 02 — Phase 1: Data Layer and Settings Infrastructure
 
 ## Summary

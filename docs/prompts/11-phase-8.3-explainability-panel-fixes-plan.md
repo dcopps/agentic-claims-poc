@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-11), entry 11.*
+
 # Plan 11 — Phase 8.3: Explainability Panel Fixes
 
 Three surgical fixes, one commit. All make the agent expand panel and the

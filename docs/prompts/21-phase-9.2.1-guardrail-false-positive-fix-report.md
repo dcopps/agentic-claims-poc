@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-21), entry 21.*
+
 # Phase 9.2.1 — Report: Guardrail false positives on the auto-approve scenario
 
 **Date:** 28–29 October 2026 — **closed as partially verified**

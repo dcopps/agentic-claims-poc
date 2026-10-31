@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-04), entry 04.*
+
 # Plan 04 — Phase 3: Remaining Agents
 
 ## 1. Goal

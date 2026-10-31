@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-20), entry 20.*
+
 # Phase 9.2 — Frontend on Azure Static Web Apps, GitHub Actions deploy with OIDC, Application Insights, second verification pass
 
 ## Where this phase starts

@@ -1,5 +1,9 @@
 # Agentic Claims POC
 
+## Not an engineer? Start here
+
+This project is a working prototype of AI-assisted insurance claims handling, built to show that such a system can be governed, inspected and audited. Two documents tell its story without code: [the build, phase by phase](docs/prompts/README.md) and [the decisions and incidents register](docs/decision-register.md). Everything below this section is written for engineers.
+
 A working prototype demonstrating **multi-agent agentic AI for insurance claims processing** at a regulated specialty insurer: retrieval-augmented coverage validation, structured settlement estimation, output guardrails, a tamper-evident audit vault, human-in-the-loop escalation, and provider substitutability — all deployed live.
 
 > **30-second pitch.** A claim is submitted and persisted before any model runs. An orchestrator drives four specialised agents — Doc-Parser (extract), Validator (RAG coverage decision, citing policy clauses), Adjuster (settlement within a market range), Guardrail (PII / bias / hallucinated-citation check) — and a deterministic escalation policy decides auto-settle vs. human review. **Every step is written to a SHA-256 hash-chained audit ledger**, so any past decision is fully reconstructable and the chain is one-click verifiable. The whole thing runs on commodity hosting today and maps cleanly onto an Azure topology for production.

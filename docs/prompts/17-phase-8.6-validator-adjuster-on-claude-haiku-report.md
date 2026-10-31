@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-17), entry 17.*
+
 # Phase 8.6 — Report: Validator and Adjuster default to Claude Haiku; Mistral path retained as a variant
 
 **Date:** 15 September 2026

@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-10), entry 10.*
+
 # Plan 10 — Phase 8.2: Doc-Parser Refactor
 
 **Claim record as source of truth for structured fields; Haiku for `narrative_summary` only.**

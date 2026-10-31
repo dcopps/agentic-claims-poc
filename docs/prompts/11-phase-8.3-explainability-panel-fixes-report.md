@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-11), entry 11.*
+
 # Report 11 — Phase 8.3: Explainability Panel Fixes
 
 ## Summary

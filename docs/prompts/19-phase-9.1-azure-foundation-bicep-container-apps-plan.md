@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-19), entry 19.*
+
 # Phase 9.1 — Plan: Azure foundation (Bicep, Postgres Flexible Server, Container Apps, Key Vault, managed identity)
 
 Prompt: [`19-phase-9.1-azure-foundation-bicep-container-apps.md`](19-phase-9.1-azure-foundation-bicep-container-apps.md). Minor version `0.8.6.1 → 0.9.0`.

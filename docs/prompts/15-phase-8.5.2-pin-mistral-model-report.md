@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-15), entry 15.*
+
 # Phase 8.5.2 — Pin Mistral model to `mistral-large-2512` — REPORT
 
 **Date:** 2026-09-14

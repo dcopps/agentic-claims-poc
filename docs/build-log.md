@@ -1,5 +1,7 @@
 # Build Log
 
+> *Plain-language versions of this record: [the build story](prompts/README.md) (phase by phase) and [the decision register](decision-register.md) (incidents and decisions).*
+
 A chronological record of every phase, task, or significant fix applied to this repository.
 
 Each entry follows the format below. Entries are appended in build order — newest at the bottom.
@@ -1495,3 +1497,23 @@ Read-only checks on all ten runs: seven audit entries each; every LLM call `prov
 **Coral Bay Adjuster latency (Dermot's check).** The Azure frontend showed 159 ms and the Vercel frontend 3.7 s for the Adjuster step. The audit settles it: on both stacks `settlement_estimate` records `demo_fixture: true`, `llm_call.provider = "demo_fixture"`, `latency_ms: 0` and *"no model call; deterministic demo fixture"* — **no model call was made on Render**. The UI figure is the agent step's wall clock as the orchestrator measures it, which on Render includes round trips to the Neon database in Frankfurt (connection open, claim read, audit append); on Azure the database is in the same region. The Harborline runs show the same shape: about 7 s between the `coverage_check` and `settlement_estimate` rows on Render against a 2.4 s model call. Hosting topology, not a model call.
 
 **Close-out:** README known-issue note removed and *Before a demo* line updated (seven cases expected green); backlog section closed; report completed; `change-governance.md` and the DORA register already carried the completed control response; `CLAUDE.md` *Demo status* back to usable without caveat, *Locked interface extensions* entry in place, *What's next* → prompt 23 (documentation) then 24 (Foundry). `azure-stop.sh` run last: replica drained after 285 s, Postgres `Stopped` at **17:52 UTC, 30 October 2026**; Azure auto-restarts it about 6 November.
+
+---
+
+## Prompt 23 — Plain-language documentation (30–31 October 2026)
+
+**Prompt:** [`docs/prompts/23-plain-language-documentation.md`](prompts/23-plain-language-documentation.md); plan [`…-plan.md`](prompts/23-plain-language-documentation-plan.md) (approved 30 October 2026, D1–D6 as recommended); report [`…-report.md`](prompts/23-plain-language-documentation-report.md). **Documentation only:** no code, prompt, test, infrastructure or workflow change; no version bump; no deployment; no Azure session.
+
+**What was built.**
+
+- `docs/decision-register.md` — **new.** *Decisions and incidents, in plain language*: purpose, glossary (twelve terms), reading guide, and **nineteen entries** R-01 to R-19 from Phase 8.4 onward (the prompt's fourteen plus four additions flagged in the plan: R-08 the 21 September findings, R-10 Azure parking, R-13 the deploy-permission decisions, R-19 the 9.2.2 trade-off). Each entry: TL;DR, Technologies, date and phase, what happened, why it mattered, what was decided and by whom, what was done, how it was proven, status, one *Technical detail* line. Where the record is silent on who decided (R-03, R-14, R-15) the entry says so. R-09 carries Dermot's recollection of the registry-build decision and the Pay-As-You-Go upgrade, labelled as recollection.
+- `docs/prompts/README.md` — **restructured.** *The build, phase by phase, in plain language*: purpose, the same glossary, an at-a-glance table of all 23 TL;DRs, then 23 entries (one per prompt) each with TL;DR, Technologies, body and *Technical detail* line, linking to the prompt, plan and report and to the register where relevant; the engineer sections kept below as *For engineers: how the archive is organised*, with the "no separate decisions file" paragraph corrected and the stale four-row index table removed (D3).
+- **Signposts:** a one-line italic pointer at the top of all 68 files under `docs/prompts/` (prompt, plan and report, 01–23) to the matching build-story entry by anchor; the same pointer at the top of this file; a *Not an engineer? Start here* section at the top of `README.md`.
+- `CLAUDE.md` — two new standing instructions (*Decision register*, *Build story*); *Build Approach* "two appends" → four; `docs/decision-register.md` in the tree; known-debt line about the index closed; *What's next* → prompt 24 (Azure AI Foundry).
+- `docs/BACKLOG.md` — the MCP-server item under *Future work* (requested at stop 1).
+
+**Method (Dermot's).** One phase per stop with review, for prompts 01–04; the entry format changed twice at review (a one-line opener → a TL;DR paragraph of three or four plain sentences; then a *Technologies* line); prompts 05–23 then written in one pass, one commit per phase, reviewed as a whole; end-of-build items last. 29 commits.
+
+**Verification.** Every Markdown link, anchor and *Technical detail* pointer in both documents resolves (checked by script after the end-of-build items: 207 links, 44 anchors and 41 build-log section references across the two documents, `README.md` and this file; the one unresolved link found is a pre-existing historical one in the Phase 8.5.2 entry to a backlog section that Phase 8.6 removed, left as the record stands). Every archive file begins with the signpost whose anchor matches its own number. `backend/tests/test_anonymisation.py` (which scans `docs/`, `README.md` and `CLAUDE.md`) passes. Suite unchanged: 429 passed, 0 failed, 15 skipped.
+
+**Next:** prompt 24 — Phase 9.3, Azure AI Foundry as a third LLM provider.

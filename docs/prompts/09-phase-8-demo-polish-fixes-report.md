@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-09), entry 09.*
+
 # Report 09 — Phase 8: Demo Polish Fixes from Rehearsal Discoveries
 
 ## Summary

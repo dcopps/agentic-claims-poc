@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-06), entry 06.*
+
 # Prompt 06 — Phase 5: Decoupling and Replay
 
 ## Read first

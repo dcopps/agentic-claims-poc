@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-09), entry 09.*
+
 # Plan 09 — Phase 8: Demo Polish Fixes
 
 A focused six-fix polish pack from the Phase 7 demo rehearsal. No architecture

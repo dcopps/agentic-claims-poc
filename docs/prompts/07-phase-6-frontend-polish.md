@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-07), entry 07.*
+
 # Prompt 07 — Phase 6: Frontend Polish (and the Backend Endpoints That Polish Requires)
 
 ## Read first

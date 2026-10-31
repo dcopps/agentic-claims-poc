@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-14), entry 14.*
+
 # Phase 8.5.1 — Migration-test autocommit fix — REPORT
 
 **Date:** 2026-09-14

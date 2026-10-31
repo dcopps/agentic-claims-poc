@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-22), entry 22.*
+
 # Phase 9.2.2 — Plan: the Guardrail's LLM citation flag must quote its evidence, and code verifies it
 
 **Prompt:** `22-phase-9.2.2-guardrail-quote-verified-citation-flags.md`. **Version:** `0.9.1.1 → 0.9.1.2`. **Status:** awaiting approval — no prompt, code or fixture has been changed.

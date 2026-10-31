@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-16), entry 16.*
+
 # Phase 8.5.3 — Report: record `requested_model` in agent audit payloads; reset the deployed DB
 
 Report for `docs/prompts/16-phase-8.5.3-requested-model-audit-and-db-reset.md`.

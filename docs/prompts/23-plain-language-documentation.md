@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-23), entry 23.*
+
 # Prompt 23 — Plain-language documentation: the decision register, the build story, and the signposts to them
 
 ## Why this phase exists

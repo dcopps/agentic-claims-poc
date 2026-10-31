@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-22), entry 22.*
+
 # Phase 9.2.2 — Report: the Guardrail's LLM citation flag must quote its evidence, and code verifies it
 
 **Status: complete — 30 October 2026, verified on all three deployed surfaces.** Version `0.9.1.2`, deployed as `94b7527` (Azure revision `--0000016`; Render auto-deploy). Plan approved 30 October (D1–D5 as recommended). Build-log entry *Phase 9.2.2* carries the full record; this report is the summary.

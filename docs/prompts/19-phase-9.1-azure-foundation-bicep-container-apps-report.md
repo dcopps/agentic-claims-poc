@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-19), entry 19.*
+
 # Phase 9.1 — Report: Azure foundation deployed, bootstrapped and verified
 
 Prompt: [`19-phase-9.1-azure-foundation-bicep-container-apps.md`](19-phase-9.1-azure-foundation-bicep-container-apps.md) · Plan: [`19-…-plan.md`](19-phase-9.1-azure-foundation-bicep-container-apps-plan.md) · 1 October 2026 · `0.8.6.1 → 0.9.0`

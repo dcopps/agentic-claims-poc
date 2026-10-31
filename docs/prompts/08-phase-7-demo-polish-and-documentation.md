@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-08), entry 08.*
+
 # Prompt 08 — Phase 7: Demo Polish and Documentation
 
 ## Read first

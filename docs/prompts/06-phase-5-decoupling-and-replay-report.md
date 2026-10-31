@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-06), entry 06.*
+
 # Report 06 — Phase 5: Decoupling and Replay
 
 ## Summary

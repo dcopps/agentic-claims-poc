@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-20), entry 20.*
+
 # Phase 9.2 — Plan: frontend on Static Web Apps, OIDC deploy on push, Application Insights, second verification pass
 
 Prompt: [`20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md`](20-phase-9.2-static-web-apps-oidc-deploy-app-insights.md). Patch version `0.9.0 → 0.9.1`.

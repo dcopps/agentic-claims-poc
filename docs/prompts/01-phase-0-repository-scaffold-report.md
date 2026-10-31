@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-01), entry 01.*
+
 # Report 01 — Phase 0: Repository Scaffold
 
 ## Summary

@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-15), entry 15.*
+
 # Phase 8.5.2 — Plan: pin Mistral model to `mistral-large-2512`
 
 Plan produced in response to `docs/prompts/15-phase-8.5.2-pin-mistral-model.md`.

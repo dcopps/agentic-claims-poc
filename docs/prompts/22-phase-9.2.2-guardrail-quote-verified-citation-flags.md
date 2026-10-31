@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-22), entry 22.*
+
 # Phase 9.2.2 — The Guardrail's LLM citation flag must quote its evidence, and code verifies it
 
 ## Why this phase exists

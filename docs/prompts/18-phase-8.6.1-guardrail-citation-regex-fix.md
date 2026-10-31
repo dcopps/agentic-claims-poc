@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-18), entry 18.*
+
 # Phase 8.6.1 — Guardrail citation-regex false positive; re-run the Phase 8.6 verification
 
 ## Context

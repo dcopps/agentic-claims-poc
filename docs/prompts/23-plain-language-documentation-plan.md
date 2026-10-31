@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-23), entry 23.*
+
 # Prompt 23 — Plan: plain-language documentation (decision register, build story, signposts)
 
 **Prompt:** `23-plain-language-documentation.md`. **Scope:** documentation only — no code, prompt, test, infrastructure or workflow change; no version bump; no deployment; no Azure session. **Status:** awaiting approval; nothing has been written yet beyond this plan.

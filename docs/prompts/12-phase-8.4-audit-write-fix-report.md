@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-12), entry 12.*
+
 # Phase 8.4 — Audit-write transaction fix — REPORT
 
 **Date:** 2026-06-26

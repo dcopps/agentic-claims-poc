@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-03), entry 03.*
+
 # Prompt 03 — Phase 2: LLM Gateway and Validator Agent
 
 ## Read first

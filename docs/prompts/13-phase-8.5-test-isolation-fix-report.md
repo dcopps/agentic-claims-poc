@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-13), entry 13.*
+
 # Phase 8.5 — Test-isolation fix — REPORT
 
 **Date:** 2026-06-27
