@@ -69,4 +69,27 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* build log, *Phase 8.4 — Audit-write Transaction Fix* (discriminator proof table); plan `12-phase-8.4-audit-write-fix-plan.md`; report `12-phase-8.4-audit-write-fix-report.md`; the fix is in `backend/db/connection.py`, the tests in `backend/tests/test_audit_persistence.py`.
 
+<a name="r-02"></a>
+### R-02 — A test run wiped the live database; the tests now refuse to touch any live host
+
+**TL;DR:** The automated tests empty the database before they run. A developer's configuration pointed at the live database, so running the tests destroyed its contents. The fix was not a warning but a refusal: the tests now check where they are pointed and will not start against any live system, and there is no switch to make them.
+
+**Technologies:** PostgreSQL; the pytest test harness; a hostname check against the Neon and, later, Azure database domains.
+
+**Date and phase.** 27 June 2026, Phase 8.5; the guard was extended to the Azure database on 1 October 2026, Phase 9.1.
+
+**What happened.** The test harness took its database address from the same configuration file the application uses. On a developer's machine that file pointed at the deployed database. The test fixtures empty the claims, audit and policy tables before each test, so an ordinary test run wiped the live system. The hazard had existed since Phase 1 and surfaced during the Phase 8.4 verification.
+
+**Why it mattered.** The deployed database held the demonstration's claims and the audit trail that explains them. A single habitual command could destroy both without any prompt or confirmation, and nothing distinguished a safe run from a destructive one until it was too late.
+
+**What was decided, and by whom.** Dermot commissioned the fix as its own phase, approved the plan as written, and chose to set up the local test database himself with the project's existing script, guided rather than driven. On 1 October 2026 he approved extending the same refusal to the Azure database as part of Phase 9.1.
+
+**What was done.** The tests gained their own database and a dedicated setting for it. The harness now resolves the address before anything runs: it prefers the test setting, accepts the ordinary setting only when it points at a local machine, and refuses outright on any deployed host, naming the host and pointing to the setup instructions. There is deliberately no environment variable or flag that bypasses the refusal. The error names only the hostname, never the full connection string.
+
+**How it was proven.** Three tests exercise each branch of the decision without touching a database. The guard was then run against the real configuration and stopped the suite before the table-clearing fixture, with the expected error. When the Azure host was added, the two new tests were shown to fail with the Azure domain temporarily removed from the guard and to pass with it restored.
+
+**Status.** Resolved. The two-database rule and the refusal are recorded as a locked decision in the project's handbook.
+
+*Technical detail:* build log, *Phase 8.5 — Test-isolation Fix* and *Phase 9.1 — Azure Foundation* (test guard); plan `13-phase-8.5-test-isolation-fix-plan.md`; report `13-phase-8.5-test-isolation-fix-report.md`; the resolver is `_resolve_test_database_url` in `backend/tests/conftest.py`, the tests in `backend/tests/test_db_isolation.py`.
+
 _Entries follow, in build order._

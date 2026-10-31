@@ -170,6 +170,17 @@ This phase set out to fix a production-only data-loss bug found while rehearsing
 
 *Technical detail:* prompt [`12-phase-8.4-audit-write-fix.md`](12-phase-8.4-audit-write-fix.md), plan [`12-phase-8.4-audit-write-fix-plan.md`](12-phase-8.4-audit-write-fix-plan.md), report [`12-phase-8.4-audit-write-fix-report.md`](12-phase-8.4-audit-write-fix-report.md); build log, entry *Phase 8.4 — Audit-write Transaction Fix*.
 
+<a name="entry-13"></a>
+### 13 — Phase 8.5: the tests can never again touch a live database
+
+**TL;DR:** The automated tests clear the database before each run. On a developer's machine, the configuration file pointed at the live database, so running the tests wiped it. This phase gave the tests their own database and, more importantly, made the test harness refuse outright to run against any live host, with no way to override it. Finished on 27 June 2026.
+
+**Technologies:** a second local PostgreSQL database for tests, a resolver in the test harness that reads the hostname of the configured database before anything runs.
+
+This phase set out to close a hazard present since Phase 1 and exposed by the Phase 8.4 verification: the test harness read whatever database address the developer's configuration file held, and the test fixtures empty every table. With the file pointing at the deployed database, one ordinary test run destroyed it. The fix is in the test layer only. The harness now prefers a dedicated test-database setting, falls back to the ordinary setting only when it points at a local host, and refuses with a named error on any deployed host, pointing the reader to the setup instructions. It delivered that with three tests that exercise each branch of the decision without touching any database. Dermot approved the plan as written and chose the verification mode: he would create the local test database himself with the project's existing setup script, guided rather than driven. Notable along the way: the guard was shown to fire end to end against the real configuration, stopping before the fixture that empties tables, with the error naming only the hostname and never the connection string. The decision register records this as [R-02](../decision-register.md#r-02).
+
+*Technical detail:* prompt [`13-phase-8.5-test-isolation-fix.md`](13-phase-8.5-test-isolation-fix.md), plan [`13-phase-8.5-test-isolation-fix-plan.md`](13-phase-8.5-test-isolation-fix-plan.md), report [`13-phase-8.5-test-isolation-fix-report.md`](13-phase-8.5-test-isolation-fix-report.md); build log, entry *Phase 8.5 — Test-isolation Fix*.
+
 _Further entries follow, in build order._
 
 ## For engineers: how the archive is organised
