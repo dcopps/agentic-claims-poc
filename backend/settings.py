@@ -604,6 +604,11 @@ class EscalationSettings(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
+# The root logging level `backend.app.logging.setup.configure_logging` applies
+# at start-up (0.10.0.2; the field existed from Phase 0 but was never read).
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+
+
 class Settings(BaseSettings):
     """Runtime configuration for the backend."""
 
@@ -618,7 +623,7 @@ class Settings(BaseSettings):
     environment: Literal["dev", "staging", "prod"] = Field(default="dev")
     api_host: str = Field(default="127.0.0.1")
     api_port: int = Field(default=8000, ge=1, le=65535)
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
+    log_level: LogLevel = Field(default="INFO")
     cors_allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # Phase 1 sub-models.

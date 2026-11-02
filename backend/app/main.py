@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api import api_router
 from backend.app.api.health import health_router
 from backend.app.escalation import EscalationPolicy
+from backend.app.logging.setup import configure_logging
 from backend.app.mcp import ActivityBus, ToolCallRecorder, build_mcp_server, mount_mcp
 from backend.app.orchestrator import PipelineEventBus
 from backend.app.orchestrator.variant_registry import VariantRegistry
@@ -108,6 +109,12 @@ def create_app(settings: Settings | None = None) -> fastapi.FastAPI:
     # definitions); the `/mcp` route exists only when a shared token is set.
     app.state.mcp_server = build_mcp_server(app)
     app.state.mcp_mounted = mount_mcp(app, app.state.mcp_server, cfg)
+
+    # After the MCP server is built: the SDK's own logging set-up runs there,
+    # and with the telemetry distro's handler already on the root logger it is
+    # a no-op, leaving the root at WARNING. This applies `log_level` for real
+    # and gives the console a handler if nothing writes to it (0.10.0.2).
+    configure_logging(cfg.log_level)
 
     return app
 
