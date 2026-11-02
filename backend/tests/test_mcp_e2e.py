@@ -85,5 +85,18 @@ def test_wrong_token_is_refused() -> None:
     async def scenario(client: Client) -> None:
         await client.list_tools()
 
-    with pytest.raises((MCPError, httpx2.HTTPStatusError, RuntimeError)):
+    # The client's task group wraps the refusal in an ExceptionGroup; look for
+    # the MCP error (or the raw 401) among the leaves rather than at the top.
+    try:
         asyncio.run(_with_client("not-the-token", scenario))
+    except BaseException as exc:  # noqa: BLE001 — the group type varies by SDK version
+        leaves = _leaves(exc)
+        assert any(isinstance(leaf, MCPError | httpx2.HTTPStatusError) for leaf in leaves), leaves
+    else:
+        raise AssertionError("a wrong token was accepted")
+
+
+def _leaves(exc: BaseException) -> list[BaseException]:
+    if isinstance(exc, BaseExceptionGroup):
+        return [leaf for inner in exc.exceptions for leaf in _leaves(inner)]
+    return [exc]

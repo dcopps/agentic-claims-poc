@@ -2,6 +2,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import {
   getAgentPrompt,
   getClaim,
+  getMcpCatalogue,
   getRun,
   listAuditEntries,
   listClaimRuns,
@@ -11,6 +12,7 @@ import type {
   AgentPrompt,
   AuditEntry,
   ClaimRecord,
+  McpCatalogue,
   PipelineResult,
   RunSummary,
 } from '../api/types'
@@ -70,5 +72,13 @@ export function useAgentPrompt(
     queryFn: () => getAgentPrompt(agent, variant),
     staleTime: FRESH,
     enabled, // lazy — only fetched when the agent card is expanded
+  })
+}
+
+export function useMcpCatalogue(): UseQueryResult<McpCatalogue> {
+  return useQuery({
+    queryKey: ['mcpCatalogue'],
+    queryFn: () => getMcpCatalogue(),
+    staleTime: FRESH, // the server's definitions change only with a deploy
   })
 }

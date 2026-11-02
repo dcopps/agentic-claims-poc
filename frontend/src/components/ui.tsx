@@ -56,20 +56,26 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 export function StatusBadge({ status }: { status: string }) {
   const cls = statusBadgeClass[status] ?? 'bg-slate-100 text-slate-700'
   return (
-    <span className={`inline-block rounded px-2 py-0.5 font-mono text-xs ${cls}`}>
-      {status}
-    </span>
+    <span className={`inline-block rounded px-2 py-0.5 font-mono text-xs ${cls}`}>{status}</span>
   )
 }
 
-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'danger' }) {
-  const cls =
-    tone === 'success'
-      ? 'bg-green-100 text-green-800'
-      : tone === 'danger'
-        ? 'bg-red-100 text-red-800'
-        : 'bg-slate-100 text-slate-700'
-  return <span className={`inline-block rounded px-2 py-0.5 text-xs ${cls}`}>{children}</span>
+type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger'
+
+const BADGE_TONE: Record<BadgeTone, string> = {
+  neutral: 'bg-slate-100 text-slate-700',
+  success: 'bg-green-100 text-green-800',
+  // Amber marks the one MCP tool that changes something (Phase 10).
+  warning: 'bg-amber-100 text-amber-800',
+  danger: 'bg-red-100 text-red-800',
+}
+
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: BadgeTone }) {
+  return (
+    <span className={`inline-block rounded px-2 py-0.5 text-xs ${BADGE_TONE[tone]}`}>
+      {children}
+    </span>
+  )
 }
 
 export function Card({ title, children }: { title?: ReactNode; children: ReactNode }) {

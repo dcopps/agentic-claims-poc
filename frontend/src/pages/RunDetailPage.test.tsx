@@ -25,9 +25,7 @@ describe('RunDetailPage', () => {
 
   it('renders queued cards and an awaiting hint when no run data exists yet', async () => {
     renderWithProviders(<App />, { route: ROUTE })
-    await waitFor(() =>
-      expect(screen.getByTestId('awaiting-hint')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('awaiting-hint')).toBeInTheDocument())
     expect(screen.getByText('Doc-Parser')).toBeInTheDocument()
   })
 
@@ -82,8 +80,21 @@ describe('RunDetailPage header (correlation id)', () => {
       configurable: true,
     })
     renderWithProviders(<App />, { route: FULL_ROUTE })
-    fireEvent.click(screen.getByRole('button', { name: /copy/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(writeText).toHaveBeenCalledWith(FULL_CID)
+  })
+
+  it('copies a ready-made question for an MCP client naming the run', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    renderWithProviders(<App />, { route: FULL_ROUTE })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy question for Claude' }))
+    expect(writeText).toHaveBeenCalledWith(
+      `Using the claims MCP server, explain run ${FULL_CID} and tell me whether its audit chain verifies.`,
+    )
   })
 
   it('links to the audit view of this run with the correlation id pre-filled', () => {

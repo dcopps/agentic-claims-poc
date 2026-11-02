@@ -73,6 +73,7 @@ export function AgentCard({
   const prompt = useAgentPrompt(agent, variant, expanded && filledPrompt === null)
   const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
   const progress = useProgress(status === 'running', expectedMs)
+  const refused = extractRefusedClaims(auditEntry)
 
   return (
     <div className="rounded border border-slate-200 bg-white">
@@ -86,14 +87,22 @@ export function AgentCard({
           {STATUS_ICON[status]}
         </span>
         <span className="w-28 font-medium">{label}</span>
-        <span className="flex-1 text-slate-500">
-          {summary ? JSON.stringify(summary) : status}
-        </span>
+        <span className="flex-1 text-slate-500">{summary ? JSON.stringify(summary) : status}</span>
         {durationMs !== undefined && (
           <span className="font-mono text-xs text-slate-400">{durationMs}ms</span>
         )}
         <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
       </button>
+
+      {/* The Guardrail's refused claims (Phase 9.2.2's `llm_flags_discarded`),
+          shown without expanding: the model said these were policy citations
+          and the code could not find them in the Adjuster's text. */}
+      {refused.length > 0 && (
+        <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-claims">
+          Refused claims ({refused.length}):{' '}
+          {refused.map((claim) => `“${claim.quote ?? 'no quote'}” — ${claim.reason}`).join('; ')}
+        </p>
+      )}
 
       {status === 'running' && (
         <div className="px-3 pb-2" aria-label={`${label} running`}>
@@ -146,8 +155,7 @@ function TemplateFallback({ prompt }: { prompt: ReturnType<typeof useAgentPrompt
   return (
     <div className="mt-1 space-y-2">
       <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
-        Showing the prompt template — this run pre-dates the audit-prompt-capture
-        change.
+        Showing the prompt template — this run pre-dates the audit-prompt-capture change.
       </p>
       <PromptText title="System" body={prompt.data.system} />
       <PromptText title="User" body={prompt.data.user} />
@@ -159,19 +167,12 @@ function TemplateFallback({ prompt }: { prompt: ReturnType<typeof useAgentPrompt
 // states: entry present → render its response block; entry absent but the agent
 // reports done → an audit-integrity error (a completed agent must have written an
 // entry); otherwise → still in flight.
-function ResponsePanel({
-  auditEntry,
-  status,
-}: {
-  auditEntry?: AuditEntry
-  status: AgentStatus
-}) {
+function ResponsePanel({ auditEntry, status }: { auditEntry?: AuditEntry; status: AgentStatus }) {
   if (auditEntry) return <JsonBlock value={extractResponseBlock(auditEntry)} />
   if (status === 'done') {
     return (
       <p className="text-sm text-red-600">
-        Audit entry not found for this completed agent — this may indicate a write
-        failure.
+        Audit entry not found for this completed agent — this may indicate a write failure.
       </p>
     )
   }
@@ -208,4 +209,23 @@ function extractPrompt(entry?: AuditEntry): { system: string; user: string } | n
 function extractResponseBlock(entry: AuditEntry): unknown {
   const payload = entry.payload
   return payload.output ?? payload.verdict ?? payload
+}
+
+interface RefusedClaim {
+  quote: string | null
+  reason: string
+}
+
+// The `llm_flags_discarded` list an output_check row carries from 0.9.1.2 on:
+// each item is a model claim the code refused, with its quote and the reason.
+// Absent or malformed → an empty list; nothing else on the card depends on it.
+function extractRefusedClaims(entry?: AuditEntry): RefusedClaim[] {
+  const discarded = entry?.payload.llm_flags_discarded
+  if (!Array.isArray(discarded)) return []
+  return discarded.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return []
+    const { quote, reason } = item as Record<string, unknown>
+    if (typeof reason !== 'string') return []
+    return [{ quote: typeof quote === 'string' ? quote : null, reason }]
+  })
 }

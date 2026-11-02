@@ -41,8 +41,9 @@ def _record(tool: str = "get_run", *, call_id: int | None = None) -> ToolCallRec
 
 
 async def _first(bus: ActivityBus) -> ToolCallRecord:
-    async for record in bus.subscribe():
-        return record
+    with bus.subscribe() as subscription:
+        async for record in subscription:
+            return record
     raise AssertionError("the subscription ended without a record")
 
 

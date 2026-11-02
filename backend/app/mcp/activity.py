@@ -5,8 +5,14 @@ Not the pipeline event bus. `PipelineEventBus` is one reader per correlation
 id with a terminal sentinel and a teardown timer — the right shape for a run
 that starts and ends. The activity feed is the opposite: any number of readers,
 one endless stream, every reader sees every record. So each subscriber gets its
-own queue, there is no terminal, and a subscriber's queue disappears the moment
-it stops iterating.
+own queue, there is no terminal, and a subscriber's queue disappears when the
+subscription closes.
+
+**Subscription is eager.** `subscribe()` registers the queue the moment it is
+called, not when iteration starts, so the feed endpoint can subscribe, then
+read the replay rows from the table, and be certain that a record written in
+between is already waiting in its queue rather than lost. The subscription is
+an async context manager so the queue is removed on every exit path.
 
 Shares the pipeline bus's two disciplines: publish only from the event-loop
 thread (the recorder already runs there), and never raise into the publisher
@@ -18,11 +24,42 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from types import TracebackType
 
 from backend.app.mcp.models import ToolCallRecord
 
 _logger = logging.getLogger(__name__)
+
+
+class Subscription:
+    """One reader's queue: an async iterator that must be closed, hence a context manager.
+
+    Registration happened in `ActivityBus.subscribe`; closing needs no await,
+    so the context manager is synchronous and works inside an async generator."""
+
+    def __init__(self, bus: ActivityBus, queue: asyncio.Queue[ToolCallRecord]) -> None:
+        self._bus = bus
+        self._queue = queue
+
+    def __aiter__(self) -> Subscription:
+        return self
+
+    async def __anext__(self) -> ToolCallRecord:
+        return await self._queue.get()
+
+    def __enter__(self) -> Subscription:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._bus._remove(self._queue)
 
 
 class ActivityBus:
@@ -51,14 +88,11 @@ class ActivityBus:
                     record.call_id,
                 )
 
-    async def subscribe(self) -> AsyncIterator[ToolCallRecord]:
-        """Yield every record published from now on, until the consumer stops."""
+    def subscribe(self) -> Subscription:
+        """Register a reader now; it receives every record published from this point."""
         queue: asyncio.Queue[ToolCallRecord] = asyncio.Queue(maxsize=self._queue_maxsize)
         self._queues.add(queue)
-        try:
-            while True:
-                yield await queue.get()
-        finally:
-            # Runs when the consumer breaks out, the connection drops, or the
-            # generator is closed — the queue must not outlive its reader.
-            self._queues.discard(queue)
+        return Subscription(self, queue)
+
+    def _remove(self, queue: asyncio.Queue[ToolCallRecord]) -> None:
+        self._queues.discard(queue)

@@ -12,6 +12,11 @@ describe('App routing', () => {
     expect(screen.getByRole('link', { name: /agentic claims poc/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Audit' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Agents' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Integrations' })).toHaveAttribute(
+      'href',
+      '/integrations',
+    )
+    expect(screen.getByRole('link', { name: 'Guide' })).toHaveAttribute('href', '/guide')
     expect(screen.getByRole('button', { name: /submit claim/i })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText(/no claims yet/i)).toBeInTheDocument())
   })
@@ -50,9 +55,7 @@ describe('App routing', () => {
       ],
     ])
     renderWithProviders(<App />, { route: '/claims/c1/compare/aaa/bbb' })
-    await waitFor(() =>
-      expect(screen.getByLabelText('Comparison diff')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByLabelText('Comparison diff')).toBeInTheDocument())
     expect(screen.getByText('850000.00')).toBeInTheDocument()
     expect(screen.getByText(/settlement_over_ceiling/)).toBeInTheDocument()
   })

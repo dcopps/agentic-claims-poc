@@ -28,11 +28,12 @@ def _record(call_id: int) -> ToolCallRecord:
 
 async def _take(bus: ActivityBus, count: int) -> list[int]:
     seen: list[int] = []
-    async for record in bus.subscribe():
-        assert record.call_id is not None
-        seen.append(record.call_id)
-        if len(seen) == count:
-            break
+    with bus.subscribe() as subscription:
+        async for record in subscription:
+            assert record.call_id is not None
+            seen.append(record.call_id)
+            if len(seen) == count:
+                break
     return seen
 
 
@@ -51,7 +52,7 @@ def test_two_subscribers_both_receive_every_record() -> None:
 
     a, b, remaining = asyncio.run(scenario())
     assert a == [1, 2] and b == [1, 2]
-    assert remaining == 0  # queues are removed when their readers stop
+    assert remaining == 0  # queues are removed when their subscriptions close
 
 
 def test_full_queue_drops_with_a_warning(caplog: pytest.LogCaptureFixture) -> None:
@@ -72,6 +73,21 @@ def test_publish_with_no_subscribers_is_a_no_op() -> None:
     bus = ActivityBus(queue_maxsize=5)
     bus.publish(_record(1))
     assert bus.subscriber_count == 0
+
+
+def test_subscription_is_registered_before_iteration_starts() -> None:
+    """The feed relies on this: subscribe, read the replay, and nothing in between is lost."""
+
+    async def scenario() -> list[int]:
+        bus = ActivityBus(queue_maxsize=5)
+        with bus.subscribe() as subscription:
+            assert bus.subscriber_count == 1
+            bus.publish(_record(1))  # before any __anext__
+            first = await subscription.__anext__()
+            assert first.call_id is not None
+            return [first.call_id]
+
+    assert asyncio.run(scenario()) == [1]
 
 
 def test_constructor_guard() -> None:

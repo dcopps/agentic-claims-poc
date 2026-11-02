@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { AuditEntry, PipelineEvent } from '../api/types'
 import { AgentCard, type AgentStatus } from '../components/AgentCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
+import { integrationsCopy } from '../copy/integrations'
 import { useAuditEntries, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
 
@@ -54,9 +55,7 @@ export function RunDetailPage() {
               view of this same run (filter pre-populated via the query param). */}
           <div className="flex flex-wrap items-center gap-2">
             <span>run</span>
-            <span className="break-all font-mono text-xs text-slate-700">
-              {correlationId}
-            </span>
+            <span className="break-all font-mono text-xs text-slate-700">{correlationId}</span>
             <CopyButton value={correlationId} />
             <Link
               to={`/audit?correlation_id=${correlationId}`}
@@ -64,6 +63,12 @@ export function RunDetailPage() {
             >
               View audit log
             </Link>
+            {/* A ready-made question for an MCP client, so the id is never read
+                aloud in a demonstration (Phase 10). */}
+            <CopyButton
+              value={integrationsCopy.copyQuestion(correlationId)}
+              label="Copy question for Claude"
+            />
           </div>
         </div>
       </Card>
@@ -117,8 +122,7 @@ function _status(key: string, events: PipelineEvent[]): AgentStatus {
 }
 
 function _duration(key: string, events: PipelineEvent[]): number | undefined {
-  return _agentEvents(key, events).find((e) => e.event_type === 'agent_completed')
-    ?.duration_ms
+  return _agentEvents(key, events).find((e) => e.event_type === 'agent_completed')?.duration_ms
 }
 
 function _summary(key: string, events: PipelineEvent[]): Record<string, unknown> | undefined {

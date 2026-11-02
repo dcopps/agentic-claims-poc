@@ -12,18 +12,9 @@ export type ClaimStatus =
   | 'settled'
   | 'awaiting_human'
 
-export type ClaimType =
-  | 'water_damage'
-  | 'fire'
-  | 'wind'
-  | 'theft'
-  | 'flood'
-  | 'storm_complex'
+export type ClaimType = 'water_damage' | 'fire' | 'wind' | 'theft' | 'flood' | 'storm_complex'
 
-export type ScenarioTag =
-  | 'auto_approve'
-  | 'threshold_escalation'
-  | 'guardrail_escalation'
+export type ScenarioTag = 'auto_approve' | 'threshold_escalation' | 'guardrail_escalation'
 
 export interface ClaimSubmission {
   claimant_name: string
@@ -172,4 +163,61 @@ export interface PipelineEvent {
   failing_agent?: string
   error_type?: string
   message?: string
+}
+
+// --- Phase 10: the MCP catalogue and the tool-call record -------------------
+
+export interface McpTool {
+  name: string
+  title: string | null
+  description: string
+  kind: 'read' | 'action'
+  parameters: Record<string, unknown>
+}
+
+export interface McpPromptArgument {
+  name: string
+  required: boolean
+}
+
+export interface McpPrompt {
+  name: string
+  title: string | null
+  description: string
+  arguments: McpPromptArgument[]
+}
+
+export interface McpResource {
+  uri: string
+  name: string
+  title: string | null
+  description: string
+  mime_type: string | null
+}
+
+export interface McpCatalogue {
+  mounted: boolean
+  path: string
+  tools: McpTool[]
+  prompts: McpPrompt[]
+  resources: McpResource[]
+}
+
+export interface ToolCallTarget {
+  kind: 'claim' | 'run'
+  id: string
+}
+
+// One recorded MCP tool call, as the activity feed streams it. `call_id` is
+// the feed's event id and the key the page de-duplicates on.
+export interface ToolCallRecord {
+  call_id: number
+  called_at: string
+  tool: string
+  arguments: Record<string, unknown>
+  target: ToolCallTarget | null
+  caller: string
+  outcome: 'ok' | 'error'
+  error_class: string | null
+  latency_ms: number
 }

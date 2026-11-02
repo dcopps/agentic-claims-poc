@@ -4,6 +4,8 @@ import { AuditPage } from './pages/AuditPage'
 import { ClaimDetailPage } from './pages/ClaimDetailPage'
 import { ClaimsPage } from './pages/ClaimsPage'
 import { ComparePage } from './pages/ComparePage'
+import { GuidePage } from './pages/GuidePage'
+import { IntegrationsPage } from './pages/IntegrationsPage'
 import { RunDetailPage } from './pages/RunDetailPage'
 
 function App() {
@@ -23,6 +25,12 @@ function App() {
         <Link to="/agents" className="hover:underline">
           Agents
         </Link>
+        <Link to="/integrations" className="hover:underline">
+          Integrations
+        </Link>
+        <Link to="/guide" className="hover:underline">
+          Guide
+        </Link>
       </nav>
       <main className="mx-auto max-w-5xl p-6">
         <Routes>
@@ -32,6 +40,8 @@ function App() {
           <Route path="/claims/:claimId/compare/:a/:b" element={<ComparePage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/guide" element={<GuidePage />} />
         </Routes>
       </main>
     </div>

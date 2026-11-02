@@ -9,6 +9,7 @@ import type {
   ClaimStatus,
   ClaimSubmission,
   HumanDecisionBody,
+  McpCatalogue,
   PipelineResult,
   RunComparison,
   RunSummary,
@@ -117,4 +118,20 @@ export function testAgent<T>(agent: string, body: unknown, variant = 'default'):
 
 export function streamUrl(correlationId: string): string {
   return `${API_BASE}/api/pipeline/stream/${correlationId}`
+}
+
+// --- Phase 10: MCP catalogue and activity feed --------------------------------
+
+export function getMcpCatalogue(): Promise<McpCatalogue> {
+  return request('/api/mcp/tools')
+}
+
+export function mcpActivityUrl(): string {
+  return `${API_BASE}/api/mcp/activity`
+}
+
+// The URL an MCP client connects to. With no explicit API base (the dev proxy
+// case) the backend is on this origin, so the page's origin is the right host.
+export function mcpEndpointUrl(): string {
+  return `${API_BASE || window.location.origin}/mcp`
 }

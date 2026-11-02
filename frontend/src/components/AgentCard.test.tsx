@@ -160,3 +160,57 @@ describe('AgentCard running state', () => {
     expect(screen.getByText('Validator')).toBeInTheDocument()
   })
 })
+
+// Phase 10 (O2): the Guardrail card shows the model's refused citation claims
+// without expanding, so the demo talking point is visible on the run page.
+describe('AgentCard refused claims', () => {
+  function guardrailEntry(discarded: unknown): AuditEntry {
+    return {
+      audit_id: 74,
+      agent: 'guardrail',
+      step: 'output_check',
+      created_at: '2026-10-30T17:30:33Z',
+      chain_hash: '7f7883d7e5e7',
+      payload: {
+        output: { passed: true, flags: [], summary: 'No additional issues found.' },
+        llm_flags_counted: [],
+        llm_flags_discarded: discarded,
+      },
+    }
+  }
+
+  it('lists each refused claim with its quote and reason', () => {
+    renderWithProviders(
+      <AgentCard
+        agent="guardrail"
+        label="Guardrail"
+        status="done"
+        variant="default"
+        auditEntry={guardrailEntry([
+          {
+            kind: 'hallucinated_citation',
+            detail: 'references a provision for inventory valuation',
+            quote: 'inventory valuation and depreciation',
+            reason: 'quote_not_a_provision',
+          },
+        ])}
+      />,
+    )
+    const line = screen.getByTestId('refused-claims')
+    expect(line).toHaveTextContent('Refused claims (1)')
+    expect(line).toHaveTextContent('“inventory valuation and depreciation” — quote_not_a_provision')
+  })
+
+  it('shows nothing when the list is empty or absent', () => {
+    renderWithProviders(
+      <AgentCard
+        agent="guardrail"
+        label="Guardrail"
+        status="done"
+        variant="default"
+        auditEntry={guardrailEntry([])}
+      />,
+    )
+    expect(screen.queryByTestId('refused-claims')).not.toBeInTheDocument()
+  })
+})

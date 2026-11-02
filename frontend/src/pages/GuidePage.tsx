@@ -1,0 +1,56 @@
+import { Link } from 'react-router-dom'
+import { Card } from '../components/ui'
+import { guideCopy, guideLinks } from '../copy/guide'
+import { typography } from '../styles/tokens'
+
+// One screen for a first-time visitor: what the system is, the three scenarios
+// and what each should do, how to read a run page, and where the public
+// documents are. All text lives in copy/guide.ts.
+export function GuidePage() {
+  return (
+    <div className="space-y-4">
+      <h1 className={typography.pageTitle}>{guideCopy.title}</h1>
+
+      <Card title={guideCopy.whatHeading}>
+        <p className="text-sm text-slate-700">{guideCopy.what}</p>
+      </Card>
+
+      <Card title={guideCopy.scenariosHeading}>
+        <ul className="space-y-1 text-sm text-slate-700">
+          {guideCopy.scenarios.map((scenario) => (
+            <li key={scenario.name}>
+              <span className="font-medium">{scenario.name}</span>: {scenario.detail}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card title={guideCopy.runPageHeading}>
+        <p className="text-sm text-slate-700">{guideCopy.runPage}</p>
+      </Card>
+
+      <Card title={guideCopy.linksHeading}>
+        <ul className="space-y-1 text-sm" aria-label="Guide links">
+          {guideLinks.map((link) => (
+            <li key={link.href}>
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-700 hover:underline"
+              >
+                {link.label}
+              </a>
+              <span className="text-slate-500"> — {link.detail}</span>
+            </li>
+          ))}
+          <li>
+            <Link to="/integrations" className="text-blue-700 hover:underline">
+              {guideCopy.integrationsLink}
+            </Link>
+          </li>
+        </ul>
+      </Card>
+    </div>
+  )
+}
