@@ -2,7 +2,7 @@
 
 ## Not an engineer? Start here
 
-This project is a working prototype of AI-assisted insurance claims handling, built to show that such a system can be governed, inspected and audited. Two documents tell its story without code: [the build, phase by phase](docs/prompts/README.md) and [the decisions and incidents register](docs/decision-register.md). The [interactive architecture diagram](https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html) shows the production target architecture, with a clickable claim journey through it. Everything below this section is written for engineers.
+This project is a working system for AI-assisted insurance claims handling, built to show that such a system can be governed, inspected and audited. Two documents tell its story without code: [the build, phase by phase](docs/prompts/README.md) and [the decisions and incidents register](docs/decision-register.md). The [interactive architecture diagram](https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html) shows the production target architecture, with a clickable claim journey through it. Everything below this section is written for engineers.
 
 A working prototype demonstrating **multi-agent agentic AI for insurance claims processing** at a regulated specialty insurer: retrieval-augmented coverage validation, structured settlement estimation, output guardrails, a tamper-evident audit vault, human-in-the-loop escalation, and provider substitutability — all deployed live.
 

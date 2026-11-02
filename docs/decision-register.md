@@ -2,7 +2,7 @@
 
 ## What this document is
 
-This is the record of every moment in the build of this prototype when something went wrong, when the work departed from its plan, or when a decision had to be taken by the person accountable for it. It is written for a reader who is not an engineer and does not want to read code: a compliance officer, an auditor, a hiring manager, or a future maintainer arriving cold. Each entry says what happened, why it mattered, what was decided and by whom, what was done, how it was shown to have worked, and where the engineer's detailed record is.
+This is the record of every moment in the build of this system when something went wrong, when the work departed from its plan, or when a decision had to be taken by the person accountable for it. It is written for a reader who is not an engineer and does not want to read code: a compliance officer, an auditor, a hiring manager, or a future maintainer arriving cold. Each entry says what happened, why it mattered, what was decided and by whom, what was done, how it was shown to have worked, and where the engineer's detailed record is.
 
 The project's claim is that software built with an AI assistant can be governed and inspected. A claim like that needs a record a non-engineer can inspect without someone beside them. This is that record. The engineer's record remains in three technical places, and every entry here ends with a pointer into it.
 
@@ -12,15 +12,15 @@ The rule from Prompt 23 onward is that every halt, every deviation from an appro
 
 A handful of project terms recur throughout. They are defined here once, by what they do, and used consistently below.
 
-**The prototype.** The working system this project built: software that reads an insurance claim, checks it against the policy wording, proposes a settlement figure, checks that proposal, and either settles the claim or sends it to a person.
+**The system.** The working claims-handling system this project built. It is a prototype in scope, with synthetic claims and a short policy excerpt, and it is built and operated to production standards: deployed on two clouds, audited, verified and change-controlled.
 
-**Agent.** One of the four specialised pieces of software in the prototype, each with a single job, each calling a language model to do it.
+**Agent.** One of the four specialised pieces of software in the system, each with a single job, each calling a language model to do it.
 
 **Doc-Parser, Validator, Adjuster, Guardrail.** The four agents. The Doc-Parser reads the claim. The Validator decides whether the policy covers the loss. The Adjuster proposes a settlement figure and gives its reasons. The Guardrail checks the Adjuster's reasons for leaked personal data, for bias, and for references to policy wording that the policy does not contain.
 
-**Orchestrator.** The part of the prototype that runs the four agents in order and applies the escalation rules at the end.
+**Orchestrator.** The part of the system that runs the four agents in order and applies the escalation rules at the end.
 
-**Language model**, or **the model**. The external artificial-intelligence service each agent calls. The prototype uses Anthropic's Claude models. An alternative provider, Mistral, is kept available as a switch.
+**Language model**, or **the model**. The external artificial-intelligence service each agent calls. The system uses Anthropic's Claude models. An alternative provider, Mistral, is kept available as a switch.
 
 **Prompt.** The written instructions an agent sends to the model with each request. There are two kinds: the fixed instructions that define the agent's job, and the per-claim content that changes every time.
 
@@ -28,7 +28,7 @@ A handful of project terms recur throughout. They are defined here once, by what
 
 **Audit trail.** The tamper-evident record of everything each run did: every agent's input, its output and its call to the model, chained together so that any later alteration is detectable. The project's rule is that the audit trail alone must be enough to explain any past decision.
 
-**Human review**, or **escalation**. The outcome in which the prototype stops and hands the claim to a person, recording which rule sent it there.
+**Human review**, or **escalation**. The outcome in which the system stops and hands the claim to a person, recording which rule sent it there.
 
 **The three scripted scenarios.** The three synthetic claims that every verification runs. A water-damage claim that should settle automatically. A fire claim large enough that a person must see it. And a claim whose reasoning cites a policy endorsement that does not exist, which the Guardrail must catch.
 
@@ -120,7 +120,7 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 <a name="r-04"></a>
 ### R-04 — Pinning the Mistral model to one named release
 
-**TL;DR:** The system had been asking its second AI provider for "the latest large model" by a name the provider is free to repoint. The provider repointed it at a release the project's free account could not use, and a live run failed. The decision was to ask for one exact, dated release instead. That restored the name the prototype had been built against, but the next step showed the free account could not use that release either.
+**TL;DR:** The system had been asking its second AI provider for "the latest large model" by a name the provider is free to repoint. The provider repointed it at a release the project's free account could not use, and a live run failed. The decision was to ask for one exact, dated release instead. That restored the name the system had been built against, but the next step showed the free account could not use that release either.
 
 **Technologies:** Mistral's large model; the project's settings and settings template.
 
@@ -130,7 +130,7 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 **Why it mattered.** Two of the four agents depended on this provider by default. A moving name means the system's behaviour, and even whether it runs at all, can change without any change in the repository, which defeats the project's claim to be reproducible.
 
-**What was decided, and by whom.** Dermot approved pinning both agents to the dated release the prototype was built and tuned against, as the cheapest of three options; adding a payment method and routing the two agents through Claude were both kept open. He also set the rule that archived prompts and plans naming the old alias stay unchanged, because rewriting them would falsify the record.
+**What was decided, and by whom.** Dermot approved pinning both agents to the dated release the system was built and tuned against, as the cheapest of three options; adding a payment method and routing the two agents through Claude were both kept open. He also set the rule that archived prompts and plans naming the old alias stay unchanged, because rewriting them would falsify the record.
 
 **What was done.** The two model names were changed in the settings and the settings template, in the tests that assert the defaults, and in a pricing example where a stale name would have silently made every call's cost unknown. Audit entries written from then on carry the dated name. The deployed verification was run by Dermot with a fresh claim.
 
@@ -235,7 +235,7 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 <a name="r-09"></a>
 ### R-09 — Azure foundation decisions: the service's own identity, building the image in the cloud registry, and baking the embedding model into the image
 
-**TL;DR:** Standing the prototype up on Azure forced four design choices before anything was built. The service gets an identity of its own kind that can be referenced before it exists; the container image is built inside Azure's registry rather than on a laptop; the language-understanding model the service needs is packed into the image so the running service never fetches anything from the internet; and database sign-in by password is accepted for now with the stronger option deferred.
+**TL;DR:** Standing the system up on Azure forced four design choices before anything was built. The service gets an identity of its own kind that can be referenced before it exists; the container image is built inside Azure's registry rather than on a laptop; the language-understanding model the service needs is packed into the image so the running service never fetches anything from the internet; and database sign-in by password is accepted for now with the stronger option deferred.
 
 **Technologies:** Azure user-assigned managed identity; Azure Container Registry builds; a Docker image with the BGE embedding model baked in; Azure Key Vault secret references.
 

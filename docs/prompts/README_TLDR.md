@@ -32,7 +32,7 @@ This phase turned the plain interface into the one the demonstration uses: separ
 
 ### [08 — Phase 7: ready to show, and the governance documents](README.md#entry-08)
 
-This phase made the prototype presentable and wrote the documents that explain how it is governed: how changes are classified and approved, which outside providers it depends on and how each could be replaced, and the reasons behind its main design choices. It also made the third scripted scenario, the one where the Guardrail must catch an invented endorsement, reproducible every time. Finished on Monday 15 June 2026.
+This phase made the system presentable and wrote the documents that explain how it is governed: how changes are classified and approved, which outside providers it depends on and how each could be replaced, and the reasons behind its main design choices. It also made the third scripted scenario, the one where the Guardrail must catch an invented endorsement, reproducible every time. Finished on Monday 15 June 2026.
 
 ### [09 — Phase 8: six fixes from the first rehearsal](README.md#entry-09)
 
@@ -60,7 +60,7 @@ The first run of the tests against the new local test database showed two failur
 
 ### [15 — Phase 8.5.2: the model that moved underneath us](README.md#entry-15)
 
-A live run failed because the second AI provider refused the request: the project's free account was no longer allowed to use the model. The system had been asking for "the latest large model", a name the provider can repoint at will, and it had been repointed at a paid release. This release pinned the exact release the prototype had been built against. It did not work, because that release had been withdrawn from the free tier too, and finding that out took the next release. Finished on Monday 14 September 2026.
+A live run failed because the second AI provider refused the request: the project's free account was no longer allowed to use the model. The system had been asking for "the latest large model", a name the provider can repoint at will, and it had been repointed at a paid release. This release pinned the exact release the system had been built against. It did not work, because that release had been withdrawn from the free tier too, and finding that out took the next release. Finished on Monday 14 September 2026.
 
 ### [16 — Phase 8.5.3: record what was asked, not only what answered; and reset the live data](README.md#entry-16)
 
@@ -76,7 +76,7 @@ This small release fixed the pattern that had halted the previous verification, 
 
 ### [19 — Phase 9.1: a second home on Azure, built from a written description](README.md#entry-19)
 
-The prototype had lived on three small hosting services. This phase stood up a second, complete installation on Microsoft Azure, the kind of platform a regulated insurer would actually use, described entirely in infrastructure files so it can be recreated from the repository. The same code, the same database layout and the same settings ran there unchanged. The three scenarios passed on it the same day. Finished on Thursday 1 October 2026.
+The system had lived on three small hosting services. This phase stood up a second, complete installation on Microsoft Azure, the kind of platform a regulated insurer would actually use, described entirely in infrastructure files so it can be recreated from the repository. The same code, the same database layout and the same settings ran there unchanged. The three scenarios passed on it the same day. Finished on Thursday 1 October 2026.
 
 ### [20 — Phase 9.2: the Azure installation completes itself, and the model changes its mind](README.md#entry-20)
 
