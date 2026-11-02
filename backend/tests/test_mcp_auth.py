@@ -14,6 +14,9 @@ replacing the mount condition in `mount_mcp` with `True` fails
 
 from __future__ import annotations
 
+import logging
+
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -117,3 +120,44 @@ def test_guard_refuses_a_blank_expected_token() -> None:
 def test_server_is_built_even_without_a_token(db_settings: Settings) -> None:
     app = create_app(_settings(db_settings, None))
     assert app.state.mcp_server is not None
+
+
+# --------------------------------------------------------------------------- #
+# 0.10.0.1 — every refusal is logged with its reason, never the value
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("headers", "reason"),
+    [
+        ({}, "header_absent"),
+        ({"Authorization": f"Basic {_TOKEN}"}, "scheme_not_bearer"),
+        ({"Authorization": "Bearer"}, "scheme_not_bearer"),
+        ({"Authorization": "Bearer definitely-not-it"}, "token_mismatch"),
+    ],
+)
+def test_refusal_is_logged_with_its_reason_and_without_the_value(
+    db_settings: Settings, caplog: pytest.LogCaptureFixture, headers: dict[str, str], reason: str
+) -> None:
+    app = create_app(_settings(db_settings, _TOKEN))
+    with (
+        caplog.at_level(logging.INFO, logger="backend.app.mcp.auth"),
+        TestClient(app) as client,
+    ):
+        resp = client.post("/mcp", json=_INITIALIZE, headers={**_ACCEPT, **headers})
+    assert resp.status_code == 401
+    lines = [r.message for r in caplog.records if r.name == "backend.app.mcp.auth"]
+    assert lines == [f"mcp auth refused: {reason} (POST /mcp)"]
+    assert "definitely-not-it" not in caplog.text and _TOKEN not in caplog.text
+
+
+def test_success_logs_nothing(db_settings: Settings, caplog: pytest.LogCaptureFixture) -> None:
+    app = create_app(_settings(db_settings, _TOKEN))
+    with (
+        caplog.at_level(logging.INFO, logger="backend.app.mcp.auth"),
+        TestClient(app) as client,
+    ):
+        client.post(
+            "/mcp", json=_INITIALIZE, headers={**_ACCEPT, "Authorization": f"Bearer {_TOKEN}"}
+        )
+    assert not [r for r in caplog.records if r.name == "backend.app.mcp.auth"]

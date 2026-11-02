@@ -13,12 +13,15 @@ Behaviour: every HTTP request must carry `Authorization: Bearer <token>`
 matching the configured value, compared in constant time. Anything else — no
 header, another scheme, a wrong token — gets a 401 with a `WWW-Authenticate`
 challenge and a one-line body that never echoes what was sent. Non-HTTP
-scopes are refused outright: the endpoint speaks HTTP only.
+scopes are refused outright: the endpoint speaks HTTP only. Every refusal is
+logged with its reason (header absent, scheme not Bearer, token mismatch) and
+the method and path, never the presented value.
 """
 
 from __future__ import annotations
 
 import hmac
+import logging
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
@@ -29,6 +32,8 @@ Scope = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[MutableMapping[str, Any]]]
 Send = Callable[[MutableMapping[str, Any]], Awaitable[None]]
 ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
+
+_logger = logging.getLogger(__name__)
 
 _REALM = "agentic-claims-mcp"
 _SCHEME = "bearer"
@@ -56,23 +61,42 @@ class BearerGuard:
         await self._app(scope, receive, send)
 
     def _authorised(self, scope: Scope) -> bool:
-        presented = _bearer_token(scope)
+        presented, reason = _bearer_token(scope)
         if presented is None:
+            _log_refusal(scope, reason)
             return False
-        return hmac.compare_digest(presented.encode("utf-8"), self._expected)
+        if not hmac.compare_digest(presented.encode("utf-8"), self._expected):
+            _log_refusal(scope, REFUSED_TOKEN_MISMATCH)
+            return False
+        return True
 
 
-def _bearer_token(scope: Scope) -> str | None:
-    """The token from `Authorization: Bearer …`, or None if absent or malformed."""
+# The three ways a request fails the guard. Logged by name so an operator can
+# tell "the client sent nothing" from "the client sent the wrong value" without
+# the record ever holding what was sent (0.10.0.1, after a connector refused).
+REFUSED_HEADER_ABSENT = "header_absent"
+REFUSED_SCHEME_NOT_BEARER = "scheme_not_bearer"
+REFUSED_TOKEN_MISMATCH = "token_mismatch"
+
+
+def _bearer_token(scope: Scope) -> tuple[str | None, str]:
+    """The token from `Authorization: Bearer …` and, when there is none, the reason why."""
     headers: list[tuple[bytes, bytes]] = list(scope.get("headers", []))
     for name, value in headers:
         if name.lower() != b"authorization":
             continue
         scheme, _, token = value.decode("latin-1").strip().partition(" ")
         if scheme.lower() != _SCHEME or not token.strip():
-            return None
-        return token.strip()
-    return None
+            return None, REFUSED_SCHEME_NOT_BEARER
+        return token.strip(), ""
+    return None, REFUSED_HEADER_ABSENT
+
+
+def _log_refusal(scope: Scope, reason: str) -> None:
+    # Method and path identify the attempt; the header's value is never logged.
+    _logger.info(
+        "mcp auth refused: %s (%s %s)", reason, scope.get("method", "?"), scope.get("path", "?")
+    )
 
 
 def _unauthorised() -> Response:
