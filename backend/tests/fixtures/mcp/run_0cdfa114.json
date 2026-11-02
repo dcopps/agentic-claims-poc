@@ -1,0 +1,269 @@
+{
+ "_note": "Harborline run 0cdfa114 as recorded on the Render deployment on 30 October 2026, read on 2 November 2026; llm_call.prompt removed from each agent row. The worked example of the Phase 10 plan (\u00a73d).",
+ "correlation_id": "0cdfa114-dde7-4fbe-971e-7fe3e64f2a97",
+ "claim": {
+  "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+  "claim_number": "CLM-2026-08454CE5",
+  "line_of_business": "Commercial Property",
+  "claimant_name": "Harborline Logistics Ltd",
+  "policy_number": "CP-2026-9001",
+  "loss_date": "2026-04-18",
+  "reported_date": "2026-04-19",
+  "jurisdiction": "United Kingdom",
+  "narrative": "Burst supply line under the second-floor break room flooded the warehouse mezzanine and damaged dry-stored inventory. Plumbing contractor confirmed pipe failure was sudden and accidental.",
+  "claim_type": "water_damage",
+  "reported_amount": "85000.00",
+  "status": "settled",
+  "scenario_tag": "auto_approve",
+  "created_at": "2026-10-30T16:18:42.440933Z",
+  "updated_at": "2026-10-30T17:30:44.557687Z"
+ },
+ "entries": [
+  {
+   "audit_id": 70,
+   "agent": "orchestrator",
+   "step": "pipeline_started",
+   "created_at": "2026-10-30T17:29:55.936115Z",
+   "payload": {
+    "variant": "default",
+    "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+    "started_at": "2026-10-30T17:29:55.934976+00:00",
+    "correlation_id": "0cdfa114-dde7-4fbe-971e-7fe3e64f2a97"
+   },
+   "chain_hash": "9adc4d93913ee8eb84789d9fbec5f00e42b4ea75f4be88d4e6e379ef7b9e3e2d"
+  },
+  {
+   "audit_id": 71,
+   "agent": "doc_parser",
+   "step": "doc_extract",
+   "created_at": "2026-10-30T17:30:03.626841Z",
+   "payload": {
+    "error": null,
+    "input": {
+     "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+     "narrative_excerpt": "Burst supply line under the second-floor break room flooded the warehouse mezzanine and damaged dry-stored inventory. Plumbing contractor confirmed pipe failure was sudden and accidental."
+    },
+    "output": {
+     "loss_date": "2026-04-18",
+     "claim_type": "water_damage",
+     "jurisdiction": "United Kingdom",
+     "claimed_amount": "85000.00",
+     "narrative_summary": "A water supply line beneath the second-floor break room ruptured unexpectedly, causing water to flood the warehouse mezzanine and damage inventory stored there. A plumbing contractor verified that the pipe failure was sudden and accidental.",
+     "claimant_identifier": "Harborline Logistics Ltd"
+    },
+    "llm_call": {
+     "model": "claude-haiku-4-5-20251001",
+     "provider": "anthropic",
+     "latency_ms": 1184,
+     "prompt_tokens": 218,
+     "requested_model": "claude-haiku-4-5-20251001",
+     "completion_tokens": 53
+    },
+    "fields_source": "claim_record"
+   },
+   "chain_hash": "3dc5708103a97c3e8a5b36cbb88c9fd69468270cab24e1f731dd3c7dfb7cb3ca"
+  },
+  {
+   "audit_id": 72,
+   "agent": "validator",
+   "step": "coverage_check",
+   "created_at": "2026-10-30T17:30:16.111623Z",
+   "payload": {
+    "error": null,
+    "input": {
+     "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+     "narrative_excerpt": "Burst supply line under the second-floor break room flooded the warehouse mezzanine and damaged dry-stored inventory. Plumbing contractor confirmed pipe failure was sudden and accidental."
+    },
+    "verdict": {
+     "covered": true,
+     "reasoning": "The narrative describes a burst supply line (plumbing system) that caused accidental water discharge and damage to inventory. The Named Perils Covered section explicitly includes 'Accidental discharge or leakage from a plumbing, heating, or air-conditioning system' resulting in direct physical damage to insured property. The plumbing contractor confirmed the pipe failure was sudden and accidental, satisfying the policy's requirement. The Exclusions section does not negate this coverage; mechanical breakdown is excluded only where a separate equipment-breakdown endorsement applies, but the policy covers the resulting water damage to other property regardless.",
+     "confidence": 0.92,
+     "cited_chunks": [
+      {
+       "section": "Named Perils Covered",
+       "chunk_id": "4082f716-c4d3-4497-af57-3d643daaf2a4"
+      },
+      {
+       "section": "Exclusions",
+       "chunk_id": "03625e83-3ec4-4db9-aabe-9fcf9c01fa0a"
+      }
+     ],
+     "policy_basis": "Named Perils Covered, Exclusions"
+    },
+    "llm_call": {
+     "model": "claude-haiku-4-5-20251001",
+     "provider": "anthropic",
+     "latency_ms": 3144,
+     "prompt_tokens": 1664,
+     "requested_model": "claude-haiku-4-5-20251001",
+     "completion_tokens": 296
+    },
+    "retrieval": {
+     "top_k": 3,
+     "chunks": [
+      {
+       "section": "Named Perils Covered",
+       "chunk_id": "4082f716-c4d3-4497-af57-3d643daaf2a4",
+       "similarity": 0.5983145476392192,
+       "content_excerpt": "Sprinkler leakage. Leakage or discharge of any substance from an automatic sprinkler system, including collapse of a tank that is part of the system. Loss caused by freezing of the system is covered only where the named insured used reasonable care to maintain heat in the building.\n\nWater damage from plumbing systems. Accidental discharge or leakage from a plumbing, heating, or air-conditioning system, or from a domestic appliance, that results in direct physical damage to the insured property. Loss to the appliance or system itself is excluded; the resulting water damage to other property is \u2026(truncated, full length=864)"
+      },
+      {
+       "section": "Exclusions",
+       "chunk_id": "03625e83-3ec4-4db9-aabe-9fcf9c01fa0a",
+       "similarity": 0.5808492898941081,
+       "content_excerpt": "Dishonest, fraudulent, or criminal acts by the named insured, an officer of the named insured, or any person to whom the named insured has entrusted the property, whether acting alone or in collusion with others.\n\nMechanical breakdown, including rupture or bursting caused by centrifugal force. Coverage for mechanical breakdown, where required, is provided only under a separate equipment-breakdown endorsement.\n\nLoss of market, loss of use, delay, or any other consequential loss, except as expressly provided under the Business Interruption section of this policy."
+      },
+      {
+       "section": "Sub-Limits",
+       "chunk_id": "9224365f-8f5b-445e-94f2-2d433a22f1f3",
+       "similarity": 0.5425400087189663,
+       "content_excerpt": "The following sub-limits apply within, and not in addition to, the overall limit of insurance. Each sub-limit is the maximum the insurer will pay regardless of the number of items, locations, or occurrences.\n\nDebris removal. The insurer will pay the reasonable cost to remove debris of insured property caused by a covered cause of loss, up to twenty-five percent of the amount paid for direct damage. Debris removal is included within the limit of insurance and is not in addition to it, except where the limit is exhausted; in that case, an additional amount of up to ten thousand currency units is\u2026(truncated, full length=1401)"
+      }
+     ]
+    }
+   },
+   "chain_hash": "ec683b4d1e6c1096f9b2c1258a6f54e0d41160b5cac7cde36d93389626d42cf7"
+  },
+  {
+   "audit_id": 73,
+   "agent": "adjuster",
+   "step": "settlement_estimate",
+   "created_at": "2026-10-30T17:30:25.438336Z",
+   "payload": {
+    "error": null,
+    "input": {
+     "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+     "parsed_claim_excerpt": {
+      "loss_date": "2026-04-18",
+      "claim_type": "water_damage",
+      "jurisdiction": "United Kingdom",
+      "claimed_amount": "85000.00",
+      "narrative_summary": "A water supply line beneath the second-floor break room ruptured unexpectedly, causing water to flood the warehouse mezzanine and damage inventory stored there. A plumbing contractor verified that the pipe failure was sudden and accidental.",
+      "claimant_identifier": "Harborline Logistics Ltd"
+     },
+     "validator_verdict_excerpt": {
+      "covered": true,
+      "confidence": 0.92,
+      "policy_basis": "Named Perils Covered, Exclusions",
+      "reasoning_excerpt": "The narrative describes a burst supply line (plumbing system) that caused accidental water discharge and damage to inventory. The Named Perils Covered section explicitly includes 'Accidental discharge or leakage from a plumbing, heating, or air-conditioning system' resulting in direct physical damage to insured property. The plumbing contractor confirmed the pipe failure was sudden and accidental, satisfying the policy's requirement. The Exclusions section does not negate this coverage; mechanic\u2026(truncated, full length=666)"
+     }
+    },
+    "output": {
+     "reasoning": "The loss involves a sudden pipe rupture causing water damage to inventory on a warehouse mezzanine\u2014a localized but material event with confirmed accidental cause. The claimed amount of $85,000 aligns closely with the damage scope described (flooded mezzanine and inventory loss), and falls comfortably within the moderate-severity band. The recommended settlement of $82,500 positions slightly below the claim to reflect typical adjustment for inventory valuation and depreciation, while remaining in the upper-middle portion of the market range to acknowledge the verified sudden nature and multi-item inventory impact.",
+     "confidence": 0.85,
+     "reasoning_excerpt": "The loss involves a sudden pipe rupture causing water damage to inventory on a warehouse mezzanine\u2014a localized but material event with confirmed accidental cause. The claimed amount of $85,000 aligns closely with the damage scope described (flooded mezzanine and inventory loss), and falls comfortably within the moderate-severity band. The recommended settlement of $82,500 positions slightly below the claim to reflect typical adjustment for inventory valuation and depreciation, while remaining in the upper-middle portion of the market range to acknowledge the verified sudden nature and multi-item inventory impact.",
+     "recommended_settlement": "82500.00"
+    },
+    "llm_call": {
+     "model": "claude-haiku-4-5-20251001",
+     "provider": "anthropic",
+     "latency_ms": 2418,
+     "prompt_tokens": 1147,
+     "requested_model": "claude-haiku-4-5-20251001",
+     "completion_tokens": 164
+    },
+    "market_data": {
+     "floor": "50000",
+     "ceiling": "200000",
+     "severity": "moderate",
+     "claim_type": "water_damage"
+    },
+    "demo_fixture": false
+   },
+   "chain_hash": "aa684f4a33a774a2834316ce8508a0ba26bc7eb38c3fe907d4fb8fe25024fad7"
+  },
+  {
+   "audit_id": 74,
+   "agent": "guardrail",
+   "step": "output_check",
+   "created_at": "2026-10-30T17:30:33.977830Z",
+   "payload": {
+    "error": null,
+    "input": {
+     "claim_id": "08454ce5-a923-412b-940b-4f48269d4e84",
+     "adjuster_output_excerpt": {
+      "confidence": 0.85,
+      "reasoning_excerpt": "The loss involves a sudden pipe rupture causing water damage to inventory on a warehouse mezzanine\u2014a localized but material event with confirmed accidental cause. The claimed amount of $85,000 aligns closely with the damage scope described (flooded mezzanine and inventory loss), and falls comfortably within the moderate-severity band. The recommended settlement of $82,500 positions slightly below the claim to reflect typical adjustment for inventory valuation and depreciation, while remaining in the upper-middle portion of the market range to acknowledge the verified sudden nature and multi-item inventory impact.",
+      "recommended_settlement": "82500.00"
+     },
+     "retrieved_chunks_summary": [
+      {
+       "section": "Named Perils Covered",
+       "chunk_id": "4082f716-c4d3-4497-af57-3d643daaf2a4",
+       "content_excerpt": "Sprinkler leakage. Leakage or discharge of any substance from an automatic sprinkler system, including collapse of a tank that is part of the system. Loss caused by freezing of the system is covered only where the named insured used reasonable care to maintain heat in the building.\n\nWater damage fro\u2026(truncated, full length=864)"
+      },
+      {
+       "section": "Exclusions",
+       "chunk_id": "03625e83-3ec4-4db9-aabe-9fcf9c01fa0a",
+       "content_excerpt": "Dishonest, fraudulent, or criminal acts by the named insured, an officer of the named insured, or any person to whom the named insured has entrusted the property, whether acting alone or in collusion with others.\n\nMechanical breakdown, including rupture or bursting caused by centrifugal force. Cover\u2026(truncated, full length=567)"
+      },
+      {
+       "section": "Sub-Limits",
+       "chunk_id": "9224365f-8f5b-445e-94f2-2d433a22f1f3",
+       "content_excerpt": "The following sub-limits apply within, and not in addition to, the overall limit of insurance. Each sub-limit is the maximum the insurer will pay regardless of the number of items, locations, or occurrences.\n\nDebris removal. The insurer will pay the reasonable cost to remove debris of insured proper\u2026(truncated, full length=1401)"
+      }
+     ]
+    },
+    "output": {
+     "flags": [],
+     "passed": true,
+     "summary": "No additional issues found beyond the rule-engine pre-scan.",
+     "flag_count": 0
+    },
+    "llm_call": {
+     "model": "claude-haiku-4-5-20251001",
+     "provider": "anthropic",
+     "latency_ms": 1701,
+     "prompt_tokens": 2308,
+     "requested_model": "claude-haiku-4-5-20251001",
+     "completion_tokens": 128
+    },
+    "rule_checks": {
+     "flags": [],
+     "flag_count": 0
+    },
+    "llm_flags_counted": [],
+    "llm_flags_discarded": [
+     {
+      "kind": "hallucinated_citation",
+      "quote": "inventory valuation and depreciation",
+      "detail": "reasoning references a provision for inventory valuation and depreciation that does not appear in the retrieved policy chunks",
+      "reason": "quote_not_a_provision"
+     }
+    ]
+   },
+   "chain_hash": "7f7883d7e5e7805b1096311680ad9d04ee2b630367e53d3f4bb561ec0e9e2968"
+  },
+  {
+   "audit_id": 75,
+   "agent": "orchestrator",
+   "step": "escalation_decision",
+   "created_at": "2026-10-30T17:30:38.146715Z",
+   "payload": {
+    "escalate": false,
+    "reasoning": "No escalation rules fired; claim is eligible for auto-settlement.",
+    "fired_rules": []
+   },
+   "chain_hash": "8ad3f399333546b2e1ffa7bb808c0b5ca54ca5123be55cbfe5b89cd39e0ecb5c"
+  },
+  {
+   "audit_id": 76,
+   "agent": "orchestrator",
+   "step": "pipeline_settled",
+   "created_at": "2026-10-30T17:30:44.918265Z",
+   "payload": {
+    "status": "settled",
+    "escalate": false,
+    "settlement": "82500.00",
+    "completed_at": "2026-10-30T17:30:41.741902+00:00",
+    "fired_rule_names": []
+   },
+   "chain_hash": "f5db6357d509cc9b56cdffd10a1f784788a513c89ac4ddff74cf3afe9c8ca90b"
+  }
+ ],
+ "verify": {
+  "ok": true,
+  "rows_checked": 118,
+  "first_break": null
+ }
+}

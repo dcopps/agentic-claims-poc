@@ -496,6 +496,39 @@ class TelemetrySettings(BaseModel):
     connection_string: SecretStr | None = None
 
 
+class MCPSettings(BaseModel):
+    """
+    The MCP endpoint (Phase 10): how an AI client reaches the audit trail.
+
+    Strategy: the shared token is the single switch, as the telemetry
+    connection string is for Application Insights. Unset, the `/mcp` route is
+    never registered — there is no anonymous mode and no flag that creates
+    one. Set, every request must present it as a bearer token before the MCP
+    server sees anything. The value never appears in code, logs or the
+    tool-call record; `token_label` is what the record names as the caller.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # MCP__SHARED_TOKEN. Whitespace-only is normalised to unset by the
+    # validator below, so a blank deployment variable cannot mount the route.
+    shared_token: SecretStr | None = None
+    # Recorded as `caller` on every tool-call row — the token's name, never
+    # its value. One label because the prototype has one shared token.
+    token_label: str = Field(default="shared-token", min_length=1, max_length=60)
+    # How many of the most recent tool-call records the activity feed replays
+    # to a client on connect; 0 means live records only.
+    activity_replay_count: int = Field(default=20, ge=0, le=500)
+
+    @model_validator(mode="after")
+    def _blank_token_is_unset(self) -> MCPSettings:
+        # A deployment that sets MCP__SHARED_TOKEN="" has not configured a
+        # token; treating it as one would mount an endpoint nobody can use.
+        if self.shared_token is not None and not self.shared_token.get_secret_value().strip():
+            self.shared_token = None
+        return self
+
+
 class AdjusterSettings(BaseModel):
     """
     Adjuster-agent configuration.
@@ -612,6 +645,9 @@ class Settings(BaseSettings):
 
     # Phase 9.2 sub-models.
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
+
+    # Phase 10 sub-models.
+    mcp: MCPSettings = Field(default_factory=MCPSettings)
 
     @model_validator(mode="before")
     @classmethod

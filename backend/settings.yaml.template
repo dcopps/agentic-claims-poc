@@ -209,3 +209,15 @@ pipeline:
   event_grace_period_s: 5.0
   event_queue_maxsize: 1000
   variants_path: backend/app/orchestrator/variants.yaml
+
+# --- mcp -------------------------------------------------------------------
+
+# The MCP endpoint (Phase 10). `/mcp` is registered only when a shared token
+# is configured; with no token there is no endpoint and no anonymous mode.
+# `token_label` is what the tool-call record names as the caller (never the
+# value); `activity_replay_count` is how many recent tool calls the
+# Integrations page's feed receives on connect.
+mcp:
+  # shared_token: loaded from MCP__SHARED_TOKEN — do not put values here
+  token_label: shared-token
+  activity_replay_count: 20

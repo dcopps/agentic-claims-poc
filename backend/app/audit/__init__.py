@@ -13,6 +13,7 @@ Public surface:
   - `AuditEvent` — the typed event a caller hands to the writer.
   - `AuditWriter` — appends an event and returns the persisted row.
   - `verify_chain` — walks the table and reports the first break.
+  - `AuditRepository` / `AuditEntry` — typed reads of a run's rows (Phase 10).
 
 The canonicalisation function (see `canonical.canonicalise`) is the
 contract between writer and verifier: the same logical event must always
@@ -22,6 +23,7 @@ so it is treated as a fixed interface.
 """
 
 from backend.app.audit.event import AuditEvent
+from backend.app.audit.repository import AuditEntry, AuditRepository
 from backend.app.audit.verify import (
     AuditBreak,
     ChainVerification,
@@ -31,7 +33,9 @@ from backend.app.audit.writer import AuditRow, AuditWriter
 
 __all__ = [
     "AuditBreak",
+    "AuditEntry",
     "AuditEvent",
+    "AuditRepository",
     "AuditRow",
     "AuditWriter",
     "ChainVerification",

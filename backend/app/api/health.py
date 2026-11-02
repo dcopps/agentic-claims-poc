@@ -36,10 +36,10 @@ class HealthResponse(BaseModel):
 
 @health_router.get("/health", response_model=HealthResponse)
 def get_health() -> HealthResponse:
-    return HealthResponse(status="ok", version=_resolve_version())
+    return HealthResponse(status="ok", version=resolve_version())
 
 
-def _resolve_version() -> str:
+def resolve_version() -> str:
     try:
         return version(_DISTRIBUTION_NAME)
     except PackageNotFoundError:

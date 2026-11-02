@@ -206,7 +206,8 @@ def migrated_db(db_settings: Settings) -> Settings:
 @pytest.fixture()
 def clean_db(migrated_db: Settings) -> Iterator[psycopg.Connection]:
     """
-    Yield a fresh connection with all Phase 1 tables truncated.
+    Yield a fresh connection with every mutable table truncated (Phase 1 tables
+    plus the Phase 10 tool-call log).
 
     `RESTART IDENTITY` resets the `audit_log.audit_id` sequence so
     chain-hash assertions across tests aren't sensitive to the order
@@ -225,7 +226,7 @@ def clean_db(migrated_db: Settings) -> Iterator[psycopg.Connection]:
     with open_connection(migrated_db) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "TRUNCATE TABLE policy_chunks, audit_log, claims "
+                "TRUNCATE TABLE policy_chunks, audit_log, claims, mcp_tool_calls "
                 "RESTART IDENTITY CASCADE"
             )
         conn.commit()

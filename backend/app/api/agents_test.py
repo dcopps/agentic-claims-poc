@@ -204,11 +204,31 @@ def get_agent_prompt(
     registry: VariantRegistry = Depends(get_variant_registry),
 ) -> AgentPromptView:
     """Return the externalised system + user prompt source for an agent/variant."""
-    normalised = agent.replace("-", "_")
+    try:
+        return load_agent_prompts(agent, variant, registry)
+    except (UnknownAgentError, UnknownVariantError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class UnknownAgentError(ValueError):
+    """The agent name matches none of the four. The API maps this to 404."""
+
+
+def load_agent_prompts(agent: str, variant: str, registry: VariantRegistry) -> AgentPromptView:
+    """
+    Read the externalised system + user prompt an agent runs under a variant.
+
+    Shared by the API above and the MCP `get_agent_instructions` tool (Phase
+    10). Sanitise (`-` → `_`), validate the agent and the variant, abort with
+    the typed errors the callers map, then read both files through the loader.
+    """
+    normalised = agent.strip().replace("-", "_")
     names = _PROMPT_NAMES.get(normalised)
     if names is None:
-        raise HTTPException(status_code=404, detail=f"unknown agent: {agent}")
-    _require_variant(registry, variant)
+        raise UnknownAgentError(
+            f"unknown agent: {agent!r}; expected one of {sorted(_PROMPT_NAMES)}"
+        )
+    registry.resolve(variant)  # raises UnknownVariantError
     system_name, user_name = names
     user_template = _user_template_for(normalised, user_name, registry, variant)
     loader = PromptLoader()

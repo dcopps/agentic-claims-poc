@@ -16,6 +16,7 @@ runs (status `running`, `completed_at=None`).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -99,6 +100,29 @@ class RunsRepository:
         summaries = [_summarise(cid, groups[cid], first_seen[cid]) for cid in groups]
         summaries.sort(key=lambda summary: summary.started_at, reverse=True)
         return summaries
+
+    @staticmethod
+    def count_runs_by_claim(
+        conn: psycopg.Connection, claim_ids: Sequence[UUID]
+    ) -> dict[UUID, int]:
+        """
+        Runs started per claim, in one grouped query (Phase 10, `list_claims`).
+
+        A run is counted by its `pipeline_started` row, so an in-flight run
+        counts too. Claims with no run are absent from the result; callers
+        read with a default of 0. An empty input returns `{}` without a query.
+        """
+        if not claim_ids:
+            return {}
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT claim_id, COUNT(*) FROM audit_log "
+                "WHERE step = 'pipeline_started' AND claim_id = ANY(%s) "
+                "GROUP BY claim_id",
+                (list(claim_ids),),
+            )
+            rows = cur.fetchall()
+        return {claim_id: int(count) for claim_id, count in rows}
 
     @staticmethod
     def is_run_active(conn: psycopg.Connection, claim_id: UUID) -> bool:

@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api import api_router
 from backend.app.api.health import health_router
 from backend.app.escalation import EscalationPolicy
+from backend.app.mcp import ActivityBus, ToolCallRecorder, build_mcp_server, mount_mcp
 from backend.app.orchestrator import PipelineEventBus
 from backend.app.orchestrator.variant_registry import VariantRegistry
 from backend.app.telemetry import configure_telemetry
@@ -49,7 +50,19 @@ async def _lifespan(app: fastapi.FastAPI) -> AsyncIterator[None]:
     )
     # Built lazily on first pipeline request; see api/pipeline.get_orchestrator_factory.
     app.state.orchestrator = None
-    yield
+    # Phase 10: the tool-call feed and the recorder every MCP tool writes through.
+    # Both exist whether or not `/mcp` is mounted, so the feed endpoint has one
+    # shape on every deployment.
+    app.state.activity_bus = ActivityBus(queue_maxsize=cfg.pipeline.event_queue_maxsize)
+    app.state.mcp_recorder = ToolCallRecorder(settings=cfg, bus=app.state.activity_bus)
+    if app.state.mcp_mounted:
+        # The SDK's session manager must run for the lifetime of the host app;
+        # a mounted sub-application's own lifespan never runs ("the line
+        # everyone forgets" in the SDK's words).
+        async with app.state.mcp_server.session_manager.run():
+            yield
+    else:
+        yield
 
 
 def create_app(settings: Settings | None = None) -> fastapi.FastAPI:
@@ -90,6 +103,11 @@ def create_app(settings: Settings | None = None) -> fastapi.FastAPI:
 
     app.include_router(health_router)
     app.include_router(api_router)
+
+    # Phase 10: the MCP server is always built (the catalogue endpoint lists its
+    # definitions); the `/mcp` route exists only when a shared token is set.
+    app.state.mcp_server = build_mcp_server(app)
+    app.state.mcp_mounted = mount_mcp(app, app.state.mcp_server, cfg)
 
     return app
 

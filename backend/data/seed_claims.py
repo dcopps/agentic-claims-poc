@@ -111,8 +111,13 @@ class _BackgroundTemplate:
 # --------------------------------------------------------------------------- #
 
 
-def _build_scripted_claims() -> list[SyntheticClaim]:
-    """The three demo scenarios — exact amounts, fixed dates, fixed copy."""
+def scripted_claims() -> list[SyntheticClaim]:
+    """
+    The three demo scenarios — exact amounts, fixed dates, fixed copy.
+
+    Public since Phase 10: the MCP `run_scenario` tool submits these same
+    claims, so the backend holds one definition of each scenario.
+    """
     return [
         SyntheticClaim(
             claim_number="CLM-2026-0001",
@@ -262,7 +267,7 @@ def generate_claims(rng_seed: int = _RNG_SEED) -> list[SyntheticClaim]:
     first, background claims after, in the same order each run.
     """
     rng = random.Random(rng_seed)
-    scripted = _build_scripted_claims()
+    scripted = scripted_claims()
     background: list[SyntheticClaim] = []
     today = date(2026, 5, 1)
 

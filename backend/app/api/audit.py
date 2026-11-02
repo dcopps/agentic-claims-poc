@@ -15,8 +15,6 @@ semantics are reviewer-evident.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.pipeline import get_settings
+from backend.app.audit.repository import AuditEntry, AuditRepository
 from backend.app.audit.verify import verify_chain
 from backend.db.connection import open_connection
 from backend.settings import Settings
@@ -31,17 +30,8 @@ from backend.settings import Settings
 audit_router = APIRouter(prefix="/audit", tags=["audit"])
 
 
-class AuditEntryView(BaseModel):
-    """One audit row, for the viewer."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    audit_id: int
-    agent: str
-    step: str
-    created_at: datetime
-    payload: dict[str, Any]
-    chain_hash: str
+class AuditEntryView(AuditEntry):
+    """One audit row, for the viewer — the repository's row under the API's name."""
 
 
 class AuditBreakView(BaseModel):
@@ -90,35 +80,15 @@ async def verify_audit_chain(
 
 
 def _list_entries(settings: Settings, correlation_id: UUID) -> list[AuditEntryView]:
-    with open_connection(settings) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT audit_id, agent, step, created_at, payload, chain_hash "
-            "FROM audit_log WHERE correlation_id = %s ORDER BY audit_id",
-            (correlation_id,),
-        )
-        rows = cur.fetchall()
-    return [
-        AuditEntryView(
-            audit_id=row[0],
-            agent=row[1],
-            step=row[2],
-            created_at=row[3],
-            payload=row[4],
-            chain_hash=row[5],
-        )
-        for row in rows
-    ]
+    with open_connection(settings) as conn:
+        entries = AuditRepository.list_entries(conn, correlation_id)
+    return [AuditEntryView.model_validate(entry.model_dump()) for entry in entries]
 
 
 def _verify(settings: Settings, correlation_id: UUID) -> ChainVerificationView | None:
     with open_connection(settings) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM audit_log WHERE correlation_id = %s LIMIT 1",
-                (correlation_id,),
-            )
-            if cur.fetchone() is None:
-                return None
+        if not AuditRepository.has_entries(conn, correlation_id):
+            return None
         result = verify_chain(conn)  # whole-ledger; see module docstring
     first_break = (
         AuditBreakView(

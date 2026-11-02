@@ -32,6 +32,10 @@ from backend.settings import Settings
 
 claims_router = APIRouter(prefix="/claims", tags=["claims"])
 
+# Page size when the caller names none. Shared with the MCP `list_claims` tool so
+# a question asked through Claude sees the same page the Claims page shows.
+DEFAULT_LIST_LIMIT = 50
+
 
 @claims_router.post("", status_code=201, response_model=ClaimRecord)
 async def submit_claim(
@@ -43,7 +47,7 @@ async def submit_claim(
 
 @claims_router.get("", response_model=list[ClaimRecord])
 async def list_claims(
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=DEFAULT_LIST_LIMIT, ge=1, le=200),
     status: ClaimStatus | None = None,
     settings: Settings = Depends(get_settings),
 ) -> list[ClaimRecord]:

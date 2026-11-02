@@ -30,6 +30,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from uuid import UUID, uuid4
 
+import fastapi
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
@@ -82,15 +83,20 @@ OrchestratorFactory = Callable[[str], PipelineOrchestrator]
 
 
 def get_orchestrator_factory(request: Request) -> OrchestratorFactory:
+    """The request-scoped form of `make_orchestrator_factory`, for `Depends`."""
+    return make_orchestrator_factory(request.app)
+
+
+def make_orchestrator_factory(app: fastapi.FastAPI) -> OrchestratorFactory:
     """
-    Return a factory `make(variant) -> PipelineOrchestrator`.
+    Return a factory `make(variant) -> PipelineOrchestrator` over `app.state`.
 
     The `default` variant resolves the lazily-built, cached default orchestrator
     (the build wires the real agent graph and loads the embedder, too heavy for
     every startup). A non-default variant is built fresh per run — variant agents
-    are not cached.
+    are not cached. Takes the app rather than a request so the MCP `run_scenario`
+    tool (Phase 10), which has no request, builds its orchestrator the same way.
     """
-    app = request.app
 
     def make(variant: str) -> PipelineOrchestrator:
         if variant == "default":
@@ -129,7 +135,7 @@ async def run_pipeline(
     await _require_known_claim(settings, claim_id)
     _require_known_variant(registry, variant)
     await _reject_if_active(settings, claim_id)
-    return await _execute(factory(variant), claim_id, correlation_id, variant, bus)
+    return await execute_run(factory(variant), claim_id, correlation_id, variant, bus)
 
 
 @pipeline_router.post("/replay/{claim_id}", response_model=PipelineResult)
@@ -153,7 +159,7 @@ async def replay_pipeline(
     _require_known_variant(registry, variant)
     await _require_prior_terminal_run(settings, claim_id)
     await _reject_if_active(settings, claim_id)
-    return await _execute(factory(variant), claim_id, correlation_id, variant, bus)
+    return await execute_run(factory(variant), claim_id, correlation_id, variant, bus)
 
 
 @pipeline_router.get("/stream/{correlation_id}")
@@ -193,14 +199,20 @@ def _make_emitter(bus: PipelineEventBus, correlation_id: UUID) -> EventEmitter:
     return emit
 
 
-async def _execute(
+async def execute_run(
     orchestrator: PipelineOrchestrator,
     claim_id: UUID,
     correlation_id: UUID | None,
     variant: str,
     bus: PipelineEventBus,
 ) -> PipelineResult:
-    """Run the orchestrator in a worker thread, bridging its events to the bus."""
+    """
+    Run the orchestrator in a worker thread, bridging its events to the bus.
+
+    Public since Phase 10: the MCP `run_scenario` tool runs a claim through
+    exactly this path, so a scenario started from Claude streams to the Run
+    page like one started from the Claims page.
+    """
     cid = correlation_id or uuid4()
     emit = _make_emitter(bus, cid)
     result: PipelineResult = await run_in_threadpool(

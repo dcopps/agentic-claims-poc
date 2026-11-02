@@ -27,6 +27,7 @@ dependencies = [
     "sse-starlette>=2.1",
     "azure-monitor-opentelemetry>=1.8.11",
     "opentelemetry-instrumentation-psycopg>=0.66b1",
+    "mcp>=2.3,<3",
 ]
 
 [dependency-groups]
