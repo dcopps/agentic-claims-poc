@@ -41,6 +41,7 @@ param containerImage string
 param databaseUrlSecretUri string
 param anthropicApiKeySecretUri string
 param mistralApiKeySecretUri string
+param mcpSharedTokenSecretUri string
 
 @description('JSON list of allowed CORS origins, as pydantic-settings parses it.')
 param corsAllowedOrigins string
@@ -159,6 +160,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
         { name: 'database-url', keyVaultUrl: databaseUrlSecretUri, identity: identityId }
         { name: 'anthropic-api-key', keyVaultUrl: anthropicApiKeySecretUri, identity: identityId }
         { name: 'mistral-api-key', keyVaultUrl: mistralApiKeySecretUri, identity: identityId }
+        { name: 'mcp-shared-token', keyVaultUrl: mcpSharedTokenSecretUri, identity: identityId }
       ]
     }
     template: {
@@ -174,6 +176,8 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
             { name: 'MISTRAL_API_KEY', secretRef: 'mistral-api-key' }
+            // Phase 10: the MCP endpoint's bearer token; unset or empty means no /mcp route.
+            { name: 'MCP__SHARED_TOKEN', secretRef: 'mcp-shared-token' }
             { name: 'CORS_ALLOWED_ORIGINS', value: corsAllowedOrigins }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             // cloud role name in Application Insights.

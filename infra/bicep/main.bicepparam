@@ -42,6 +42,10 @@ param adjusterTemperature = '0'
 param postgresAdminPassword = readEnvironmentVariable('POSTGRES_ADMIN_PASSWORD')
 param anthropicApiKey = readEnvironmentVariable('ANTHROPIC_API_KEY')
 param mistralApiKey = readEnvironmentVariable('MISTRAL_API_KEY')
+// Phase 10: the MCP endpoint's shared token. scripts/azure-deploy.sh reuses the
+// value already in Key Vault (or generates one on first deploy), as it does for
+// the Postgres password, so a redeploy never rotates it under a connected client.
+param mcpSharedToken = readEnvironmentVariable('MCP_SHARED_TOKEN', '')
 param deployerClientIp = readEnvironmentVariable('DEPLOYER_CLIENT_IP')
 param deployerPrincipalId = readEnvironmentVariable('DEPLOYER_PRINCIPAL_ID')
 // Empty on pass 1 (environment only); the image reference on pass 2.

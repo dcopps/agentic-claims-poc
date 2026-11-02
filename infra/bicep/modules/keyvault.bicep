@@ -42,6 +42,9 @@ param anthropicApiKey string
 @secure()
 param mistralApiKey string
 
+@secure()
+param mcpSharedToken string
+
 // Built-in roles.
 var secretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var secretsOfficerRoleId = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
@@ -103,6 +106,16 @@ resource mistralSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   }
 }
 
+// Phase 10. The backend reads it as MCP__SHARED_TOKEN; an empty value is
+// stored as empty, which the backend treats as "no endpoint".
+resource mcpSharedTokenSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
+  parent: vault
+  name: 'mcp-shared-token'
+  properties: {
+    value: mcpSharedToken
+  }
+}
+
 resource appSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(vault.id, appPrincipalId, secretsUserRoleId)
   scope: vault
@@ -130,3 +143,4 @@ output uri string = vault.properties.vaultUri
 output databaseUrlSecretUri string = databaseUrlSecret.properties.secretUri
 output anthropicApiKeySecretUri string = anthropicSecret.properties.secretUri
 output mistralApiKeySecretUri string = mistralSecret.properties.secretUri
+output mcpSharedTokenSecretUri string = mcpSharedTokenSecret.properties.secretUri

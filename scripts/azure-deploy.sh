@@ -14,8 +14,9 @@
 # Strategy: sanitise → validate → abort → execute. Every secret the Bicep
 # parameter file reads with readEnvironmentVariable() is resolved into this
 # process's environment here — API keys from the shell or the local .env, the
-# Postgres admin password from Key Vault if one exists (so a redeploy never
-# rotates it) or freshly generated — and only *names* are ever echoed.
+# Postgres admin password and the MCP shared token from Key Vault if they exist
+# (so a redeploy never rotates them) or freshly generated — and only *names* are
+# ever echoed.
 
 set -euo pipefail
 # shellcheck source=scripts/azure-common.sh
@@ -57,6 +58,30 @@ resolve_postgres_password() {
     else
         info "generating a new postgres admin password"
         export POSTGRES_ADMIN_PASSWORD="$(openssl rand -hex "$PASSWORD_BYTES")"
+    fi
+}
+
+# Phase 10: the MCP endpoint's shared token follows the Postgres-password rule —
+# the environment wins, else the value already in Key Vault, else a fresh one —
+# so a redeploy never rotates the token under a client that is already connected.
+resolve_mcp_shared_token() {
+    if [[ -n "${MCP_SHARED_TOKEN:-}" ]]; then
+        info "MCP_SHARED_TOKEN taken from the environment"
+        return 0
+    fi
+    local vault existing=""
+    vault="$(az resource list --resource-group "$AZ_RESOURCE_GROUP" \
+        --resource-type Microsoft.KeyVault/vaults --query '[0].name' -o tsv 2>/dev/null || true)"
+    if [[ -n "$vault" ]]; then
+        existing="$(az keyvault secret show --vault-name "$vault" --name mcp-shared-token \
+            --query value -o tsv 2>/dev/null || true)"
+    fi
+    if [[ -n "$existing" ]]; then
+        info "reusing the MCP shared token from vault '$vault'"
+        export MCP_SHARED_TOKEN="$existing"
+    else
+        info "generating a new MCP shared token"
+        export MCP_SHARED_TOKEN="$(openssl rand -hex "$PASSWORD_BYTES")"
     fi
 }
 
@@ -113,6 +138,7 @@ resolve_parameters() {
     resolve_from_env_or_dotenv ANTHROPIC_API_KEY
     resolve_from_env_or_dotenv MISTRAL_API_KEY
     resolve_postgres_password
+    resolve_mcp_shared_token
     resolve_deployer_identity
     resolve_container_image "${1:-}"
 }

@@ -48,7 +48,7 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 ## Phase 9 — Azure deployment (in progress; 9.1 verified 1 October 2026, 9.2 deployed and verified 26 October 2026)
 
-Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19, 20 and 24; prompt 21 is the 9.2.1 point release, prompt 22 is the 9.2.2 point release, prompt 23 is the plain-language documentation phase): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (**complete** 26 October 2026; pass two passed with the Harborline terminal state as a recorded exception — see the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
+Phase 9 deploys the prototype to Azure in three sub-phases (prompts 19, 20 and 24; prompt 21 is the 9.2.1 point release, prompt 22 is the 9.2.2 point release, prompt 23 is the plain-language documentation phase): **9.1** foundation (Bicep, Flexible Server, Container Apps, Key Vault, managed identity — **complete**: deployed, bootstrapped and verified on 1 October 2026), **9.2** frontend on Static Web Apps + OIDC deploy on push + Application Insights + the second verification pass through the UI (**complete** 26 October 2026; pass two passed with the Harborline terminal state as a recorded exception — see the Phase 9.2 entry of [`build-log.md`](build-log.md)), **9.3** Azure AI Foundry as a third LLM provider — **moved to *Future work* on 2 November 2026**, when Dermot chose Phase 10 (the MCP server) ahead of it. Render / Vercel / Neon stay up throughout and remain canonical for demos until Azure has passed the three-scenario verification twice.
 
 ### Decision: retire Render / Neon? (open since 26 October 2026)
 
@@ -115,10 +115,16 @@ Each should be visited before Phase 8.7 lands, and any items found folded into t
 
 ## Future work (queued, not next)
 
-### An MCP server in front of the prototype's API (requested by Dermot, 30 October 2026)
+### Azure AI Foundry as a third LLM provider (formerly Phase 9.3; moved here 2 November 2026)
 
-**Let a claims manager or auditor ask, in natural language, why a claim settled or escalated, and get an answer drawn only from the audit trail — never from re-deciding.** A Model Context Protocol server that sits in front of the existing HTTP API and exposes read-only tools over claims, runs, the audit trail and chain verification (the `/api/claims`, `/api/runs/{correlation_id}`, `/api/audit?correlation_id=` and `/api/audit/verify/{correlation_id}` surfaces), plus one action: run a scripted scenario. The answering assistant reads the recorded `output_check`, `escalation_decision` and `llm_call` payloads and explains them; it has no tool that re-runs an agent on a claim or alters anything. About a day's work with FastMCP; additive; no backend change. Placement before or after Phase 9.3 (Azure AI Foundry) is Dermot's choice.
+The production target reaches every model through Azure AI Foundry private endpoints; the prototype has never exercised that path. The phase would add a third provider behind the `LLMProvider` Gateway (`llm.<agent>_provider = foundry`), with `azure-identity` for the credential, and run the three scenarios through it on Azure. Two risks noted when it was deferred: **region** — the Claude and Mistral models may not be offered in North Europe, which would put the inference endpoint outside the region that holds the data; and **quota** — a pay-as-you-go subscription's default token-per-minute allowance may be too small for a demonstration without a quota request. Entra authentication for Postgres (above) is its natural companion.
 
+### Phase 10 follow-ons (found while planning and building the MCP server, 2 November 2026)
+
+- **One source for the three scripted scenarios (plan O3, declined for the phase).** They are defined three times: `backend/data/seed_claims.py` (which the MCP `run_scenario` tool now uses), `scripts/verify-demo-scenarios.py` and `frontend/src/fixtures/demoClaims.ts`. The script and the fixture could read them from the backend (`GET /api/scenarios`, or a generated file) instead of carrying copies.
+- **`Last-Event-ID` on the activity feed (plan O5, declined for the phase).** The feed replays the last N records on every connect and the page de-duplicates by `call_id`. Resuming from the last seen id would make a long-lived page cheaper and exact; not needed at demo scale.
+- **Claude's *Request headers* field is in beta.** The connector's fixed-credential header is documented as limited to some organisations. If an account lacks it, the Claude Code `add-json` command on the Integrations page is the path; record which path the deployed verification used.
+- **The `run_scenario` tool is synchronous** (about a minute while the pipeline runs). If a connector's tool timeout proves shorter, the planned fallback is a detached start that returns the correlation id immediately, with `get_run` to poll — a one-function change.
 
 ### Guardrail rule-engine test corpus from more than one model
 
@@ -184,6 +190,8 @@ A new SPA route (`/about` or `/how-it-works`) inside the deployed demo that host
 - DORA Article 28 provider substitutability rationale
 - Audit-as-trusted-record explanation
 - Links to the GitHub repo, this demo URL, and CLAUDE.md for the curious
+
+**Partly met by Phase 10 (2 November 2026):** the *Guide* page is the one-screen plain-language introduction (what the system is, the three scenarios, how to read a run page, links to the diagram, the build story, the register and the repository). What remains of this item is the in-page rendering of the four diagrams and the longer architectural narrative.
 
 **Currently blocked on:** the stack-comparison diagram. Three iterations attempted (inline SVG, Claude Design, ChatGPT); none landed. Parked deliberately until the diagram deliverable is settled — no useful info page without the diagram to anchor it.
 

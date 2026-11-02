@@ -94,3 +94,7 @@ After two releases of adjusting the Guardrail's instructions, this one changed w
 
 Everything in this build had been recorded, but only in places an engineer can read. This phase wrote two documents for everyone else: this one, which tells the build phase by phase, and the decision register, which records every incident and every decision taken at a gate. It also put signposts to them at the top of every technical file, and made writing them part of the routine for every future phase. Begun on Friday 30 October 2026 and finished on Saturday 31 October 2026.
 
+### [24 — Phase 10: a way to ask the system questions, and a page that shows it being asked](README.md#entry-24)
+
+Until now the system could only be used through its web pages. This phase let an AI assistant such as Claude ask it questions — why did this claim settle, what did the Guardrail object to and why did the objection not count — and get answers taken only from the audit trail, never from deciding again. Every question is recorded, only a holder of a shared secret may ask, and a new page shows the questions arriving as they are asked. A short Guide page for first-time visitors was added at the same time. Begun on Monday 2 November 2026; the live check on both clouds, with Dermot present, is still to come.
+

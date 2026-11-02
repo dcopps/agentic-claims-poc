@@ -58,6 +58,10 @@ param anthropicApiKey string
 @description('Mistral API key (used by the v1_mistral replay variant).')
 param mistralApiKey string
 
+@secure()
+@description('Shared bearer token for the MCP endpoint (Phase 10). Empty leaves /mcp unmounted.')
+param mcpSharedToken string = ''
+
 @description('Public IPv4 of the deploying machine, for the Postgres firewall.')
 param deployerClientIp string
 
@@ -195,6 +199,7 @@ module keyVault 'modules/keyvault.bicep' = {
     postgresAdminPassword: postgresAdminPassword
     anthropicApiKey: anthropicApiKey
     mistralApiKey: mistralApiKey
+    mcpSharedToken: mcpSharedToken
   }
 }
 
@@ -211,6 +216,7 @@ module containerApps 'modules/containerapps.bicep' = {
     databaseUrlSecretUri: keyVault.outputs.databaseUrlSecretUri
     anthropicApiKeySecretUri: keyVault.outputs.anthropicApiKeySecretUri
     mistralApiKeySecretUri: keyVault.outputs.mistralApiKeySecretUri
+    mcpSharedTokenSecretUri: keyVault.outputs.mcpSharedTokenSecretUri
     corsAllowedOrigins: corsOrigins
     appInsightsConnectionString: appInsights.outputs.connectionString
     adjusterTemperature: adjusterTemperature

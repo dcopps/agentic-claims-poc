@@ -38,6 +38,8 @@ A handful of project terms recur throughout. They are defined here once, by what
 
 **Replay.** Re-sending a recorded prompt to the model to see whether its answer has changed. Since Phase 9.2.1 a set of recorded runs is replayed before every demonstration.
 
+**MCP, or a connector.** The Model Context Protocol, a standard way for an AI assistant such as Claude to call a system's functions and read the answers. Since Phase 10 the system offers a small set of such functions, every one answered from the audit trail; a *connector* is the assistant's side of that link, and a shared token is what lets it in.
+
 The names of the three synthetic claimants, Harborline, Northwood and Coral Bay, are invented. No real client is named anywhere in this project.
 
 ## How to read an entry
@@ -485,3 +487,25 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 
 *Technical detail:* plan `22-phase-9.2.2-guardrail-quote-verified-citation-flags-plan.md` (§2 property, §5, *Approval*); backlog, the closed *Findings from the 26 October 2026 verification* section; `CLAUDE.md` → *Escalation policy*.
 
+<a name="r-20"></a>
+### R-20 — Phase 10's two decisions at the gate: who may ask the system questions, and what a question may do
+
+**TL;DR:** The system was given a way for an AI assistant such as Claude to ask it questions about a claim and get answers from the audit trail. Two decisions shaped it. Only a holder of a shared secret may connect, and with no secret configured there is no door at all. And a question may only read, except for one action: running one of the three rehearsed scenarios. Decided on Monday 2 November 2026; the live check with Dermot present is still to come.
+
+**Technologies:** the Model Context Protocol (MCP) and its Python library; a bearer token; a new database table for the access record.
+
+**Date and phase.** 2 November 2026, Phase 10, approval gate.
+
+**What happened.** Phase 10 adds an MCP endpoint inside the backend so that a claims manager or an auditor can ask, in natural language, why a claim settled or escalated, and get an answer drawn only from what the agents recorded. The plan had to settle how a client proves it may connect, and what a connected client may do. It also found, while planning, that the prompt's worked example had attached one run's refused phrase to another run; the plan corrected it from the recorded data.
+
+**Why it mattered.** An AI assistant with a tool that could change a claim would be a new decision-maker outside the audited pipeline. An endpoint reachable without a secret would expose synthetic but realistic claims to anyone. And an access path that left no record would be the one part of the system a reviewer could not reconstruct.
+
+**What was decided, and by whom.** Dermot, at the gate, as the plan recommended: the endpoint exists only when a shared token is configured, with no anonymous mode and no switch to create one; every call must present that token; eight tools read, one runs a scripted scenario, and there is no tool for the human approve-or-reject decision or the agent test bench; every call is recorded in its own table, kept out of the audit chain because questions about the record are not decisions in it. Also decided: the library's own OAuth-shaped sign-in is not used (the prototype has no sign-in service to point it at), the library's localhost-only host check is switched off for this endpoint because the hosting platforms own the host name and the token is the control, and the demonstration compares the two Harborline runs of 30 October on the Render deployment, since the earlier Azure run is on a different claim and cannot be compared.
+
+**What was done.** The endpoint, the guard, the nine tools, the access-record table and the live feed were built, with an *Integrations* page that lists what the server offers from its own definitions and shows calls as they happen, and a *Guide* page for first-time visitors. The Guardrail's card on the run page now shows the model's refused citation claims without opening the audit record.
+
+**How it was proven.** Every guard has a test that triggers it: a missing, wrong or differently-formed token is refused; an unset token leaves no route; a scenario name outside the three is refused before anything is looked up. Two tests were deliberately broken and watched fail: removing the token comparison fails the wrong-token test (the missing-header refusal sits before the comparison, so that test still passes, which is the correct reading of it); forcing the endpoint to mount without a token fails the two unset-token tests. The official client library was run against a local backend over HTTP: tools listed, policy read, claims listed, chain verified, wrong token refused. The deployed check on both clouds, with Dermot present, had not been run when this entry was written.
+
+**Status.** Open until the deployed verification; the decisions themselves are settled.
+
+*Technical detail:* plan `24-phase-10-mcp-server-and-integrations-page-plan.md` (§0 findings 5, 11 and 12; §2; *Decisions requested*, D1–D8; *Approval*); `backend/app/mcp/auth.py`, `server.py`, `tools.py`; migration `0003_mcp_tool_calls`; `backend/tests/test_mcp_auth.py` (mutation proofs in the module docstring and the build log); build log, entry *Phase 10*.

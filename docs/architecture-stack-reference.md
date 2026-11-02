@@ -22,7 +22,7 @@ The prototype is deliberately deployed on commodity hosting (Render and Vercel) 
 | Frontend framework | React with Vite, Tailwind CSS | React with Vite, Tailwind CSS |
 | Backend hosting | Render | Azure Container Apps |
 | Backend framework | Python 3.11+, FastAPI, Uvicorn, Pydantic | Python 3.11+, FastAPI, Uvicorn, Pydantic |
-| API edge | Render's built-in router | Azure API Management with Entra ID auth |
+| API edge | Render's built-in router; since Phase 10 an MCP endpoint at `/mcp` behind a shared bearer token | Azure API Management with Entra ID auth, in front of the same MCP endpoint |
 | Workflow orchestration | In-process Python async | Azure Durable Functions |
 | Event backbone | Button-triggered events in the React UI | Azure Service Bus |
 | Claims of record | Neon (managed Postgres) — `eu-central-1` / Frankfurt; pgvector 0.8.0 enabled | Azure SQL Managed Instance |
@@ -138,6 +138,7 @@ Phase 9 deploys the prototype to Azure so that the Azure column of this document
 | Network model | Public internet | Public endpoints with firewall rules (Azure services + the deploying machine); TLS enforced | Private VNet, private endpoints, PrivateLink |
 | Frontend hosting | Vercel | Azure Static Web Apps (Free), `navigationFallback` to `index.html`, built and uploaded by GitHub Actions with the app's deployment token | Azure Container Apps |
 | LLM providers | Public Anthropic API (Mistral via `v1_mistral`) | Unchanged in 9.1 (Azure AI Foundry as a third provider in 9.3) | Azure AI Foundry private endpoints |
+| AI access to the claims record (Phase 10) | MCP endpoint `/mcp` behind a shared bearer token (a Render dashboard variable); every tool call recorded in `mcp_tool_calls` with tool, arguments, target, caller, outcome and latency | The same endpoint; the token held in Key Vault as `mcp-shared-token` and referenced by the Container App | API Management with Entra sign-in in front of the same endpoint; the same tool-call record |
 | CI / CD | GitHub Actions (test) + Render / Vercel auto-deploy | GitHub Actions: deploy on a green CI run on `main`; backend by OIDC (no stored credential), image built with `az acr build`, rollout verified against `/health` and the ready revision; infrastructure still deployed from a developer shell with Bicep | Azure DevOps Pipelines |
 
 **Resource inventory (resource group `rg-claimsai-dev`).** Names carry a five-character deterministic suffix where Azure requires global uniqueness.

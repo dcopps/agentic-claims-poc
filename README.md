@@ -115,6 +115,29 @@ az group delete --name rg-claimsai-dev --yes && az keyvault purge --name <vault>
 
 Running cost in the parked state is about €8 a month at list price (registry unit ≈ €4.5, Postgres storage ≈ €3.5; Static Web App Free and Application Insights within the free allowance cost nothing), less if the free-account Postgres allowance applies. One warm replica during a demo window costs about €0.10 an hour at list, inside the Container Apps monthly free grant. Azure restarts a stopped Postgres server after seven days, so a long pause needs `azure-stop.sh` re-run. Out of scope for Phase 9, and listed as gaps in the stack reference: VNet and private endpoints, API Management, Service Bus, Durable Functions, SQL Managed Instance with Ledger Tables, AI Search, Entra sign-in, Langfuse, Document Intelligence, the LoRA adapter, Azure DevOps Pipelines.
 
+## Integrations (MCP)
+
+Since Phase 10 (`0.10.0`) the backend serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp`, so an MCP client — Claude's custom connectors, Claude Code, or any other — can ask the system questions and receive answers taken from the audit trail. Nine tools: eight read-only (`list_claims`, `get_claim`, `get_run`, `explain_decision`, `get_audit_trail`, `verify_chain`, `compare_runs`, `get_agent_instructions`) and one action, `run_scenario`, limited to the three scripted scenarios; two prompts (*Audit this run*, *Why did this claim settle or escalate?*); one resource (the policy excerpt). `explain_decision` is the one to try: the Validator's verdict and the passages it saw, the Adjuster's figure and range, the Guardrail's findings including the model's citation claims that code refused and why, the rules that fired, and the chain check — every section tagged with the audit row it came from.
+
+The five rules, locked in the [plan](docs/prompts/24-phase-10-mcp-server-and-integrations-page-plan.md): answers come from recorded data, never from re-deciding; read-only with the one named exception, and no tool for the human decision or the test bench; every call is recorded in `mcp_tool_calls` (migration 0003) with its tool, arguments, target, caller, outcome and latency — the "who asked what of the system" trail; the server runs inside the backend; and **access is explicit** — `/mcp` exists only when `MCP__SHARED_TOKEN` is set (Key Vault on Azure, the dashboard on Render), with no anonymous mode. The web interface's **Integrations** page lists the tools from the server's own definitions, shows how to connect, and streams the calls as they happen; the **Guide** page is the one-screen introduction for a first-time visitor.
+
+```bash
+# Backend: set the token (generate one with `openssl rand -hex 24`), apply migration 0003, start.
+export MCP__SHARED_TOKEN=...
+uv run alembic --config backend/alembic.ini upgrade head
+
+# Claude (claude.ai, Desktop, Cowork): Customize › Connectors › Add custom connector →
+#   URL https://<backend>/mcp, No sign-in, Request headers: authorization = "Bearer <token>".
+#   Connectors reach the server from Anthropic's cloud, so the backend must be publicly reachable.
+# Claude Code:
+claude mcp add-json agentic-claims '{"type":"http","url":"https://<backend>/mcp","headers":{"Authorization":"Bearer <token>"}}'
+
+# End-to-end check with the official client, against any running backend:
+RUN_MCP_E2E_TESTS=1 MCP_E2E_URL=https://<backend>/mcp MCP_E2E_TOKEN=... uv run pytest backend/tests/test_mcp_e2e.py
+```
+
+The two-minute demo script is [`docs/demo-mcp.md`](docs/demo-mcp.md). In production the endpoint sits behind Azure API Management with Entra sign-in, as the production diagram shows; the shared token is the prototype's stand-in.
+
 ## One-command local setup
 
 Prerequisites: **Python 3.11+ with [`uv`](https://docs.astral.sh/uv/)**, **Node 20+**, **PostgreSQL 17 with pgvector** (native, no Docker). Full prerequisite notes are below.
@@ -260,6 +283,7 @@ Every prompt that built this prototype is archived in [`docs/prompts/`](docs/pro
 - [`docs/design-decisions.md`](docs/design-decisions.md) — trade-offs in depth
 - [`docs/change-governance.md`](docs/change-governance.md) · [`docs/dora-third-party-register.md`](docs/dora-third-party-register.md)
 - [`docs/walkthrough.md`](docs/walkthrough.md) — the demo script
+- [`docs/demo-mcp.md`](docs/demo-mcp.md) — the two-minute MCP demo: a question in Claude, the tool calls on the Integrations page
 - [`docs/verification/phase-7/scenarios.md`](docs/verification/phase-7/scenarios.md) — live-scenario verification evidence
 - [`infra/azure-devops-pipeline.yml`](infra/azure-devops-pipeline.yml) — the production CI/CD reference
 - [`docs/prompts/`](docs/prompts/) · [`docs/build-log.md`](docs/build-log.md) · [`diagrams/`](diagrams/)

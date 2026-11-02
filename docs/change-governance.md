@@ -156,3 +156,10 @@ none of the *control*: no CAB, no eval gate, no Work Item linkage. Adding that
 governance overlay is one of the six dev→prod transitions (see
 [`architecture-stack-reference.md`](architecture-stack-reference.md)) and is
 referenced from the Azure pipeline in [`../infra/azure-devops-pipeline.yml`](../infra/azure-devops-pipeline.yml).
+
+Since Phase 10 (2 November 2026) the prototype also records every question an AI
+client asks of the claims record through the MCP endpoint — tool, arguments, target,
+caller, outcome, latency — in `mcp_tool_calls` and as a structured log line. That is
+an access record, not a change record: nothing on that path alters a claim, and it is
+kept out of the audit chain on purpose. The relationship is described in the
+[DORA register](dora-third-party-register.md) under the Anthropic row.

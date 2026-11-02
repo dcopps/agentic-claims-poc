@@ -15,7 +15,7 @@ Everything inside the resource group is created by `main.bicep`. Nothing is crea
 | `modules/staticwebapp.bicep` | Static Web App (Free) for the React frontend, no repository link; deployed by `.github/workflows/deploy-frontend.yml` with its token (Phase 9.2). |
 | `modules/postgres.bicep` | Azure Database for PostgreSQL Flexible Server 17, `vector` allow-listed, database, firewall. |
 | `modules/acr.bicep` | Basic container registry; `AcrPull` for the backend identity; `AcrPush` + *Container Registry Tasks Contributor* for the deployer; admin user disabled. |
-| `modules/keyvault.bicep` | RBAC-mode vault; the four secrets; the two data-plane role grants. |
+| `modules/keyvault.bicep` | RBAC-mode vault; the five secrets (`database-url`, `postgres-admin-password`, `anthropic-api-key`, `mistral-api-key`, `mcp-shared-token`); the two data-plane role grants. |
 | `modules/containerapps.bicep` | Consumption environment + backend Container App with Key Vault secret references, `/health` probes, the Application Insights connection string and the OpenTelemetry knobs; *Container Apps Contributor* for the deployer, scoped to the app. |
 
 `main.bicep` composes the backend's CORS list from the committed origins plus the Static Web App's server-generated hostname, so the frontend origin is never copied from the portal into a file.
@@ -57,7 +57,7 @@ scripts/azure-deploy.sh deploy
 scripts/azure-deploy.sh what-if                    # idempotence
 ```
 
-`what-if` always precedes `deploy` on an existing group. The script reads `ANTHROPIC_API_KEY` / `MISTRAL_API_KEY` from the shell or the local `.env`, reuses the Postgres admin password already in Key Vault (or generates one on first deploy), discovers the public IP and the signed-in user's object id, and echoes names only — never values.
+`what-if` always precedes `deploy` on an existing group. The script reads `ANTHROPIC_API_KEY` / `MISTRAL_API_KEY` from the shell or the local `.env`, reuses the Postgres admin password and the MCP shared token already in Key Vault (or generates each on first deploy; Phase 10 — the token is what an MCP client presents as a bearer to `/mcp`, read back with `az keyvault secret show --name mcp-shared-token` when configuring a client, never displayed by the script), discovers the public IP and the signed-in user's object id, and echoes names only — never values.
 
 Parameters you may override in `main.bicepparam`: `minReplicas` (0 = scale to zero, 1 = one warm replica), `containerCpu` / `containerMemory`, `corsAllowedOrigins` (the Static Web App origin is appended automatically), `githubRepository`, `staticWebAppLocation`, Postgres SKU and storage. Changing the prefix or environment name changes every resource name: do it only on a fresh group.
 
@@ -127,7 +127,7 @@ az keyvault purge --name <kv-claimsai-dev-xxxxx>      # soft-delete would otherw
 
 | Principal | Role | Scope | Why |
 |---|---|---|---|
-| `id-claimsai-dev-backend` | Key Vault Secrets User | the vault | Resolve the three secret references at revision start. |
+| `id-claimsai-dev-backend` | Key Vault Secrets User | the vault | Resolve the four secret references at revision start. |
 | `id-claimsai-dev-backend` | AcrPull | the registry | Pull the image without registry credentials. |
 | Deploying user | Key Vault Secrets Officer | the vault | Read `database-url` for the bootstrap; Owner alone has no data-plane access in RBAC mode. |
 | `id-claimsai-dev-deployer` | AcrPush | the registry | Push the built image's layers (Phase 9.2). |
