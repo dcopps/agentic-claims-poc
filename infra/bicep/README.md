@@ -107,6 +107,8 @@ uv run python scripts/verify-demo-scenarios.py --backend "https://$FQDN"
 
 ## Stop / start between demo sessions
 
+> **Close the Integrations page first (Phase 10).** Its live-activity feed is an open request, and the HTTP scaler keeps a replica alive while one is open; `azure-stop.sh` then waits its full budget and refuses to stop Postgres under a running replica. A browser tab on `/integrations` reconnects by itself, so close it before running the script.
+
 ```bash
 scripts/azure-stop.sh    # Container App → 0 replicas, waits for the last replica to drain, then stops Postgres
 scripts/azure-start.sh   # Postgres started; Container App → 1 warm replica; waits for /health
