@@ -2,7 +2,7 @@
 
 ## Not an engineer? Start here
 
-This project is a working system for AI-assisted insurance claims handling, built to show that such a system can be governed, inspected and audited. Two documents tell its story without code: [the build, phase by phase](docs/prompts/README.md) and [the decisions and incidents register](docs/decision-register.md). The [interactive architecture diagram](https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html) shows the production target architecture, with a clickable claim journey through it. Everything below this section is written for engineers.
+This project is a working system for AI-assisted insurance claims handling, built to show that such a system can be governed, inspected and audited. Two documents tell its story without code: [the build, phase by phase](docs/prompts/README.md) and [the decisions and incidents register](docs/decision-register.md). The [interactive architecture diagram](https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html) shows the production target architecture, with a clickable claim journey through it. A third document, [how the system was tested](docs/test-evidence.md), traces the plan, the tests and the result for every phase. Everything below this section is written for engineers.
 
 A working prototype demonstrating **multi-agent agentic AI for insurance claims processing** at a regulated specialty insurer: retrieval-augmented coverage validation, structured settlement estimation, output guardrails, a tamper-evident audit vault, human-in-the-loop escalation, and provider substitutability — all deployed live.
 
@@ -284,6 +284,7 @@ Every prompt that built this prototype is archived in [`docs/prompts/`](docs/pro
 - [`docs/change-governance.md`](docs/change-governance.md) · [`docs/dora-third-party-register.md`](docs/dora-third-party-register.md)
 - [`docs/walkthrough.md`](docs/walkthrough.md) — the demo script
 - [`docs/demo-mcp.md`](docs/demo-mcp.md) — the two-minute MCP demo: a question in Claude, the tool calls on the Integrations page
+- [`docs/test-evidence.md`](docs/test-evidence.md) — how the system was tested: the suites today, plan → tests → result per phase, the replay corpus, CI
 - [`docs/verification/phase-7/scenarios.md`](docs/verification/phase-7/scenarios.md) — live-scenario verification evidence
 - [`infra/azure-devops-pipeline.yml`](infra/azure-devops-pipeline.yml) — the production CI/CD reference
 - [`docs/prompts/`](docs/prompts/) · [`docs/build-log.md`](docs/build-log.md) · [`diagrams/`](diagrams/)

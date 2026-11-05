@@ -36,6 +36,12 @@ A handful of project terms recur throughout. They are defined here once, by what
 
 **MCP, or a connector.** The Model Context Protocol, a standard way for an AI assistant such as Claude to call a system's functions and read the answers. Since Phase 10 the system offers a small set of such functions, every one answered from the audit trail; a *connector* is the assistant's side of that link, and a shared token is what lets it in.
 
+**Automated test.** A small program that runs one part of the system with a known input and fails if the result is not what was promised. The system has several hundred; they run on every change.
+
+**Mutation proof.** Showing that a test catches the fault it exists for: the guard is deliberately removed, the test is run and seen to fail, and the guard is put back. Recorded in the report of the phase that did it.
+
+**Continuous integration (CI).** A shared build server that runs every check, style, types and tests, on every change pushed to the repository. Since Phase 9.2 a deployment to Azure happens only after that run is green.
+
 The names of the three synthetic claimants, Harborline, Northwood and Coral Bay, are invented. No real client is named anywhere in this project.
 
 ## The build at a glance
@@ -68,6 +74,7 @@ Each row is one phase's TL;DR; the number links to the full entry below.
 | [22](#entry-22) | Phase 9.2.2: the model may suspect, but code decides | After two releases of adjusting the Guardrail's instructions, this one changed who makes the decision. The model must now quote the exact words it objects to. Code checks that the quote really is in the Adjuster's reasoning and that it looks like a named policy provision, using the same test the deterministic check already uses. If either fails, the objection is recorded in the audit trail with the reason and does not count. The auto-approve scenario passed on all three paths the same day. Finished on Friday 30 October 2026. |
 | [23](#entry-23) | Prompt 23: the story told in plain language | Everything in this build had been recorded, but only in places an engineer can read. This phase wrote two documents for everyone else: this one, which tells the build phase by phase, and the decision register, which records every incident and every decision taken at a gate. It also put signposts to them at the top of every technical file, and made writing them part of the routine for every future phase. Begun on Friday 30 October 2026 and finished on Saturday 31 October 2026. |
 | [24](#entry-24) | Phase 10: a way to ask the system questions, and a page that shows it being asked | Until now the system could only be used through its web pages. This phase let an AI assistant such as Claude ask it questions — why did this claim settle, what did the Guardrail object to and why did the objection not count — and get answers taken only from the audit trail, never from deciding again. Every question is recorded, only a holder of a shared secret may ask, and a new page shows the questions arriving as they are asked. A short Guide page for first-time visitors was added at the same time. Begun on Monday 2 November 2026 and finished on Wednesday 4 November 2026. |
+| [25](#entry-25) | Prompt 25: one document that shows how the system was tested | The proof that the system had been tested was spread across twenty-four plans, twenty-four reports and the build log, each with its own count and its own wording. This prompt gathered it into one document: what an automated test is and why there are hundreds, what the two test suites hold today, which tests each phase planned and delivered and whether it proved them, how the model's behaviour is watched, and what is not tested at all — finished on Thursday 5 November 2026. |
 
 ## The build, phase by phase
 
@@ -338,6 +345,19 @@ This phase set out to add a Model Context Protocol server inside the backend, wi
 
 *Technical detail:* prompt [`24-phase-10-mcp-server-and-integrations-page.md`](24-phase-10-mcp-server-and-integrations-page.md), plan [`24-phase-10-mcp-server-and-integrations-page-plan.md`](24-phase-10-mcp-server-and-integrations-page-plan.md), report [`24-phase-10-mcp-server-and-integrations-page-report.md`](24-phase-10-mcp-server-and-integrations-page-report.md); build log, entry *Phase 10*; `docs/demo-mcp.md`.
 
+
+<a name="entry-25"></a>
+### 25 — Prompt 25: one document that shows how the system was tested
+
+**TL;DR:** The proof that the system had been tested was spread across twenty-four plans, twenty-four reports and the build log, each with its own count and its own wording. This prompt gathered it into one document: what an automated test is and why there are hundreds, what the two test suites hold today, which tests each phase planned and delivered and whether it proved them, how the model's behaviour is watched, and what is not tested at all — finished on Thursday 5 November 2026.
+
+**Technologies:** pytest and Vitest, the two test frameworks; the Guardrail replay corpus; GitHub Actions, the shared build server.
+
+Documentation only: no code, no test and no version changed. The document, `docs/test-evidence.md`, has six parts. The first is a page for a reader who is not an engineer: the four kinds of evidence the project keeps (the backend tests, the frontend tests, the replay corpus and the deployed verification passes), what a mutation proof is, what continuous integration is and why a deployment waits for it, and a plain list of what is not tested automatically. The second records a fresh run of both suites made that day, with the command and the date, and names every test file with one line on what it guards. The third is a table with one row per phase from Phase 0 to Phase 10: the plan's testing section, the test files the phase added, the count the plan predicted, the count the report recorded, the mutation proof in the report's own words, and the build-log entry. The fourth describes the replay corpus and every dated run of the three scripted scenarios on a live installation, including the two that failed and the one that halted. The fifth says what the web pages' tests cover and that no test drives the real screens in a browser; that gap is now in the backlog with a proposal. The sixth describes the build server's three workflows and explains the four months during which its interface half was red.
+
+Reading the record first turned up five things the document says plainly rather than smoothing over. The prompt counted 65 backend test files; there are 59, and the document says how it counted. Four phases had no testing section in their plan, one point release had no plan at all, and four plans gave no predicted count; those cells say so, and no number was reconstructed. No phase before 8.4 recorded a mutation proof. Of the 18 tests that are skipped by default, two still ask for a Mistral key and could not pass on the project's current account even with it. And the build log's Phase 10 heading still said its deployed verification was pending, two days after it had been closed; the heading was corrected. Three terms were added to the glossary shared by this document and the decision register: automated test, mutation proof, and continuous integration.
+
+*Technical detail:* prompt [`25-test-evidence.md`](25-test-evidence.md), plan [`25-test-evidence-plan.md`](25-test-evidence-plan.md), report [`25-test-evidence-report.md`](25-test-evidence-report.md); build log, entry *Prompt 25 — Test evidence*; the document [`../test-evidence.md`](../test-evidence.md); backlog entry *Browser-driven end-to-end test of the three scenarios*. Completion date from the report's *Completed at*.
 
 ## For engineers: how the archive is organised
 

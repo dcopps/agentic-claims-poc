@@ -1526,7 +1526,7 @@ Read-only checks on all ten runs: seven audit entries each; every LLM call `prov
 
 ---
 
-## Phase 10 — MCP server over the audit trail, Integrations and Guide pages (2 November 2026; deployed verification pending)
+## Phase 10 — MCP server over the audit trail, Integrations and Guide pages (2 to 4 November 2026)
 
 **Prompt:** [`docs/prompts/24-phase-10-mcp-server-and-integrations-page.md`](prompts/24-phase-10-mcp-server-and-integrations-page.md); plan [`…-plan.md`](prompts/24-phase-10-mcp-server-and-integrations-page-plan.md) (approved 2 November 2026: D1–D6 and D8 as recommended, D7 with two copy changes, O1 / O2 / O4 in scope, O3 / O5 to the backlog); report `…-report.md` (at close-out). **Version `0.9.1.2 → 0.10.0`.** Execution in four commits, stopping before the deployed verification so that Dermot is present.
 
@@ -1564,3 +1564,21 @@ Read-only checks on all ten runs: seven audit entries each; every LLM call `prov
 **Parking (4 November 2026, after the close-out commit).** `azure-stop.sh` timed out twice with one replica still running and left Postgres `Ready`, by design. The console log shows no request after 11:46 UTC other than the platform's `/health` probes, and six opens of `GET /api/mcp/activity` before that: the Integrations page's feed is a long-lived request that the HTTP scaler will not retire a replica under, and the browser reconnects it whenever the replica returns. Recorded in the backlog (*Phase 10 follow-ons*) and in `infra/bicep/README.md` → *Stop / start*; the stop is re-run once the page is closed.
 
 **Next:** at Dermot's choice — Azure AI Foundry as a third provider (backlog, with its region and quota risks), Phase 8.7 UI polish, or the Render / Neon retirement decision. Token into Key Vault via `azure-deploy.sh deploy` and into the Render dashboard; `alembic upgrade head` on the Azure server and on Neon; push deploys both stacks; Claude connector (or Claude Code) against the Azure `/mcp`; the `docs/demo-mcp.md` script; the feed on both deployments; `mcp_tool_calls` rows; a wrong token refused; the three scripted scenarios unchanged; `azure-stop.sh` last. The report, the register's R-20 status and this entry's close-out follow that session.
+
+---
+
+## Prompt 25 — Test evidence: one document that shows how the system was tested (5 November 2026)
+
+**Prompt:** [`docs/prompts/25-test-evidence.md`](prompts/25-test-evidence.md); plan [`…-plan.md`](prompts/25-test-evidence-plan.md) (approved 5 November 2026, D1–D5 as recommended, O1 yes, O2 and O3 no); report [`…-report.md`](prompts/25-test-evidence-report.md). **Version:** unchanged, `0.10.0.2`. Documentation only.
+
+**What was written.** `docs/test-evidence.md`, six parts: (1) a plain-language page on the four kinds of evidence (backend tests, frontend tests, the replay corpus, the deployed passes), mutation proofs, CI, and what is not tested automatically; (2) the suites as they stand, from a fresh run that day, with the 18 skips decomposed and every one of the 59 backend modules and 14 frontend files given its phase and one line; (3) a 24-row plan → tests → result table from Phase 0 to Phase 10 that quotes each plan's predicted count verbatim, each report's recorded count and each mutation proof in the report's words, with silent cells saying so; (4) the replay corpus from its fixtures' own metadata and the eleven dated deployed runs including the two failures and the halt, each with its register entry; (5) the frontend's coverage and the browser-driven gap; (6) the three workflows and the red period. With it: three glossary terms (*Automated test*, *Mutation proof*, *Continuous integration (CI)*) in both glossaries; the backlog entry *Browser-driven end-to-end test of the three scenarios* (Playwright, gated like the replay, not built); the README's start-here and documentation-index lines; build-story entry 25 and the regenerated table and `README_TLDR.md`; `CLAUDE.md`.
+
+**Correction (D1).** The Phase 10 heading above read *(2 November 2026; deployed verification pending)* two days after the entry was closed; it now reads *(2 to 4 November 2026)*. No document had linked its anchor.
+
+**Fresh run (commit `ed24e5d`).** Backend `uv run pytest`: **521 passed, 0 failed, 18 skipped** in 11.06 s at 2026-11-05T17:51Z. Frontend `npm test -- --run`: **14 files, 54 passed** at 17:49Z. Both equal the Phase 10 close-out; no gated suite was run. Anonymisation guard 10 passed with the new document in scope.
+
+**Verification.** Every Markdown link and anchor in the eight documents touched checked by a scratchpad script against GitHub's slug rule and the explicit `<a name>` anchors: 8 files, 254 links, 126 anchors, 1 reported — a README line quoted as a draft inside the plan, whose path is relative to the README. The checker's first version stripped underscores as emphasis and mis-slugged one plan heading; corrected before the final pass.
+
+**Findings.** The prompt counted 65 backend test files; there are 59 (63 `.py` with `conftest.py`, `__init__.py` and two fixture modules). Four plans have no testing section (Phases 0, 9.1, 9.2, Prompt 23), 8.5.1 has no plan, the Phase 2 plan lists tests per module without a total, and the 9.2.1 and 9.2.2 plans state no predicted count; no number was reconstructed. No phase before 8.4 recorded a mutation proof. Two of the 18 gated tests (the Validator and Adjuster live calls) still require a Mistral key and cannot pass on the free tier since R-06. The Phase 7 evidence file's blocks were never filled. Three Phase 5 frontend test files were removed in Phase 6 with their components.
+
+**Tests:** unchanged — 521 passed, 0 failed, 18 skipped; frontend 54 passed.

@@ -40,6 +40,12 @@ A handful of project terms recur throughout. They are defined here once, by what
 
 **MCP, or a connector.** The Model Context Protocol, a standard way for an AI assistant such as Claude to call a system's functions and read the answers. Since Phase 10 the system offers a small set of such functions, every one answered from the audit trail; a *connector* is the assistant's side of that link, and a shared token is what lets it in.
 
+**Automated test.** A small program that runs one part of the system with a known input and fails if the result is not what was promised. The system has several hundred; they run on every change.
+
+**Mutation proof.** Showing that a test catches the fault it exists for: the guard is deliberately removed, the test is run and seen to fail, and the guard is put back. Recorded in the report of the phase that did it.
+
+**Continuous integration (CI).** A shared build server that runs every check, style, types and tests, on every change pushed to the repository. Since Phase 9.2 a deployment to Azure happens only after that run is green.
+
 The names of the three synthetic claimants, Harborline, Northwood and Coral Bay, are invented. No real client is named anywhere in this project.
 
 ## How to read an entry

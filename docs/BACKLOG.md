@@ -127,6 +127,12 @@ The production target reaches every model through Azure AI Foundry private endpo
 - **An open Integrations page holds an Azure replica (found 4 November 2026 at the close-out).** The page's activity feed is a long-lived SSE request, and Container Apps' HTTP scaler will not retire a replica with an open request, so `azure-stop.sh` timed out twice (420 s each) with one replica still running and left Postgres up, as it is designed to. The browser's `EventSource` reconnects on its own after the replica restarts, so the only cure is to close the tab before parking. Options: the feed closes itself after an idle period and the page reconnects on focus; `azure-stop.sh` prints this cause when a replica survives the budget; or accept and document (done in `infra/bicep/README.md` → *Stop / start*). Cost of a held replica: about €0.10 an hour.
 - **The `run_scenario` tool is synchronous** (about a minute while the pipeline runs). If a connector's tool timeout proves shorter, the planned fallback is a detached start that returns the correlation id immediately, with `get_run` to poll — a one-function change.
 
+### Browser-driven end-to-end test of the three scenarios
+
+**Gap, recorded by prompt 25 (5 November 2026).** The frontend's 14 test files render pages and components with the API mocked; nothing drives the real screens in a browser. The path a person takes — submit, run, watch the cards fill, open the audit — is covered only by the manual verification passes and by `scripts/verify-demo-scenarios.py`, which drives the API, not the browser. See `docs/test-evidence.md`, part 5.
+
+**Proposal.** A Playwright run of the three scripted scenarios against a deployed frontend: submit each claim through the form, press *Process*, wait for the four cards and the terminal state, open the audit page and confirm seven rows and a green chain. Gated like the replay corpus (`RUN_BROWSER_E2E_TESTS=1` with the frontend URL), never in CI, run before a demo alongside the replay. Adds Playwright as a dev dependency — flagged for the phase that takes it. Not built.
+
 ### Guardrail rule-engine test corpus from more than one model
 
 *Raised by Phase 8.6.1 — the lesson from the citation-regex false positive.*

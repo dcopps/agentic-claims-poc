@@ -98,3 +98,7 @@ Everything in this build had been recorded, but only in places an engineer can r
 
 Until now the system could only be used through its web pages. This phase let an AI assistant such as Claude ask it questions — why did this claim settle, what did the Guardrail object to and why did the objection not count — and get answers taken only from the audit trail, never from deciding again. Every question is recorded, only a holder of a shared secret may ask, and a new page shows the questions arriving as they are asked. A short Guide page for first-time visitors was added at the same time. Begun on Monday 2 November 2026 and finished on Wednesday 4 November 2026.
 
+### [25 — Prompt 25: one document that shows how the system was tested](README.md#entry-25)
+
+The proof that the system had been tested was spread across twenty-four plans, twenty-four reports and the build log, each with its own count and its own wording. This prompt gathered it into one document: what an automated test is and why there are hundreds, what the two test suites hold today, which tests each phase planned and delivered and whether it proved them, how the model's behaviour is watched, and what is not tested at all — finished on Thursday 5 November 2026.
+
