@@ -54,7 +54,8 @@ The diagram shows the prototype's default wiring. Since Phase 8.6 (15 September 
 
 ## Live demo
 
-> **Live URL:** `https://agentic-claims-poc.vercel.app` (Vercel frontend); the Render backend at `https://agentic-claims-poc-backend.onrender.com/health` returns `{"status":"ok","version":"<current>"}`, where the version matches `pyproject.toml`. Since Phase 9.1 the same repository also deploys to Azure — see *Azure deployment* below.
+> **Live on Azure:** [delightful-beach-009db650f.5.azurestaticapps.net](https://delightful-beach-009db650f.5.azurestaticapps.net) (Static Web Apps frontend; Container Apps backend, health at [`/health`](https://ca-claimsai-dev-backend.victorioushill-60f56bb8.northeurope.azurecontainerapps.io/health)). It may be parked between demos: if it is, the backend answers only after `scripts/azure-start.sh` has run; otherwise the first request may take up to half a minute while a replica starts — see *Azure deployment* below.
+> **Live on Render / Vercel / Neon:** [agentic-claims-poc.vercel.app](https://agentic-claims-poc.vercel.app) (Vercel frontend); the Render backend at `https://agentic-claims-poc-backend.onrender.com/health` returns `{"status":"ok","version":"<current>"}`, where the version matches `pyproject.toml`.
 > A 3-minute walkthrough script is at [`docs/walkthrough.md`](docs/walkthrough.md); the recorded video is kept outside the repo (link shared for the interview).
 
 Three pre-loaded scenarios (the "Load demo claim" buttons on the submission form):
