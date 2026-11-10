@@ -106,3 +106,7 @@ The proof that the system had been tested was spread across twenty-four plans, t
 
 The repository and its README now send a first-time visitor straight to the app, and the Guide is the page that tells them what they are looking at. Its opening paragraph described the project before it said what the system was, it never named the four agents or said how a claim is processed, it gave no steps to follow, and its links predated the testing document and the diagram's fourth view. This prompt rewrote the Guide's text and added three sections — finished on Tuesday 10 November 2026.
 
+### [27 — Prompt 27: a Policy page, so a reader can see the wording every decision rests on](README.md#entry-27)
+
+Every coverage decision in the system rests on the policy wording, but a visitor could not read it: the Validator named the passages it relied on, the review panel showed excerpts, the Guide said there were twelve passages, and the policy itself sat only in the repository as a text file. This prompt added a Policy page that shows the policy exactly as the system indexed it, and linked to it from every place that names a passage — finished on Tuesday 10 November 2026.
+
