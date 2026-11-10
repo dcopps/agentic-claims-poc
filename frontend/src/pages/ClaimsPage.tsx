@@ -5,6 +5,7 @@ import type { ClaimRecord } from '../api/types'
 import { ClaimForm } from '../components/ClaimForm'
 import { Tooltip } from '../components/Tooltip'
 import { Button, Card, Spinner, StatusBadge } from '../components/ui'
+import { guideCopy } from '../copy/guide'
 import { tooltips } from '../copy/tooltips'
 import { useClaims } from '../hooks/queries'
 
@@ -28,9 +29,7 @@ export function ClaimsPage() {
     const cid = crypto.randomUUID()
     navigate(`/claims/${claimId}/runs/${cid}`)
     const post =
-      kind === 'process'
-        ? runPipeline(claimId, cid)
-        : replayPipeline(claimId, cid, REPLAY_VARIANT)
+      kind === 'process' ? runPipeline(claimId, cid) : replayPipeline(claimId, cid, REPLAY_VARIANT)
     post
       .then(() => refetch())
       .catch((err: unknown) => {
@@ -44,6 +43,9 @@ export function ClaimsPage() {
   return (
     <div className="space-y-6">
       <Card title="Submit a claim">
+        {/* The first line a visitor reads: the data is synthetic and the site is
+            public, so no real personal details (Prompt 26). */}
+        <p className="mb-3 text-sm text-slate-600">{guideCopy.dataNotice}</p>
         <ClaimForm onSubmitted={refetch} />
       </Card>
       <Card title="Claims">
@@ -106,11 +108,7 @@ function ClaimRow({
           <Button onClick={onProcess}>Process</Button>
         </Tooltip>
         <Tooltip text={tooltips.reprocessV2}>
-          <Button
-            variant="secondary"
-            onClick={onReplay}
-            disabled={!REPLAYABLE.has(claim.status)}
-          >
+          <Button variant="secondary" onClick={onReplay} disabled={!REPLAYABLE.has(claim.status)}>
             Re-process with v2
           </Button>
         </Tooltip>

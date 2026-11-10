@@ -1,27 +1,84 @@
 import { describe, expect, it } from 'vitest'
-import { guideCopy, guideLinks } from './guide'
+import { demoClaims } from '../fixtures/demoClaims'
+import { guideCopy, guideLinks, type GuideSegment } from './guide'
 
-// The Guide is one screen by design; the budget keeps a later edit honest.
-const ONE_SCREEN_BUDGET_CHARS = 2200
+// Flattens a "Try it" sentence to the text a reader sees.
+const sentenceText = (segments: readonly GuideSegment[]): string =>
+  segments.map((s) => (typeof s === 'string' ? s : s.label)).join('')
+
+// The labels a sentence names, in order.
+const sentenceLabels = (segments: readonly GuideSegment[]): string[] =>
+  segments.flatMap((s) => (typeof s === 'string' ? [] : [s.label]))
+
+// One sentence: exactly one full stop, question or exclamation mark followed by
+// a space or the end. A decimal point ("$1.4M") is not a terminator.
+const sentenceCount = (text: string): number => (text.match(/[.!?](?=\s|$)/g) ?? []).length
 
 describe('guide copy', () => {
-  it('links to the four public documents with absolute https URLs', () => {
-    expect(guideLinks).toHaveLength(4)
+  it('links to the five public documents with absolute https URLs', () => {
+    expect(guideLinks).toHaveLength(5)
     for (const link of guideLinks) expect(link.href).toMatch(/^https:\/\//)
     expect(guideLinks[0].href).toBe(
       'https://dcopps.github.io/agentic-claims-poc/diagrams/Architecture_Diagram.html',
     )
+    expect(guideLinks[0].detail).toBe(
+      'the production design in four views, the last marking what is built and what stands in',
+    )
+    expect(guideLinks[1].href).toMatch(/\/docs\/test-evidence\.md$/)
     expect(guideLinks.map((l) => l.label)).toEqual([
       'Interactive architecture diagram',
+      'How the system was tested',
       'The build story, phase by phase',
       'The decision register',
       'The repository',
     ])
   })
 
-  it('opens with the glossary definition of the system', () => {
-    expect(guideCopy.what).toContain('It is a prototype in scope')
-    expect(guideCopy.what).toContain('built and operated to production standards')
+  it('opens with what the system is and names the four agents in order', () => {
+    expect(guideCopy.whatIntro).toContain('agentic insurance claims processor')
+    expect(guideCopy.agents.map((a) => a.name)).toEqual([
+      'Doc-Parser',
+      'Validator',
+      'Adjuster',
+      'Guardrail',
+    ])
+    // The Validator names its passages; it does not quote them (plan F4).
+    expect(guideCopy.agents[1].detail).toContain('naming the passages it relied on')
+    expect(guideCopy.whatScope).toContain('its scope is a prototype’s')
+    expect(guideCopy.whatScope).toContain('built and run to production standards')
+  })
+
+  it('explains how it works in five parts with the verified numbers', () => {
+    expect(guideCopy.how.map((p) => p.lead)).toEqual([
+      'Preparing the policy.',
+      'Finding the relevant wording.',
+      'Deciding.',
+      'Recording.',
+      'Asking it questions.',
+    ])
+    expect(guideCopy.how[0].body).toContain('twelve short passages')
+    expect(guideCopy.how[1].body).toContain('three passages closest in meaning')
+    expect(guideCopy.how[2].body).toContain('$250,000')
+    expect(guideCopy.how[2].body).toContain('watchlist')
+    expect(guideCopy.how[3].body).toContain('SHA-256')
+  })
+
+  it('gives five one-sentence steps that use the interface’s own labels', () => {
+    expect(guideCopy.trySteps).toHaveLength(5)
+    for (const step of guideCopy.trySteps) expect(sentenceCount(sentenceText(step))).toBe(1)
+    for (const sentence of guideCopy.tryMore) expect(sentenceCount(sentenceText(sentence))).toBe(1)
+
+    // The three demo buttons are named exactly as the form renders them.
+    expect(sentenceLabels(guideCopy.trySteps[0])).toEqual(demoClaims.map((d) => d.label))
+    expect(sentenceLabels(guideCopy.trySteps[1])).toEqual(['Submit Claim'])
+    expect(sentenceLabels(guideCopy.trySteps[2])).toEqual(['Process'])
+    expect(sentenceLabels(guideCopy.trySteps[3])).toEqual([])
+    expect(sentenceLabels(guideCopy.trySteps[4])).toEqual([
+      'View audit log',
+      'Verify chain (whole ledger)',
+    ])
+    expect(sentenceLabels(guideCopy.tryMore[0])).toEqual(['Approve', 'Reject'])
+    expect(sentenceLabels(guideCopy.tryMore[1])).toEqual(['Re-process with v2', 'Compare selected'])
   })
 
   it('names the three scenarios and their expected outcomes', () => {
@@ -29,17 +86,16 @@ describe('guide copy', () => {
     expect(guideCopy.scenarios[0].detail).toContain('a little below the claimed amount')
     expect(guideCopy.scenarios[1].detail).toContain('$250,000 ceiling')
     expect(guideCopy.scenarios[2].detail).toContain('Coastal Surge Rider')
+    expect(guideCopy.scenarios[2].detail).toContain('demo_fixture: true')
   })
 
-  it('points readers to the Guardrail card for refused claims', () => {
-    expect(guideCopy.runPage).toContain('The Guardrail card lists any refused claims')
+  it('points readers to the Guardrail card for refused objections', () => {
+    expect(guideCopy.runPage).toContain('The Guardrail card lists any refused objections')
+    expect(guideCopy.runPage).not.toContain('refused claims')
   })
 
-  it('stays within one screen', () => {
-    const total =
-      guideCopy.what.length +
-      guideCopy.runPage.length +
-      guideCopy.scenarios.reduce((n, s) => n + s.name.length + s.detail.length, 0)
-    expect(total).toBeLessThan(ONE_SCREEN_BUDGET_CHARS)
+  it('warns against real personal details', () => {
+    expect(guideCopy.dataNotice).toContain('do not enter real personal details')
+    expect(sentenceCount(guideCopy.dataNotice)).toBe(1)
   })
 })

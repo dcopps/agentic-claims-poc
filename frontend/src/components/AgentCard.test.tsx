@@ -161,9 +161,9 @@ describe('AgentCard running state', () => {
   })
 })
 
-// Phase 10 (O2): the Guardrail card shows the model's refused citation claims
+// Phase 10 (O2): the Guardrail card shows the model's refused citation objections
 // without expanding, so the demo talking point is visible on the run page.
-describe('AgentCard refused claims', () => {
+describe('AgentCard refused objections', () => {
   function guardrailEntry(discarded: unknown): AuditEntry {
     return {
       audit_id: 74,
@@ -179,7 +179,7 @@ describe('AgentCard refused claims', () => {
     }
   }
 
-  it('lists each refused claim with its quote and reason', () => {
+  it('lists each refused objection with its quote and reason', () => {
     renderWithProviders(
       <AgentCard
         agent="guardrail"
@@ -196,8 +196,8 @@ describe('AgentCard refused claims', () => {
         ])}
       />,
     )
-    const line = screen.getByTestId('refused-claims')
-    expect(line).toHaveTextContent('Refused claims (1)')
+    const line = screen.getByTestId('refused-objections')
+    expect(line).toHaveTextContent('Refused objections (1)')
     expect(line).toHaveTextContent('“inventory valuation and depreciation” — quote_not_a_provision')
   })
 
@@ -211,6 +211,6 @@ describe('AgentCard refused claims', () => {
         auditEntry={guardrailEntry([])}
       />,
     )
-    expect(screen.queryByTestId('refused-claims')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('refused-objections')).not.toBeInTheDocument()
   })
 })

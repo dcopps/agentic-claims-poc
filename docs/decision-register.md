@@ -12,7 +12,7 @@ The rule from Prompt 23 onward is that every halt, every deviation from an appro
 
 A handful of project terms recur throughout. They are defined here once, by what they do, and used consistently below.
 
-**The system.** The working claims-handling system this project built. It is a prototype in scope, with synthetic claims and a short policy excerpt, and it is built and operated to production standards: deployed on two clouds, audited, verified and change-controlled.
+**The system.** An agentic insurance claims processor: four AI agents handle a claim in turn, a set of rules decides whether it settles or goes to a person for review, and every step is recorded in an audit trail that shows if anything has been altered. The claims are synthetic and the policy is a short excerpt, so its scope is a prototype’s. It is built and run to production standards: deployed on Azure, tested, audited and change-controlled.
 
 **Agent.** One of the four specialised pieces of software in the system, each with a single job, each calling a language model to do it.
 

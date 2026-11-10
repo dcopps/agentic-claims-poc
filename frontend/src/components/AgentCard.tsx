@@ -94,12 +94,14 @@ export function AgentCard({
         <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
       </button>
 
-      {/* The Guardrail's refused claims (Phase 9.2.2's `llm_flags_discarded`),
+      {/* The Guardrail's refused objections (Phase 9.2.2's `llm_flags_discarded`),
           shown without expanding: the model said these were policy citations
-          and the code could not find them in the Adjuster's text. */}
+          and the code could not find them in the Adjuster's text. Called
+          objections, not claims, because on this screen a claim is an
+          insurance claim (Prompt 26). */}
       {refused.length > 0 && (
-        <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-claims">
-          Refused claims ({refused.length}):{' '}
+        <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-objections">
+          Refused objections ({refused.length}):{' '}
           {refused.map((claim) => `“${claim.quote ?? 'no quote'}” — ${claim.reason}`).join('; ')}
         </p>
       )}

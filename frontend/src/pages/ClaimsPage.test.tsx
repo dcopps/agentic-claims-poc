@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaimRecord } from '../api/types'
+import { guideCopy } from '../copy/guide'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { ClaimsPage } from './ClaimsPage'
 
@@ -38,6 +39,14 @@ describe('ClaimsPage', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
+  // Prompt 26: the data notice is the first line above the form.
+  it('shows the synthetic-data notice above the form', () => {
+    renderWithProviders(<ClaimsPage />)
+    const notice = screen.getByText(guideCopy.dataNotice)
+    const form = screen.getByRole('form', { name: 'Submit a claim' })
+    expect(notice.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('navigates to the run page immediately on Process', async () => {
     const user = userEvent.setup()
     renderWithProviders(
@@ -49,9 +58,7 @@ describe('ClaimsPage', () => {
     await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Process' }))
     await waitFor(() =>
-      expect(screen.getByTestId('location').textContent).toMatch(
-        /^\/claims\/claim-1\/runs\//,
-      ),
+      expect(screen.getByTestId('location').textContent).toMatch(/^\/claims\/claim-1\/runs\//),
     )
   })
 
