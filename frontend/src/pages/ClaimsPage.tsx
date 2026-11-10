@@ -61,7 +61,7 @@ export function ClaimsPage() {
         {claims && claims.length > 0 && (
           <table className="w-full text-left text-sm" aria-label="Claims">
             {/* Column padding and a right-aligned amount give the row room at ~1280 px;
-                the status badge and the two actions never wrap (Prompt 28). */}
+                the claimant, type, status badge and the two actions never wrap (Prompt 28). */}
             <thead className="text-slate-500">
               <tr>
                 <th className="px-3 py-1.5">Claimant</th>
@@ -101,12 +101,12 @@ function ClaimRow({
   const canRerun = REPLAYABLE.has(claim.status)
   return (
     <tr className="border-t border-slate-200">
-      <td className="px-3 py-1.5">
+      <td className="whitespace-nowrap px-3 py-1.5">
         <Link to={`/claims/${claim.claim_id}`} className="text-blue-700 hover:underline">
           {claim.claimant_name}
         </Link>
       </td>
-      <td className="px-3 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
+      <td className="whitespace-nowrap px-3 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
       <td className="px-3 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>
       <td className="px-3 py-1.5">
         <StatusBadge status={claim.status} label={statusLabel(claim.status)} />
