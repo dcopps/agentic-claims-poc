@@ -60,16 +60,16 @@ export function ClaimsPage() {
         )}
         {claims && claims.length > 0 && (
           <table className="w-full text-left text-sm" aria-label="Claims">
-            {/* Column padding and a right-aligned amount give the row room at ~1280 px;
+            {/* Cell padding sized so the table fits the card at the 1024 px main (measured on Azure);
                 the claimant, type, status badge and the two actions never wrap (Prompt 28). */}
             <thead className="text-slate-500">
               <tr>
-                <th className="px-3 py-1.5">Claimant</th>
-                <th className="px-3 py-1.5">Type</th>
-                <th className="px-3 py-1.5 text-right">Amount</th>
-                <th className="px-3 py-1.5">Status</th>
-                <th className="px-3 py-1.5">Submitted</th>
-                <th className="px-3 py-1.5">Actions</th>
+                <th className="py-1.5 pr-2">Claimant</th>
+                <th className="px-2 py-1.5">Type</th>
+                <th className="px-2 py-1.5 text-right">Amount</th>
+                <th className="px-2 py-1.5">Status</th>
+                <th className="px-2 py-1.5">Submitted</th>
+                <th className="py-1.5 pl-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -101,20 +101,20 @@ function ClaimRow({
   const canRerun = REPLAYABLE.has(claim.status)
   return (
     <tr className="border-t border-slate-200">
-      <td className="whitespace-nowrap px-3 py-1.5">
+      <td className="whitespace-nowrap py-1.5 pr-2">
         <Link to={`/claims/${claim.claim_id}`} className="text-blue-700 hover:underline">
           {claim.claimant_name}
         </Link>
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
-      <td className="px-3 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>
-      <td className="px-3 py-1.5">
+      <td className="whitespace-nowrap px-2 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>
+      <td className="px-2 py-1.5">
         <StatusBadge status={claim.status} label={statusLabel(claim.status)} />
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-slate-600">
+      <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">
         {formatDateTime(claim.created_at)}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5" data-testid="claim-actions">
+      <td className="whitespace-nowrap py-1.5 pl-2" data-testid="claim-actions">
         <Tooltip text={tooltips.processClaim}>
           <Button size="sm" onClick={onProcess}>
             Process
