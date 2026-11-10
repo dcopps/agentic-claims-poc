@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-27), entry 27.*
+
 # Prompt 27 — Policy page
 
 ## Why this prompt exists
