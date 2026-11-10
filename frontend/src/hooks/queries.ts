@@ -3,6 +3,7 @@ import {
   getAgentPrompt,
   getClaim,
   getMcpCatalogue,
+  getPolicy,
   getRun,
   listAuditEntries,
   listClaimRuns,
@@ -14,6 +15,7 @@ import type {
   ClaimRecord,
   McpCatalogue,
   PipelineResult,
+  PolicyIndex,
   RunSummary,
 } from '../api/types'
 
@@ -80,5 +82,13 @@ export function useMcpCatalogue(): UseQueryResult<McpCatalogue> {
     queryKey: ['mcpCatalogue'],
     queryFn: () => getMcpCatalogue(),
     staleTime: FRESH, // the server's definitions change only with a deploy
+  })
+}
+
+export function usePolicy(): UseQueryResult<PolicyIndex> {
+  return useQuery({
+    queryKey: ['policy'],
+    queryFn: () => getPolicy(),
+    staleTime: FRESH, // the index changes only when the policy is re-indexed
   })
 }

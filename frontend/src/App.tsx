@@ -6,6 +6,7 @@ import { ClaimsPage } from './pages/ClaimsPage'
 import { ComparePage } from './pages/ComparePage'
 import { GuidePage } from './pages/GuidePage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
+import { PolicyPage } from './pages/PolicyPage'
 import { RunDetailPage } from './pages/RunDetailPage'
 
 function App() {
@@ -28,6 +29,9 @@ function App() {
         <Link to="/integrations" className="hover:underline">
           Integrations
         </Link>
+        <Link to="/policy" className="hover:underline">
+          Policy
+        </Link>
         <Link to="/guide" className="hover:underline">
           Guide
         </Link>
@@ -41,6 +45,7 @@ function App() {
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/policy" element={<PolicyPage />} />
           <Route path="/guide" element={<GuidePage />} />
         </Routes>
       </main>

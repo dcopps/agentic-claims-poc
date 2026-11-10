@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuditEntry } from '../api/types'
@@ -212,5 +212,75 @@ describe('AgentCard refused objections', () => {
       />,
     )
     expect(screen.queryByTestId('refused-objections')).not.toBeInTheDocument()
+  })
+})
+
+// Prompt 27: the Validator card lists the retrieved passages, each linked to the
+// Policy page, with the cited ones marked.
+describe('AgentCard retrieved passages', () => {
+  const ID_A = '11111111-1111-4111-8111-111111111111'
+  const ID_B = '22222222-2222-4222-8222-222222222222'
+
+  function validatorEntry(payload: Record<string, unknown>): AuditEntry {
+    return {
+      audit_id: 2,
+      agent: 'validator',
+      step: 'coverage_check',
+      created_at: '2026-10-30T17:30:20Z',
+      chain_hash: 'abc',
+      payload,
+    }
+  }
+
+  it('links each retrieved passage and marks the cited one', () => {
+    renderWithProviders(
+      <AgentCard
+        agent="validator"
+        label="Validator"
+        status="done"
+        variant="default"
+        auditEntry={validatorEntry({
+          retrieval: {
+            top_k: 2,
+            chunks: [
+              {
+                chunk_id: ID_A,
+                section: 'Named Perils Covered',
+                similarity: 0.7,
+                content_excerpt: 'x',
+              },
+              { chunk_id: ID_B, section: 'Exclusions', similarity: 0.6, content_excerpt: 'y' },
+            ],
+          },
+          verdict: {
+            covered: true,
+            cited_chunks: [{ chunk_id: ID_A, section: 'Named Perils Covered' }],
+          },
+        })}
+      />,
+    )
+    const line = screen.getByTestId('validator-passages')
+    expect(line).toHaveTextContent('Passages: Named Perils Covered (cited) · Exclusions')
+    expect(within(line).getByRole('link', { name: 'Named Perils Covered' })).toHaveAttribute(
+      'href',
+      `/policy#${ID_A}`,
+    )
+    expect(within(line).getByRole('link', { name: 'Exclusions' })).toHaveAttribute(
+      'href',
+      `/policy#${ID_B}`,
+    )
+  })
+
+  it('shows nothing when the entry has no retrieval block', () => {
+    renderWithProviders(
+      <AgentCard
+        agent="validator"
+        label="Validator"
+        status="done"
+        variant="default"
+        auditEntry={validatorEntry({ verdict: { covered: false } })}
+      />,
+    )
+    expect(screen.queryByTestId('validator-passages')).not.toBeInTheDocument()
   })
 })

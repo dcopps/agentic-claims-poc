@@ -3,14 +3,17 @@
 // `whatIntro` followed by `whatScope` is the glossary's definition of the
 // system in docs/decision-register.md and docs/prompts/README.md, so the page
 // and the plain-language documents say the same thing; the agent list is the
-// Guide's alone. Phase 10; rewritten by Prompt 26.
+// Guide's alone. Phase 10; rewritten by Prompt 26; Policy links added by Prompt 27.
 //
 // "Try it" names buttons and links exactly as the components render them. The
 // three demo-button labels are asserted against fixtures/demoClaims.ts by the
 // copy test, so a renamed button fails the suite rather than dating the Guide.
 
-/** A piece of a "Try it" sentence: plain text, or a label the interface shows. */
-export type GuideSegment = string | { readonly label: string }
+/** A piece of a Guide sentence: plain text, a label the interface shows, or an in-app link. */
+export type GuideSegment =
+  | string
+  | { readonly label: string }
+  | { readonly link: string; readonly to: string }
 
 export const REPOSITORY_URL = 'https://github.com/dcopps/agentic-claims-poc'
 
@@ -80,43 +83,50 @@ export const guideCopy = {
   how: [
     {
       lead: 'Preparing the policy.',
-      body:
-        'Before any claim arrives, the policy wording is split into twelve short passages. An ' +
-        'embedding model turns each passage into a vector, a list of numbers that represents ' +
-        'its meaning. The passages and their vectors are stored in the database.',
+      body: [
+        'Before any claim arrives, ',
+        { link: 'the policy wording', to: '/policy' },
+        ' is split into twelve short passages. An ' +
+          'embedding model turns each passage into a vector, a list of numbers that represents ' +
+          'its meaning. The passages and their vectors are stored in the database.',
+      ],
     },
     {
       lead: 'Finding the relevant wording.',
-      body:
+      body: [
         'When a claim is processed, the same embedding model turns the claim’s description into ' +
-        'a vector. The database compares it with the stored vectors and returns the three ' +
-        'passages closest in meaning. The Validator is given those three passages and nothing ' +
-        'else, so its decision can only cite wording it was actually shown. The same model must ' +
-        'be used for both steps, or the comparison would be meaningless.',
+          'a vector. The database compares it with the stored vectors and returns the three ' +
+          'passages closest in meaning. The Validator is given those three passages and nothing ' +
+          'else, so its decision can only cite wording it was actually shown. The same model must ' +
+          'be used for both steps, or the comparison would be meaningless.',
+      ],
     },
     {
       lead: 'Deciding.',
-      body:
+      body: [
         'The Adjuster’s figure and the Guardrail’s findings are tested against the escalation ' +
-        'policy, a configuration file kept apart from the program code. A settlement over ' +
-        '$250,000, low confidence from the Validator or Adjuster, or a Guardrail failure sends ' +
-        'the claim to a person. Otherwise it settles. Three further rules in the same file, for ' +
-        'a claimant or claim type on a watchlist and for a claim that spans more than one ' +
-        'jurisdiction, also send a claim to a person; the watchlists are empty here.',
+          'policy, a configuration file kept apart from the program code. A settlement over ' +
+          '$250,000, low confidence from the Validator or Adjuster, or a Guardrail failure sends ' +
+          'the claim to a person. Otherwise it settles. Three further rules in the same file, for ' +
+          'a claimant or claim type on a watchlist and for a claim that spans more than one ' +
+          'jurisdiction, also send a claim to a person; the watchlists are empty here.',
+      ],
     },
     {
       lead: 'Recording.',
-      body:
+      body: [
         'Each step writes a row to the audit trail: what the agent was asked, what it answered, ' +
-        'and which rules fired. Each row carries a SHA-256 hash, a short code calculated from ' +
-        'the row’s contents and the hash of the row before it. Changing or removing any row ' +
-        'breaks every hash after it. One click checks the whole trail.',
+          'and which rules fired. Each row carries a SHA-256 hash, a short code calculated from ' +
+          'the row’s contents and the hash of the row before it. Changing or removing any row ' +
+          'breaks every hash after it. One click checks the whole trail.',
+      ],
     },
     {
       lead: 'Asking it questions.',
-      body:
+      body: [
         'An AI assistant such as Claude can connect to the system and ask why a claim settled or ' +
-        'escalated. The answer is read from the audit trail, never worked out afresh.',
+          'escalated. The answer is read from the audit trail, never worked out afresh.',
+      ],
     },
   ],
 
@@ -204,6 +214,13 @@ export const guideCopy = {
     'could not find in the Adjuster’s text, each with the reason it did not count.',
 
   linksHeading: 'Links',
+  // An in-app link, rendered with <Link> like the Integrations line (Prompt 27).
+  policyLink: {
+    label: 'The policy',
+    detail:
+      'the wording every claim is checked against, split into the passages the Validator searches',
+    to: '/policy',
+  },
   integrationsLink: 'Connect an AI client: see Integrations.',
 
   // Shown on the Claims page above the form, the first line a visitor reads.

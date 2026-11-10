@@ -94,6 +94,11 @@ describe('IntegrationsPage', () => {
     const extras = screen.getByLabelText('MCP prompts and resources')
     expect(within(extras).getByText('audit_this_run')).toBeInTheDocument()
     expect(within(extras).getByText('policy://excerpt')).toBeInTheDocument()
+    // Prompt 27: the caption's mention of the policy excerpt links to the Policy page.
+    expect(screen.getByRole('link', { name: 'the policy excerpt' })).toHaveAttribute(
+      'href',
+      '/policy',
+    )
     expect(screen.queryByTestId('not-configured')).not.toBeInTheDocument()
   })
 

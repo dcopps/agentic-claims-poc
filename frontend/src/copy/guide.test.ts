@@ -3,12 +3,14 @@ import { demoClaims } from '../fixtures/demoClaims'
 import { guideCopy, guideLinks, type GuideSegment } from './guide'
 
 // Flattens a "Try it" sentence to the text a reader sees.
+const segmentText = (s: GuideSegment): string =>
+  typeof s === 'string' ? s : 'link' in s ? s.link : s.label
 const sentenceText = (segments: readonly GuideSegment[]): string =>
-  segments.map((s) => (typeof s === 'string' ? s : s.label)).join('')
+  segments.map(segmentText).join('')
 
 // The labels a sentence names, in order.
 const sentenceLabels = (segments: readonly GuideSegment[]): string[] =>
-  segments.flatMap((s) => (typeof s === 'string' ? [] : [s.label]))
+  segments.flatMap((s) => (typeof s !== 'string' && 'label' in s ? [s.label] : []))
 
 // One sentence: exactly one full stop, question or exclamation mark followed by
 // a space or the end. A decimal point ("$1.4M") is not a terminator.
@@ -56,11 +58,14 @@ describe('guide copy', () => {
       'Recording.',
       'Asking it questions.',
     ])
-    expect(guideCopy.how[0].body).toContain('twelve short passages')
-    expect(guideCopy.how[1].body).toContain('three passages closest in meaning')
-    expect(guideCopy.how[2].body).toContain('$250,000')
-    expect(guideCopy.how[2].body).toContain('watchlist')
-    expect(guideCopy.how[3].body).toContain('SHA-256')
+    const bodies = guideCopy.how.map((p) => sentenceText(p.body))
+    expect(bodies[0]).toContain('the policy wording is split into twelve short passages')
+    expect(bodies[1]).toContain('three passages closest in meaning')
+    expect(bodies[2]).toContain('$250,000')
+    expect(bodies[2]).toContain('watchlist')
+    expect(bodies[3]).toContain('SHA-256')
+    // Prompt 27: "the policy wording" is the one in-app link in How it works.
+    expect(guideCopy.how[0].body).toContainEqual({ link: 'the policy wording', to: '/policy' })
   })
 
   it('gives five one-sentence steps that use the interface’s own labels', () => {
@@ -92,6 +97,15 @@ describe('guide copy', () => {
   it('points readers to the Guardrail card for refused objections', () => {
     expect(guideCopy.runPage).toContain('The Guardrail card lists any refused objections')
     expect(guideCopy.runPage).not.toContain('refused claims')
+  })
+
+  it('links to the Policy page in the app', () => {
+    expect(guideCopy.policyLink).toEqual({
+      label: 'The policy',
+      detail:
+        'the wording every claim is checked against, split into the passages the Validator searches',
+      to: '/policy',
+    })
   })
 
   it('warns against real personal details', () => {

@@ -11,6 +11,7 @@ import type {
   HumanDecisionBody,
   McpCatalogue,
   PipelineResult,
+  PolicyIndex,
   RunComparison,
   RunSummary,
 } from './types'
@@ -134,4 +135,10 @@ export function mcpActivityUrl(): string {
 // case) the backend is on this origin, so the page's origin is the right host.
 export function mcpEndpointUrl(): string {
   return `${API_BASE || window.location.origin}/mcp`
+}
+
+// --- Prompt 27: the indexed policy ------------------------------------------------
+
+export function getPolicy(): Promise<PolicyIndex> {
+  return request('/api/policy')
 }

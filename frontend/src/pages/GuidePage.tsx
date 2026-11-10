@@ -30,7 +30,7 @@ export function GuidePage() {
         <div className="space-y-2 text-sm text-slate-700">
           {guideCopy.how.map((part) => (
             <p key={part.lead}>
-              <span className="font-medium">{part.lead}</span> {part.body}
+              <span className="font-medium">{part.lead}</span> <Sentence segments={part.body} />
             </p>
           ))}
         </div>
@@ -86,6 +86,12 @@ export function GuidePage() {
             </li>
           ))}
           <li>
+            <Link to={guideCopy.policyLink.to} className="text-blue-700 hover:underline">
+              {guideCopy.policyLink.label}
+            </Link>
+            <span className="text-slate-500"> — {guideCopy.policyLink.detail}</span>
+          </li>
+          <li>
             <Link to="/integrations" className="text-blue-700 hover:underline">
               {guideCopy.integrationsLink}
             </Link>
@@ -96,18 +102,23 @@ export function GuidePage() {
   )
 }
 
-// One "Try it" sentence: plain text as written, the interface's labels in <em>
-// so a reader can tell a button name from the surrounding words.
+// One Guide sentence from its segments: plain text as written, the interface's
+// labels in <em> so a reader can tell a button name from the surrounding words,
+// and in-app links as <Link>.
 function Sentence({ segments }: { segments: readonly GuideSegment[] }) {
   return (
     <>
-      {segments.map((segment, index) =>
-        typeof segment === 'string' ? (
-          <span key={index}>{segment}</span>
-        ) : (
-          <em key={index}>{segment.label}</em>
-        ),
-      )}
+      {segments.map((segment, index) => {
+        if (typeof segment === 'string') return <span key={index}>{segment}</span>
+        if ('link' in segment) {
+          return (
+            <Link key={index} to={segment.to} className="text-blue-700 hover:underline">
+              {segment.link}
+            </Link>
+          )
+        }
+        return <em key={index}>{segment.label}</em>
+      })}
     </>
   )
 }

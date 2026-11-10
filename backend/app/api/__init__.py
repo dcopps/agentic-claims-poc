@@ -6,6 +6,7 @@ from backend.app.api.claims import claims_router
 from backend.app.api.human import human_router
 from backend.app.api.mcp import mcp_router
 from backend.app.api.pipeline import pipeline_router
+from backend.app.api.policy import policy_router
 from backend.app.api.runs import runs_router
 
 # Top-level API router. Sub-routers mount here under the /api prefix.
@@ -17,3 +18,4 @@ api_router.include_router(audit_router)
 api_router.include_router(human_router)
 api_router.include_router(agents_test_router)
 api_router.include_router(mcp_router)
+api_router.include_router(policy_router)

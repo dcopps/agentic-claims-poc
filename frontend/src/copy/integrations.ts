@@ -20,9 +20,11 @@ export const integrationsCopy = {
     'The MCP endpoint is not configured on this deployment (no shared token is set), so ' +
     'nothing can connect to it; the catalogue below shows what it would offer.',
   catalogueCaption: 'Generated from the server’s own definitions.',
-  promptsCaption:
-    'Prompts are ready-made questions the client offers its user; the resource is the policy ' +
-    'excerpt the Validator searches.',
+  // The caption's "the policy excerpt" is a link to the Policy page (Prompt 27).
+  promptsCaptionBefore:
+    'Prompts are ready-made questions the client offers its user; the resource is ',
+  promptsCaptionLink: 'the policy excerpt',
+  promptsCaptionAfter: ' the Validator searches.',
   connectorHeading: 'Connect Claude (custom connector)',
   connectorSteps: [
     'In Claude, open Customize › Connectors and choose Add custom connector.',

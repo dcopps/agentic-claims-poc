@@ -221,3 +221,27 @@ export interface ToolCallRecord {
   error_class: string | null
   latency_ms: number
 }
+
+// --- Prompt 27: the indexed policy, as GET /api/policy returns it ---------------
+
+export interface PolicyPassage {
+  chunk_id: string
+  section: string
+  chunk_index: number
+  position: number // 1-based within the section
+  section_size: number
+  text: string
+  token_count: number
+}
+
+export interface PolicySection {
+  name: string
+  passages: PolicyPassage[]
+}
+
+export interface PolicyIndex {
+  source: string
+  embedding_model: string | null
+  passage_count: number
+  sections: PolicySection[]
+}

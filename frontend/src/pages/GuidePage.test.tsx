@@ -24,6 +24,10 @@ describe('GuidePage', () => {
       4,
     )
     expect(screen.getByText('Preparing the policy.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'the policy wording' })).toHaveAttribute(
+      'href',
+      '/policy',
+    )
 
     // Five numbered steps; the interface's labels are emphasised, not quoted.
     const steps = within(screen.getByLabelText('Try it steps')).getAllByRole('listitem')
@@ -38,6 +42,7 @@ describe('GuidePage', () => {
     for (const link of guideLinks) {
       expect(links.getByRole('link', { name: link.label })).toHaveAttribute('href', link.href)
     }
+    expect(links.getByRole('link', { name: 'The policy' })).toHaveAttribute('href', '/policy')
     expect(links.getByRole('link', { name: /see Integrations/ })).toHaveAttribute(
       'href',
       '/integrations',

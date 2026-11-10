@@ -90,7 +90,13 @@ function CatalogueTables({ catalogue }: { catalogue: McpCatalogue }) {
           ))}
         </tbody>
       </table>
-      <p className={typography.caption}>{integrationsCopy.promptsCaption}</p>
+      <p className={typography.caption}>
+        {integrationsCopy.promptsCaptionBefore}
+        <Link to="/policy" className="text-blue-700 hover:underline">
+          {integrationsCopy.promptsCaptionLink}
+        </Link>
+        {integrationsCopy.promptsCaptionAfter}
+      </p>
     </div>
   )
 }

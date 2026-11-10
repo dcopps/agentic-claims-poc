@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { AuditEntry } from '../api/types'
 import { agentDescriptions } from '../copy/agent-descriptions'
 import { useAgentPrompt } from '../hooks/queries'
@@ -74,6 +75,7 @@ export function AgentCard({
   const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
   const progress = useProgress(status === 'running', expectedMs)
   const refused = extractRefusedClaims(auditEntry)
+  const passages = extractPassages(auditEntry)
 
   return (
     <div className="rounded border border-slate-200 bg-white">
@@ -93,6 +95,27 @@ export function AgentCard({
         )}
         <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
       </button>
+
+      {/* The Validator's retrieved passages (Prompt 27), shown without expanding
+          and each linked to its place on the Policy page; the ones the verdict
+          cited are marked. Read from the coverage_check row's retrieval block. */}
+      {passages.length > 0 && (
+        <p className="px-3 pb-2 text-xs text-slate-600" data-testid="validator-passages">
+          Passages:{' '}
+          {passages.map((passage, index) => (
+            <span key={passage.chunkId}>
+              {index > 0 && ' · '}
+              <Link
+                to={{ pathname: '/policy', hash: passage.chunkId }}
+                className="text-blue-700 hover:underline"
+              >
+                {passage.section}
+              </Link>
+              {passage.cited && ' (cited)'}
+            </span>
+          ))}
+        </p>
+      )}
 
       {/* The Guardrail's refused objections (Phase 9.2.2's `llm_flags_discarded`),
           shown without expanding: the model said these were policy citations
@@ -229,5 +252,33 @@ function extractRefusedClaims(entry?: AuditEntry): RefusedClaim[] {
     const { quote, reason } = item as Record<string, unknown>
     if (typeof reason !== 'string') return []
     return [{ quote: typeof quote === 'string' ? quote : null, reason }]
+  })
+}
+
+interface RetrievedPassage {
+  chunkId: string
+  section: string
+  cited: boolean
+}
+
+// The coverage_check row's `retrieval.chunks`, each marked if the verdict's
+// `cited_chunks` names it. Absent or malformed → an empty list; the card shows
+// nothing extra, as with the Guardrail's refused objections.
+function extractPassages(entry?: AuditEntry): RetrievedPassage[] {
+  const retrieval = entry?.payload.retrieval
+  const chunks = (retrieval as Record<string, unknown> | undefined)?.chunks
+  if (!Array.isArray(chunks)) return []
+  const verdict = entry?.payload.verdict as Record<string, unknown> | undefined
+  const citedRaw = Array.isArray(verdict?.cited_chunks) ? verdict.cited_chunks : []
+  const cited = new Set(
+    citedRaw.flatMap((c) => {
+      const id = (c as Record<string, unknown> | null)?.chunk_id
+      return typeof id === 'string' ? [id] : []
+    }),
+  )
+  return chunks.flatMap((chunk) => {
+    const { chunk_id, section } = (chunk ?? {}) as Record<string, unknown>
+    if (typeof chunk_id !== 'string' || typeof section !== 'string') return []
+    return [{ chunkId: chunk_id, section, cited: cited.has(chunk_id) }]
   })
 }
