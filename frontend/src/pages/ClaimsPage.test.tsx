@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -78,7 +78,8 @@ describe('ClaimsPage', () => {
     expect(screen.getByRole('button', { name: 'Process' })).toHaveClass('text-xs', 'bg-blue-700')
     expect(screen.getByText('Received')).toHaveClass('whitespace-nowrap')
     expect(screen.getByRole('columnheader', { name: 'Amount' })).toHaveClass('text-right')
-    expect(screen.getByText('Water damage').closest('td')).toHaveClass('whitespace-nowrap')
+    const row = screen.getByText('Acme Logistics Ltd').closest('tr') as HTMLElement
+    expect(within(row).getByText('Water damage').closest('td')).toHaveClass('whitespace-nowrap')
     const icons = screen.getAllByRole('button', { name: 'About this action' })
     await user.hover(icons[icons.length - 1])
     expect(screen.getByRole('tooltip')).toHaveTextContent(
