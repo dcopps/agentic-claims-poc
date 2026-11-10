@@ -102,3 +102,7 @@ Until now the system could only be used through its web pages. This phase let an
 
 The proof that the system had been tested was spread across twenty-four plans, twenty-four reports and the build log, each with its own count and its own wording. This prompt gathered it into one document: what an automated test is and why there are hundreds, what the two test suites hold today, which tests each phase planned and delivered and whether it proved them, how the model's behaviour is watched, and what is not tested at all — finished on Thursday 5 November 2026.
 
+### [26 — Prompt 26: the Guide rewritten for a first-time visitor](README.md#entry-26)
+
+The repository and its README now send a first-time visitor straight to the app, and the Guide is the page that tells them what they are looking at. Its opening paragraph described the project before it said what the system was, it never named the four agents or said how a claim is processed, it gave no steps to follow, and its links predated the testing document and the diagram's fourth view. This prompt rewrote the Guide's text and added three sections — finished on Tuesday 10 November 2026.
+
