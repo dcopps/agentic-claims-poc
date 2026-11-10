@@ -9,7 +9,9 @@ describe('App routing', () => {
 
   it('renders the nav and the claims landing page', async () => {
     renderWithProviders(<App />)
-    expect(screen.getByRole('link', { name: /agentic claims poc/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Agentic Insurance Claims Processor' }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Audit' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Agents' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Integrations' })).toHaveAttribute(

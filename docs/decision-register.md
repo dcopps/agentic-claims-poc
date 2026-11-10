@@ -515,3 +515,47 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 **Status.** Resolved.
 
 *Technical detail:* plan `24-phase-10-mcp-server-and-integrations-page-plan.md` (§0 findings 5, 11 and 12; §2; *Decisions requested*, D1–D8; *Approval*); report `24-phase-10-mcp-server-and-integrations-page-report.md` (*Deployed verification*); `backend/app/mcp/auth.py`, `server.py`, `tools.py`; `backend/app/logging/setup.py` (0.10.0.2); migration `0003_mcp_tool_calls`; `backend/tests/test_mcp_auth.py` (mutation proofs in the module docstring and the build log); build log, entry *Phase 10*; Azure runs `cc53d855`, `67bdf225`, `e9566e92` (4 November 2026).
+
+### R-21 — A commit reached the repository with a failing test in it, because the check's result had been filtered away
+
+**TL;DR:** While polishing the Claims page, one commit was pushed with a test that failed. The test itself had been run before the commit, but its output had been passed through a filter to shorten it, and the filter threw away the one thing that mattered: whether the run had passed. The build server caught it and deployed nothing. The fix followed eleven minutes later. Tuesday 10 November 2026.
+
+**Technologies:** the frontend test runner (Vitest); the shell pipeline that ran it; the build server (GitHub Actions).
+
+**Date and phase.** 10 November 2026, Prompt 28 (Claims page polish), during the build.
+
+**What happened.** A change made the claimant and type cells of the Claims table stay on one line. Its test looked for the words "Water damage" on the page, and found them twice: once in the table cell it meant, and once in the form's list of claim types, which the same prompt had just given plain-words labels. The test runner reported one failure and exited with a failure code. The command that ran it, though, had been written as a pipeline that kept only a few summary lines; the exit code the commit step saw was the filter's, which was success. The commit `b694554` was made and pushed.
+
+**Why it mattered.** The repository's rule is that nothing reaches the main branch red, and since Phase 9.2 the Azure deployment is driven from the main branch by the build server. A red commit that nobody noticed would have been one that could not be deployed; a red commit that was noticed only by a later reader would have been a lie in the history about the state of the code when it was committed.
+
+**What was decided, and by whom.** No gate: an incident. The build server failed the run and skipped both deployments, as designed. The fix was made at once: the assertion was scoped to the table row so it could not match the form. After the second incident of the day (R-22) Dermot asked for the rule that now stands in `CLAUDE.md`: a test, lint or type-check that gates a commit is never piped through `head`, `tail` or `grep`, and the commit is made only when the command itself exits with success.
+
+**What was done.** `94df9ce`, eleven minutes after the red commit, with the test runner run on its own and its exit code the condition for the commit. Every later commit chain in the prompt followed that form.
+
+**How it was proven.** The build server's run on `b694554` is recorded as failed with the one test named, and the two deploy workflows as skipped; the run on `94df9ce` is green with both deployments completed. The Azure frontend was then measured and found to carry the change.
+
+**Status.** Resolved. The rule is in `CLAUDE.md`, *Standing Instructions*, *Commit protocol*.
+
+*Technical detail:* commits `b694554` (red) and `94df9ce` (fix), 10 November 2026; `frontend/src/pages/ClaimsPage.test.tsx` (the assertion now uses `within(row)`); report `28-claims-page-polish-report.md` (*Findings and deviations*); build log, entry *Prompt 28*; `.github/workflows/ci.yml` (the Frontend job).
+
+### R-22 — The same mistake an hour later: a style-rule failure hidden by a shortened lint output
+
+**TL;DR:** An hour after R-21, a second commit reached the repository red, this time on the style checker rather than the tests. The checker had been run locally, but only its last line was kept, and the last line said nothing about the error above it. Again the build server caught it and deployed nothing; again the fix followed within minutes. The two incidents together produced a standing rule. Tuesday 10 November 2026.
+
+**Technologies:** the style checker (ESLint, with the React hooks rules); the build server (GitHub Actions).
+
+**Date and phase.** 10 November 2026, Prompt 28 (Claims page polish), while fixing the tooltip box at Dermot's request.
+
+**What happened.** The tooltip was changed to measure itself after opening and move when it would leave the visible page. The first version stored where it should sit in the component's state, set from inside an effect that runs before the browser paints. A rule the project's style checker enforces forbids that pattern, because setting state from such an effect forces a second render. The checker reported the error locally, but the command kept only its final line, so the error scrolled past unread, and the commit `0b3d830` was pushed. The build server's Lint step failed on it and the deployments were skipped.
+
+**Why it mattered.** As R-21: the main branch must stay green because deployment hangs off it. The second incident mattered more than the first, because it showed the cause was not one careless line but a habit: shortening a check's output to keep the terminal quiet, and losing the check's verdict with it.
+
+**What was decided, and by whom.** No gate for the fix: the placement is now written straight to the element inside the effect, with no state update, which satisfies the rule and is also the simpler design (the value is used by the box alone). The standing rule was Dermot's decision at the close-out of Prompt 28, in these words: a test, lint or type-check run that gates a commit is never piped through `head`, `tail` or `grep`, and the commit is made only when the command itself exits with success. It is recorded in `CLAUDE.md` under *Commit protocol*.
+
+**What was done.** `6291f43`, with ESLint run in full and its exit code the condition. A first attempt had exported the placement helper for testing and tripped a second rule (a component file may export only components); the helper was made private and the tests exercise it through the component.
+
+**How it was proven.** The build server's run on `0b3d830` shows the Lint step failed and both deployments skipped; the run on `6291f43` is green with both deployments completed and the Azure page measured afterwards: five tooltips, each inside the viewport, the two on the last visible row opened above their control.
+
+**Status.** Resolved. Both incidents are also recorded in the build log and the Prompt 28 report.
+
+*Technical detail:* commits `0b3d830` (red) and `6291f43` (fix), 10 November 2026; `frontend/src/components/Tooltip.tsx` (`place()`, called from `useLayoutEffect`); the ESLint rules `react-hooks/set-state-in-effect` and `react-refresh/only-export-components`; report `28-claims-page-polish-report.md`; build log, entry *Prompt 28*; `CLAUDE.md`, *Standing Instructions*, *Commit protocol*.

@@ -110,3 +110,7 @@ The repository and its README now send a first-time visitor straight to the app,
 
 Every coverage decision in the system rests on the policy wording, but a visitor could not read it: the Validator named the passages it relied on, the review panel showed excerpts, the Guide said there were twelve passages, and the policy itself sat only in the repository as a text file. This prompt added a Policy page that shows the policy exactly as the system indexed it, and linked to it from every place that names a passage — finished on Tuesday 10 November 2026.
 
+### [28 — Prompt 28: the Claims page made readable for a first-time visitor](README.md#entry-28)
+
+The repository's About link sends a visitor straight to the Claims page, and until this prompt that page showed the system's insides: amounts as `850000.00`, claim types and statuses as the database spells them, a form whose field names vanished as soon as they were filled, no date on any row, and a second button called "Re-process with v2". This prompt changed only what the page shows, not what the system stores or does. It also gave the application its name, *Agentic Insurance Claims Processor*, in the menu and the browser tab — finished on Tuesday 10 November 2026.
+

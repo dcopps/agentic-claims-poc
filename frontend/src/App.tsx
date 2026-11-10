@@ -16,7 +16,7 @@ function App() {
           anchors carry a matching scroll margin so a linked passage stops below it. */}
       <nav className="sticky top-0 z-10 flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3 text-sm">
         <Link to="/" className="text-base font-semibold">
-          Agentic Claims POC
+          Agentic Insurance Claims Processor
         </Link>
         <span className="text-slate-300">|</span>
         <Link to="/" className="hover:underline">
