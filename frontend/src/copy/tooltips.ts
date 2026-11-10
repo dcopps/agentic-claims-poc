@@ -11,11 +11,11 @@ export const tooltips = {
     'Runs the four agents on this claim now and opens the run page to watch them. In ' +
     'production the ClaimReceived event would start this automatically through Azure ' +
     'Durable Functions.',
-  rerunStrictValidator:
+  strictRerun:
     'Runs the claim again with the Validator under a stricter instruction, so the two runs ' +
     'can be compared on the claim’s page. In production a model-promotion event from the ' +
     'deployment pipeline would trigger it.',
-  // Prefixed to rerunStrictValidator while the button is disabled.
+  // Prefixed to strictRerun while the button is disabled.
   disabledNoFinishedRun: 'Not yet available: this claim has no finished run. ',
   verifyChain:
     'In production, the audit ledger is SQL Server with Ledger Tables; chain ' +

@@ -60,14 +60,16 @@ export function ClaimsPage() {
         )}
         {claims && claims.length > 0 && (
           <table className="w-full text-left text-sm" aria-label="Claims">
+            {/* Column padding and a right-aligned amount give the row room at ~1280 px;
+                the status badge and the two actions never wrap (Prompt 28). */}
             <thead className="text-slate-500">
               <tr>
-                <th className="py-1">Claimant</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Submitted</th>
-                <th>Actions</th>
+                <th className="px-3 py-1.5">Claimant</th>
+                <th className="px-3 py-1.5">Type</th>
+                <th className="px-3 py-1.5 text-right">Amount</th>
+                <th className="px-3 py-1.5">Status</th>
+                <th className="px-3 py-1.5">Submitted</th>
+                <th className="px-3 py-1.5">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -99,32 +101,35 @@ function ClaimRow({
   const canRerun = REPLAYABLE.has(claim.status)
   return (
     <tr className="border-t border-slate-200">
-      <td className="py-1">
+      <td className="px-3 py-1.5">
         <Link to={`/claims/${claim.claim_id}`} className="text-blue-700 hover:underline">
           {claim.claimant_name}
         </Link>
       </td>
-      <td>{claimTypeLabel(claim.claim_type)}</td>
-      <td>{formatUsd(claim.reported_amount)}</td>
-      <td>
+      <td className="px-3 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>
+      <td className="px-3 py-1.5">
         <StatusBadge status={claim.status} label={statusLabel(claim.status)} />
       </td>
-      <td className="whitespace-nowrap text-slate-600">{formatDateTime(claim.created_at)}</td>
-      <td className="space-x-2 py-1">
+      <td className="whitespace-nowrap px-3 py-1.5 text-slate-600">
+        {formatDateTime(claim.created_at)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5" data-testid="claim-actions">
         <Tooltip text={tooltips.processClaim}>
-          <Button onClick={onProcess}>Process</Button>
-        </Tooltip>
+          <Button size="sm" onClick={onProcess}>
+            Process
+          </Button>
+        </Tooltip>{' '}
         {/* The disabled reason leads the tooltip, so a visitor can tell why (Prompt 28). */}
-        <Tooltip
-          text={(canRerun ? '' : tooltips.disabledNoFinishedRun) + tooltips.rerunStrictValidator}
-        >
+        <Tooltip text={(canRerun ? '' : tooltips.disabledNoFinishedRun) + tooltips.strictRerun}>
           <Button
             variant="secondary"
+            size="sm"
             onClick={onReplay}
             disabled={!canRerun}
             aria-disabled={!canRerun}
           >
-            Re-run with strict Validator
+            Strict re-run
           </Button>
         </Tooltip>
       </td>

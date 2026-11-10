@@ -5,6 +5,7 @@ import { claimTypeLabel } from '../copy/labels'
 import { tooltips } from '../copy/tooltips'
 import { demoClaims } from '../fixtures/demoClaims'
 import { Tooltip } from './Tooltip'
+import { Button } from './ui'
 
 const CLAIM_TYPES: ClaimType[] = ['water_damage', 'fire', 'wind', 'theft', 'flood', 'storm_complex']
 
@@ -153,13 +154,9 @@ export function ClaimForm({ onSubmitted }: ClaimFormProps) {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <Tooltip text={tooltips.submitClaim}>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded bg-slate-800 px-3 py-1.5 text-white disabled:opacity-50"
-        >
+        <Button type="submit" disabled={busy}>
           {busy ? 'Submitting…' : 'Submit Claim'}
-        </button>
+        </Button>
       </Tooltip>
     </form>
   )

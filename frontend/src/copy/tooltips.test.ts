@@ -7,7 +7,7 @@ describe('tooltips', () => {
       /^Saves the claim; nothing is processed until you press Process\./,
     )
     expect(tooltips.processClaim).toMatch(/^Runs the four agents on this claim now/)
-    expect(tooltips.rerunStrictValidator).toMatch(
+    expect(tooltips.strictRerun).toMatch(
       /^Runs the claim again with the Validator under a stricter instruction/,
     )
   })
@@ -15,7 +15,7 @@ describe('tooltips', () => {
   it('then name the production trigger', () => {
     expect(tooltips.submitClaim).toContain('Azure Service Bus')
     expect(tooltips.processClaim).toContain('Durable Functions')
-    expect(tooltips.rerunStrictValidator).toContain('deployment pipeline')
+    expect(tooltips.strictRerun).toContain('deployment pipeline')
     expect(tooltips.verifyChain).toContain('Ledger Tables')
   })
 

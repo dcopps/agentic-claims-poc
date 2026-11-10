@@ -171,7 +171,7 @@ export const guideCopy = {
     ],
     [
       'To see the same claim handled a second way, press ',
-      { label: 'Re-run with strict Validator' },
+      { label: 'Strict re-run' },
       ' on its row, which runs the Validator under a stricter instruction, then open the ' +
         'claim, tick the two runs and press ',
       { label: 'Compare selected' },

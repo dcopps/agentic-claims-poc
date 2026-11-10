@@ -66,13 +66,22 @@ describe('ClaimsPage', () => {
     const user = userEvent.setup()
     renderWithProviders(<ClaimsPage />)
     await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
-    const rerun = screen.getByRole('button', { name: 'Re-run with strict Validator' })
+    const rerun = screen.getByRole('button', { name: 'Strict re-run' })
     expect(rerun).toBeDisabled()
     expect(screen.queryByRole('button', { name: /re-process/i })).not.toBeInTheDocument()
+    // Both actions sit side by side in one non-wrapping cell, at the small size.
+    const cell = screen.getByTestId('claim-actions')
+    expect(cell).toHaveClass('whitespace-nowrap')
+    expect(cell).toContainElement(screen.getByRole('button', { name: 'Process' }))
+    expect(cell).toContainElement(rerun)
+    expect(rerun).toHaveClass('text-xs', 'border-blue-700')
+    expect(screen.getByRole('button', { name: 'Process' })).toHaveClass('text-xs', 'bg-blue-700')
+    expect(screen.getByText('Received')).toHaveClass('whitespace-nowrap')
+    expect(screen.getByRole('columnheader', { name: 'Amount' })).toHaveClass('text-right')
     const icons = screen.getAllByRole('button', { name: 'About this action' })
     await user.hover(icons[icons.length - 1])
     expect(screen.getByRole('tooltip')).toHaveTextContent(
-      tooltips.disabledNoFinishedRun + tooltips.rerunStrictValidator,
+      tooltips.disabledNoFinishedRun + tooltips.strictRerun,
     )
   })
 

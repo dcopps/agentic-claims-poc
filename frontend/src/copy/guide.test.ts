@@ -83,10 +83,7 @@ describe('guide copy', () => {
       'Verify chain (whole ledger)',
     ])
     expect(sentenceLabels(guideCopy.tryMore[0])).toEqual(['Approve', 'Reject'])
-    expect(sentenceLabels(guideCopy.tryMore[1])).toEqual([
-      'Re-run with strict Validator',
-      'Compare selected',
-    ])
+    expect(sentenceLabels(guideCopy.tryMore[1])).toEqual(['Strict re-run', 'Compare selected'])
   })
 
   it('names the three scenarios and their expected outcomes', () => {

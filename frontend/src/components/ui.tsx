@@ -9,21 +9,32 @@ import { statusBadgeClass } from '../styles/tokens'
 const COPY_FEEDBACK_MS = 1500
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
+type ButtonSize = 'md' | 'sm'
 
+// Primary is solid blue matching the link colour (text-blue-700); secondary is
+// the same blue as an outline on white; danger stays red. Disabled keeps the
+// greyed look (Prompt 28).
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-slate-800 text-white hover:bg-slate-700',
-  secondary: 'border border-slate-300 text-slate-700 hover:bg-slate-50',
+  primary: 'bg-blue-700 text-white hover:bg-blue-800',
+  secondary: 'border border-blue-700 bg-white text-blue-700 hover:bg-blue-50',
   danger: 'bg-red-600 text-white hover:bg-red-500',
+}
+
+// `sm` is for dense places such as a table row, where two actions share a line.
+const BUTTON_SIZE: Record<ButtonSize, string> = {
+  md: 'px-3 py-1.5 text-sm',
+  sm: 'px-2 py-1 text-xs',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
+  size?: ButtonSize
 }
 
-export function Button({ variant = 'primary', className = '', ...rest }: ButtonProps) {
+export function Button({ variant = 'primary', size = 'md', className = '', ...rest }: ButtonProps) {
   return (
     <button
-      className={`rounded px-3 py-1.5 text-sm disabled:opacity-50 ${BUTTON_VARIANT[variant]} ${className}`}
+      className={`rounded whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_SIZE[size]} ${BUTTON_VARIANT[variant]} ${className}`}
       {...rest}
     />
   )
@@ -60,7 +71,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   const cls = statusBadgeClass[status] ?? 'bg-slate-100 text-slate-700'
   const font = label ? '' : 'font-mono '
   return (
-    <span className={`inline-block rounded px-2 py-0.5 ${font}text-xs ${cls}`}>
+    <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 ${font}text-xs ${cls}`}>
       {label ?? status}
     </span>
   )
