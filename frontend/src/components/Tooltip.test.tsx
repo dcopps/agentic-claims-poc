@@ -57,21 +57,23 @@ describe('Tooltip', () => {
   })
 
   // The box wraps its own text (a caller may sit in a nowrap table cell), is
-  // capped at 320 px, sits above the rows, and never leaves the visible page.
+  // capped at 320 px, sits above the rows, and never leaves the visible page:
+  // it measures itself after opening and flips right or above as needed.
   describe('box', () => {
     afterEach(() => vi.restoreAllMocks())
 
-    function renderAt(left: number, innerWidth: number) {
-      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(innerWidth)
+    function renderAt(rect: { right: number; bottom: number }, viewport = { w: 1280, h: 900 }) {
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(viewport.w)
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(viewport.h)
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-        left,
-        right: left + 120,
-        top: 0,
-        bottom: 20,
-        width: 120,
-        height: 20,
-        x: left,
-        y: 0,
+        left: rect.right - 320,
+        right: rect.right,
+        top: rect.bottom - 80,
+        bottom: rect.bottom,
+        width: 320,
+        height: 80,
+        x: rect.right - 320,
+        y: rect.bottom - 80,
         toJSON: () => ({}),
       })
       render(
@@ -83,21 +85,38 @@ describe('Tooltip', () => {
       )
     }
 
-    it('wraps inside a dark box of at most 320 px, above the rows', async () => {
+    it('wraps inside a dark box of at most 320 px, above the rows, below and to the right by default', async () => {
       const user = userEvent.setup()
-      renderAt(100, 1280)
+      renderAt({ right: 600, bottom: 300 })
       await user.hover(screen.getByRole('button', { name: 'About this action' }))
       const tip = screen.getByRole('tooltip')
-      expect(tip).toHaveClass('whitespace-normal', 'bg-slate-800', 'text-white', 'z-30', 'left-0')
+      expect(tip).toHaveClass(
+        'whitespace-normal',
+        'bg-slate-800',
+        'text-white',
+        'z-30',
+        'left-0',
+        'top-full',
+      )
       expect(tip).toHaveStyle({ maxWidth: '320px' })
     })
 
-    it('aligns to the right of its control when it would leave the viewport', async () => {
+    it('aligns to the right of its control when it would pass the right edge', async () => {
       const user = userEvent.setup()
-      renderAt(1100, 1280) // 1100 + 320 > 1280
+      renderAt({ right: 1300, bottom: 300 }) // 1300 > 1280
       await user.hover(screen.getByRole('button', { name: 'About this action' }))
-      expect(screen.getByRole('tooltip')).toHaveClass('right-0')
-      expect(screen.getByRole('tooltip')).not.toHaveClass('left-0')
+      const tip = screen.getByRole('tooltip')
+      expect(tip).toHaveClass('right-0', 'top-full')
+      expect(tip).not.toHaveClass('left-0')
+    })
+
+    it('opens above its control when it would pass the bottom edge', async () => {
+      const user = userEvent.setup()
+      renderAt({ right: 600, bottom: 950 }) // 950 > 900
+      await user.hover(screen.getByRole('button', { name: 'About this action' }))
+      const tip = screen.getByRole('tooltip')
+      expect(tip).toHaveClass('bottom-full', 'left-0')
+      expect(tip).not.toHaveClass('top-full')
     })
   })
 })
