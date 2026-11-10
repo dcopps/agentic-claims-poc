@@ -90,15 +90,8 @@ describe('Tooltip', () => {
       renderAt({ right: 600, bottom: 300 })
       await user.hover(screen.getByRole('button', { name: 'About this action' }))
       const tip = screen.getByRole('tooltip')
-      expect(tip).toHaveClass(
-        'whitespace-normal',
-        'bg-slate-800',
-        'text-white',
-        'z-30',
-        'left-0',
-        'top-full',
-      )
-      expect(tip).toHaveStyle({ maxWidth: '320px' })
+      expect(tip).toHaveClass('whitespace-normal', 'bg-slate-800', 'text-white', 'z-30')
+      expect(tip).toHaveStyle({ maxWidth: '320px', left: '0px', top: '100%' })
     })
 
     it('aligns to the right of its control when it would pass the right edge', async () => {
@@ -106,8 +99,7 @@ describe('Tooltip', () => {
       renderAt({ right: 1300, bottom: 300 }) // 1300 > 1280
       await user.hover(screen.getByRole('button', { name: 'About this action' }))
       const tip = screen.getByRole('tooltip')
-      expect(tip).toHaveClass('right-0', 'top-full')
-      expect(tip).not.toHaveClass('left-0')
+      expect(tip).toHaveStyle({ right: '0px', left: 'auto', top: '100%' })
     })
 
     it('opens above its control when it would pass the bottom edge', async () => {
@@ -115,8 +107,7 @@ describe('Tooltip', () => {
       renderAt({ right: 600, bottom: 950 }) // 950 > 900
       await user.hover(screen.getByRole('button', { name: 'About this action' }))
       const tip = screen.getByRole('tooltip')
-      expect(tip).toHaveClass('bottom-full', 'left-0')
-      expect(tip).not.toHaveClass('top-full')
+      expect(tip).toHaveStyle({ bottom: '100%', top: 'auto', left: '0px' })
     })
   })
 })
