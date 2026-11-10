@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaimRecord } from '../api/types'
+import { formatDateTime } from '../copy/format'
 import { guideCopy } from '../copy/guide'
+import { tooltips } from '../copy/tooltips'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { ClaimsPage } from './ClaimsPage'
 
@@ -25,8 +27,8 @@ const CLAIM: ClaimRecord = {
   reported_amount: '85000.00',
   status: 'received',
   scenario_tag: null,
-  created_at: 't',
-  updated_at: 't',
+  created_at: '2026-11-04T11:08:00Z',
+  updated_at: '2026-11-04T11:08:00Z',
 }
 
 describe('ClaimsPage', () => {
@@ -45,6 +47,33 @@ describe('ClaimsPage', () => {
     const notice = screen.getByText(guideCopy.dataNotice)
     const form = screen.getByRole('form', { name: 'Submit a claim' })
     expect(notice.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // Prompt 28: the row shows plain words, a currency amount and the submitted time.
+  it('shows the amount as currency, the type and status in plain words, and when it was submitted', async () => {
+    renderWithProviders(<ClaimsPage />)
+    await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
+    const row = screen.getByText('Acme Logistics Ltd').closest('tr') as HTMLElement
+    expect(row).toHaveTextContent('$85,000')
+    expect(row).toHaveTextContent('Water damage')
+    expect(row).toHaveTextContent('Received')
+    expect(row).not.toHaveTextContent('water_damage')
+    expect(row).toHaveTextContent(formatDateTime('2026-11-04T11:08:00Z'))
+    expect(screen.getByRole('columnheader', { name: 'Submitted' })).toBeInTheDocument()
+  })
+
+  it('names the second action and says why it is disabled before a finished run', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ClaimsPage />)
+    await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
+    const rerun = screen.getByRole('button', { name: 'Re-run with strict Validator' })
+    expect(rerun).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /re-process/i })).not.toBeInTheDocument()
+    const icons = screen.getAllByRole('button', { name: 'About this action' })
+    await user.hover(icons[icons.length - 1])
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      tooltips.disabledNoFinishedRun + tooltips.rerunStrictValidator,
+    )
   })
 
   it('navigates to the run page immediately on Process', async () => {

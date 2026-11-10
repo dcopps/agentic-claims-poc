@@ -18,6 +18,14 @@ describe('StatusBadge', () => {
     expect(screen.getByText('aborted')).toHaveClass('bg-red-100')
   })
 
+  it('shows a plain-words label when given one and keeps the status colour', () => {
+    render(<StatusBadge status="awaiting_human" label="Awaiting human review" />)
+    const badge = screen.getByText('Awaiting human review')
+    expect(badge).toHaveClass('bg-amber-100')
+    expect(badge).not.toHaveClass('font-mono')
+    expect(screen.queryByText('awaiting_human')).not.toBeInTheDocument()
+  })
+
   it('falls back to neutral for an unknown status', () => {
     render(<StatusBadge status="mystery" />)
     expect(screen.getByText('mystery')).toHaveClass('bg-slate-100')

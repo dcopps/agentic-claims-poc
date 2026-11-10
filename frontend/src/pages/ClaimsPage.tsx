@@ -4,12 +4,16 @@ import { replayPipeline, runPipeline } from '../api/client'
 import type { ClaimRecord } from '../api/types'
 import { ClaimForm } from '../components/ClaimForm'
 import { Tooltip } from '../components/Tooltip'
+import { formatDateTime, formatUsd } from '../copy/format'
+import { claimTypeLabel, statusLabel } from '../copy/labels'
 import { Button, Card, Spinner, StatusBadge } from '../components/ui'
 import { guideCopy } from '../copy/guide'
 import { tooltips } from '../copy/tooltips'
 import { useClaims } from '../hooks/queries'
 
 const REPLAYABLE = new Set(['settled', 'awaiting_human', 'aborted'])
+// The second action: the same claim again under the strict-Validator variant,
+// so the two runs can be compared on the claim's page.
 const REPLAY_VARIANT = 'v2_strict_validator'
 
 export function ClaimsPage() {
@@ -62,6 +66,7 @@ export function ClaimsPage() {
                 <th>Type</th>
                 <th>Amount</th>
                 <th>Status</th>
+                <th>Submitted</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -91,6 +96,7 @@ function ClaimRow({
   onProcess: () => void
   onReplay: () => void
 }) {
+  const canRerun = REPLAYABLE.has(claim.status)
   return (
     <tr className="border-t border-slate-200">
       <td className="py-1">
@@ -98,18 +104,27 @@ function ClaimRow({
           {claim.claimant_name}
         </Link>
       </td>
-      <td>{claim.claim_type}</td>
-      <td>{claim.reported_amount}</td>
+      <td>{claimTypeLabel(claim.claim_type)}</td>
+      <td>{formatUsd(claim.reported_amount)}</td>
       <td>
-        <StatusBadge status={claim.status} />
+        <StatusBadge status={claim.status} label={statusLabel(claim.status)} />
       </td>
+      <td className="whitespace-nowrap text-slate-600">{formatDateTime(claim.created_at)}</td>
       <td className="space-x-2 py-1">
         <Tooltip text={tooltips.processClaim}>
           <Button onClick={onProcess}>Process</Button>
         </Tooltip>
-        <Tooltip text={tooltips.reprocessV2}>
-          <Button variant="secondary" onClick={onReplay} disabled={!REPLAYABLE.has(claim.status)}>
-            Re-process with v2
+        {/* The disabled reason leads the tooltip, so a visitor can tell why (Prompt 28). */}
+        <Tooltip
+          text={(canRerun ? '' : tooltips.disabledNoFinishedRun) + tooltips.rerunStrictValidator}
+        >
+          <Button
+            variant="secondary"
+            onClick={onReplay}
+            disabled={!canRerun}
+            aria-disabled={!canRerun}
+          >
+            Re-run with strict Validator
           </Button>
         </Tooltip>
       </td>

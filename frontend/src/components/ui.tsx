@@ -53,10 +53,16 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
   )
 }
 
-export function StatusBadge({ status }: { status: string }) {
+// `label` (Prompt 28) is the plain-words text a page may show in place of the
+// stored value; the colour is always looked up by the stored value, so the two
+// cannot drift. Pages that pass nothing still show the raw status.
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const cls = statusBadgeClass[status] ?? 'bg-slate-100 text-slate-700'
+  const font = label ? '' : 'font-mono '
   return (
-    <span className={`inline-block rounded px-2 py-0.5 font-mono text-xs ${cls}`}>{status}</span>
+    <span className={`inline-block rounded px-2 py-0.5 ${font}text-xs ${cls}`}>
+      {label ?? status}
+    </span>
   )
 }
 
