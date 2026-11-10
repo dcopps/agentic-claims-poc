@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { PolicyPassage, PolicySection } from '../api/types'
-import { Card, ErrorBanner, Spinner } from '../components/ui'
+import { Card, CopyButton, ErrorBanner, Spinner } from '../components/ui'
 import { policyCopy } from '../copy/policy'
 import { usePolicy } from '../hooks/queries'
 import { typography } from '../styles/tokens'
@@ -13,6 +13,11 @@ import { typography } from '../styles/tokens'
 export function PolicyPage() {
   const policy = usePolicy()
   const highlighted = useAnchorHighlight(policy.data?.passage_count ?? 0)
+  const anchorMissing =
+    highlighted !== null &&
+    policy.data !== undefined &&
+    policy.data.passage_count > 0 &&
+    !policy.data.sections.some((s) => s.passages.some((p) => p.chunk_id === highlighted))
 
   return (
     <div className="space-y-4">
@@ -32,6 +37,14 @@ export function PolicyPage() {
 
       {policy.data && policy.data.passage_count > 0 && (
         <>
+          {anchorMissing && (
+            <p
+              className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              data-testid="policy-missing-anchor"
+            >
+              {policyCopy.missingAnchor}
+            </p>
+          )}
           <p className={typography.caption} data-testid="policy-count">
             {policyCopy.countLine(
               policy.data.passage_count,
@@ -73,14 +86,19 @@ function SectionCard({
 // The anchor is the raw chunk id (a UUID is a valid element id), so a link of the
 // form /policy#<chunk_id> is stable for as long as the index is.
 function PassageBlock({ passage, current }: { passage: PolicyPassage; current: boolean }) {
+  // scroll-mt keeps a passage reached by its anchor below the sticky navigation.
   const frame = current
-    ? 'rounded border-2 border-amber-400 bg-amber-50 p-3'
-    : 'rounded border border-slate-200 p-3'
+    ? 'scroll-mt-20 rounded border-2 border-amber-400 bg-amber-50 p-3'
+    : 'scroll-mt-20 rounded border border-slate-200 p-3'
   return (
     <article id={passage.chunk_id} aria-current={current ? 'true' : undefined} className={frame}>
-      <p className="mb-1 text-xs text-slate-500">
-        {policyCopy.passageLabel(passage.section, passage.position, passage.section_size)}
-      </p>
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <span>
+          {policyCopy.passageLabel(passage.section, passage.position, passage.section_size)}
+        </span>
+        <span className="font-mono text-slate-400">{policyCopy.chunkLabel(passage.chunk_id)}</span>
+        <CopyButton value={passage.chunk_id} label={policyCopy.copyChunkId} />
+      </div>
       <p className="whitespace-pre-wrap text-sm text-slate-700">{passage.text}</p>
     </article>
   )
@@ -94,7 +112,8 @@ function useAnchorHighlight(renderedCount: number): string | null {
   const target = hash.startsWith('#') ? decodeURIComponent(hash.slice(1)) : null
   useEffect(() => {
     if (!target || renderedCount === 0) return
-    document.getElementById(target)?.scrollIntoView?.({ block: 'center' })
+    // block: 'start' with the article's scroll margin rests it just below the menu.
+    document.getElementById(target)?.scrollIntoView?.({ block: 'start' })
   }, [target, renderedCount])
   return target
 }

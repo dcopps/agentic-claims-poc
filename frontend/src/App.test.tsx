@@ -21,6 +21,14 @@ describe('App routing', () => {
     await waitFor(() => expect(screen.getByText(/no claims yet/i)).toBeInTheDocument())
   })
 
+  it('keeps the navigation stuck to the top of the window', () => {
+    renderWithProviders(<App />)
+    const nav = screen.getByRole('navigation')
+    expect(nav.className).toMatch(/\bsticky\b/)
+    expect(nav.className).toMatch(/\btop-0\b/)
+    expect(screen.getByRole('link', { name: 'Policy' })).toHaveAttribute('href', '/policy')
+  })
+
   it('deep-links to the audit viewer', () => {
     renderWithProviders(<App />, { route: '/audit' })
     expect(screen.getByLabelText('Correlation id')).toBeInTheDocument()

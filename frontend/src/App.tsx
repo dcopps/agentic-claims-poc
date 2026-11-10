@@ -12,7 +12,9 @@ import { RunDetailPage } from './pages/RunDetailPage'
 function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      <nav className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+      {/* Sticky so the menu stays visible while a long page (the Policy) scrolls; in-page
+          anchors carry a matching scroll margin so a linked passage stops below it. */}
+      <nav className="sticky top-0 z-10 flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3 text-sm">
         <Link to="/" className="text-base font-semibold">
           Agentic Claims POC
         </Link>

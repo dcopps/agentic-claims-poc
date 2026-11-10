@@ -17,6 +17,13 @@ export const policyCopy = {
   // The small label on each passage (D5: no token count).
   passageLabel: (section: string, position: number, size: number): string =>
     `${section}, passage ${position} of ${size}`,
+  // The chunk id beside the label: the first eight characters, the full id on the copy button.
+  chunkLabel: (chunkId: string): string => `Chunk ${chunkId.slice(0, 8)}`,
+  copyChunkId: 'Copy id',
+  // Shown above the sections when the URL names a chunk id the index does not hold.
+  missingAnchor:
+    'The passage this link points to is not in the current index; the policy may have been ' +
+    're-indexed since that run.',
   empty:
     'No policy is indexed on this deployment, so there is nothing to show here, and the ' +
     'Validator cannot run until one has been indexed.',

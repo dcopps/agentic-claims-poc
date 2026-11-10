@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PolicyIndex } from '../api/types'
 import { policyCopy } from '../copy/policy'
@@ -105,6 +105,38 @@ describe('PolicyPage', () => {
       within(current[0] as HTMLElement).getByText('We do not cover flood.'),
     ).toBeInTheDocument()
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+    // block 'start' plus the article's scroll margin rests it below the sticky menu.
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+    expect(current[0].className).toMatch(/\bscroll-mt-\d+\b/)
+    expect(screen.queryByTestId('policy-missing-anchor')).not.toBeInTheDocument()
+  })
+
+  it('shows each passage’s chunk id in short with a copy button for the full id', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    stubFetch([['/api/policy', INDEX]])
+    renderWithProviders(<PolicyPage />, { route: '/policy' })
+    await waitFor(() => expect(document.getElementById(ID_B2)).not.toBeNull())
+    const block = document.getElementById(ID_B2) as HTMLElement
+    expect(within(block).getByText(`Chunk ${ID_B2.slice(0, 8)}`)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Copy id' })).toHaveLength(3)
+    fireEvent.click(within(block).getByRole('button', { name: 'Copy id' }))
+    expect(writeText).toHaveBeenCalledWith(ID_B2)
+    // The clicked button acknowledges, as the run id's copy button does.
+    expect(within(block).getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('says so when the URL names a chunk id that is not in the index', async () => {
+    stubFetch([['/api/policy', INDEX]])
+    renderWithProviders(<PolicyPage />, {
+      route: '/policy#99999999-9999-4999-8999-999999999999',
+    })
+    await waitFor(() => expect(screen.getByTestId('policy-missing-anchor')).toBeInTheDocument())
+    expect(screen.getByTestId('policy-missing-anchor')).toHaveTextContent(policyCopy.missingAnchor)
+    // The sections still render; nothing is highlighted or scrolled.
+    expect(screen.getByRole('heading', { name: 'Exclusions' })).toBeInTheDocument()
+    expect(document.querySelector('[aria-current="true"]')).toBeNull()
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('reports a failed load in plain words', async () => {
