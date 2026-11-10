@@ -34,6 +34,14 @@ Found in run `765f1ad2-0871-41eb-bbab-1e12a0bb17bd` (Background Claimant 01): `M
 
 The abort itself is correct behaviour (no silent fallback to a guessed range). The fix is data: either add market ranges for the five types, or constrain the seed generator to supported types — and add a test asserting that every seeded `claim_type` resolves in `MarketDataTable`, so the two files cannot drift again. Natural ride-along for Phase 8.7.
 
+**Seen again on 10 November 2026** on the Azure frontend: a background claim of type `hail` (run `8c537109-58b4-4021-9957-b6189480c86e`) aborted at the Adjuster. It matters more now, because the repository's About link sends visitors to the Azure app, where *Process* on a background claim is one click away. Dermot's decision that day: not now; record it here. The agreed shape of the clean-up, when it is done:
+
+- **Do not clear the databases.** The claims cannot be deleted without their audit rows, which would restart the hash chain and remove the live runs the decision register and the build log name (the 1 October pass and the 26 October failures behind the model-drift finding among them).
+- **Remove only the background claims that have never been run.** They have no audit rows, so the chain is untouched. Background claims that have been run stay.
+- **Fix the generator** as described above, with the test.
+- **Before any deletion:** a backup of the database, and the list of rows to be removed shown to Dermot first. Apply to both deployed databases.
+- Clutter from repeated scenario runs is a display matter (a date column, a filter), not a data one.
+
 ### Retrieval misses *Named Perils Covered* for a theft narrative
 
 Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption* and *Duties After Loss* (similarity 0.52–0.55) and never *Named Perils Covered*, which is what drove `covered: false`. Similarities that low and that flat suggest the narrative's vocabulary ("forced entry", "display safes", "CCTV") is simply far from the policy's peril wording. Worth a look at `top_k` (currently 3), at whether *Named Perils Covered* should always be included for a coverage decision, or at query construction from `claim_type` as well as the narrative. Retrieval quality only — the embedding model is a one-way door and is not in question.
