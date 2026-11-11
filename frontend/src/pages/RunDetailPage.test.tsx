@@ -1,8 +1,9 @@
 import { QueryClient } from '@tanstack/react-query'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { PipelineEvent } from '../api/types'
+import { ABORT_MESSAGE, abortedRows, guardrailFailureRows, settledRows } from '../test/runFixtures'
 import { renderWithProviders, stubFetch } from '../test/utils'
 
 // useRunStream uses an EventSource (a no-op stub in tests), so mock it to return
@@ -15,6 +16,8 @@ vi.mock('../hooks/useRunStream', () => ({
 }))
 
 const ROUTE = '/claims/c1/runs/cid-1'
+// The Claims page's trigger navigates with `started` (Prompt 29).
+const STARTED_HERE = { pathname: ROUTE, state: { started: true } }
 
 describe('RunDetailPage', () => {
   beforeEach(() => {
@@ -23,10 +26,20 @@ describe('RunDetailPage', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('renders queued cards and an awaiting hint when no run data exists yet', async () => {
-    renderWithProviders(<App />, { route: ROUTE })
+  it('renders waiting cards and an awaiting hint for a run started here with no data yet', async () => {
+    renderWithProviders(<App />, { route: STARTED_HERE })
     await waitFor(() => expect(screen.getByTestId('awaiting-hint')).toBeInTheDocument())
     expect(screen.getByText('Doc-Parser')).toBeInTheDocument()
+    expect(screen.getAllByText('Waiting')).toHaveLength(4)
+    expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+  })
+
+  it('says "Run not found" for an id opened from elsewhere that nothing has recorded', async () => {
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(screen.getByTestId('run-not-found')).toHaveTextContent('Run not found.'),
+    )
+    expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
   })
 
   it('renders an error banner when a pipeline_aborted event arrives', () => {
@@ -41,7 +54,9 @@ describe('RunDetailPage', () => {
       },
     ]
     renderWithProviders(<App />, { route: ROUTE })
-    expect(screen.getByRole('alert')).toHaveTextContent(/aborted at doc_parser/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Run aborted: the Doc-Parser raised ValueError',
+    )
   })
 
   it('renders an error banner when a run-error was recorded for this correlation id', () => {
@@ -101,5 +116,132 @@ describe('RunDetailPage header (correlation id)', () => {
     renderWithProviders(<App />, { route: FULL_ROUTE })
     const link = screen.getByRole('link', { name: /view audit log/i })
     expect(link).toHaveAttribute('href', `/audit?correlation_id=${FULL_CID}`)
+  })
+})
+
+// Prompt 29: the audit rows are the source of each card's state, so a run reads
+// the same while it happens and when it is opened afterwards.
+describe('RunDetailPage after the event (audit rows, no live events)', () => {
+  const RUN = { status: 'settled', escalation_decision: null }
+
+  beforeEach(() => {
+    streamState.events = []
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  function cardText(label: string) {
+    return screen.getByText(label).closest('button')!
+  }
+
+  it('renders a settled run: four sentences, durations, the header, no awaiting hint', async () => {
+    stubFetch([
+      ['/api/runs/', RUN],
+      ['/api/audit', settledRows()],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(cardText('Doc-Parser')).toHaveTextContent('Summarised the claim (Water damage)'),
+    )
+    expect(cardText('Doc-Parser')).toHaveTextContent('1.3 s')
+    expect(cardText('Validator')).toHaveTextContent('Covered (92% confident)')
+    expect(cardText('Adjuster')).toHaveTextContent('Recommends $82,500 (85% confident)')
+    expect(cardText('Guardrail')).toHaveTextContent('Passed')
+    expect(screen.getByTestId('run-variant')).toHaveTextContent('Standard run')
+    expect(screen.getByText('Settled')).toBeInTheDocument()
+    expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('fired-rules')).not.toBeInTheDocument()
+  })
+
+  it('renders an aborted run: the failed agent with its reason and message, the later agent not run', async () => {
+    stubFetch([
+      ['/api/runs/', { status: 'aborted', escalation_decision: null, aborted_agent: 'adjuster' }],
+      ['/api/audit', abortedRows()],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(cardText('Adjuster')).toHaveTextContent(
+        'Failed: the Adjuster has no market range for the claim type Smoke damage',
+      ),
+    )
+    expect(screen.getByTestId('card-detail')).toHaveTextContent(ABORT_MESSAGE)
+    expect(cardText('Guardrail')).toHaveTextContent('Not run: the run stopped at the Adjuster')
+    expect(cardText('Validator')).toHaveTextContent('Covered (88% confident)')
+    expect(screen.getByText('Aborted')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Run aborted: the Adjuster has no market range',
+    )
+  })
+
+  it('renders the Guardrail failure as awaiting human review with two rule lines', async () => {
+    stubFetch([
+      ['/api/runs/', { status: 'awaiting_human', escalation_decision: null }],
+      ['/api/audit', guardrailFailureRows()],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(cardText('Guardrail')).toHaveTextContent(
+        'Failed: cited policy wording the policy does not contain',
+      ),
+    )
+    expect(cardText('Adjuster')).toHaveTextContent(
+      'Recommends $1,400,000 from the fixed demonstration file, no model call (82% confident)',
+    )
+    expect(screen.getByText('Awaiting human review')).toBeInTheDocument()
+    const rules = screen.getByTestId('fired-rules')
+    expect(rules).toHaveTextContent('Why it went to a person')
+    expect(
+      within(rules)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Guardrail check did not pass', 'Settlement over the $250,000 ceiling: $1,400,000'])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('RunDetailPage watching a live abort', () => {
+  beforeEach(() => stubFetch([]))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('moves the failing card to Failed and the later card to Not run at once', () => {
+    const base = { correlation_id: 'cid-1', timestamp: 't' }
+    streamState.events = [
+      { ...base, event_type: 'pipeline_started', variant: 'default' },
+      {
+        ...base,
+        event_type: 'agent_completed',
+        agent: 'doc_parser',
+        duration_ms: 1300,
+        summary: { claim_type: 'hail' },
+      },
+      {
+        ...base,
+        event_type: 'agent_completed',
+        agent: 'validator',
+        duration_ms: 3000,
+        summary: { covered: true },
+      },
+      { ...base, event_type: 'agent_started', agent: 'adjuster' },
+      {
+        ...base,
+        event_type: 'pipeline_aborted',
+        failing_agent: 'adjuster',
+        error_type: 'ValueError',
+        message:
+          "MarketDataTable.lookup: unknown claim_type 'hail' (normalised='hail'); supported types=[]",
+      },
+    ]
+    renderWithProviders(<App />, { route: STARTED_HERE })
+    const adjuster = screen.getByText('Adjuster').closest('button')!
+    expect(adjuster).toHaveTextContent(
+      'Failed: the Adjuster has no market range for the claim type Hail',
+    )
+    expect(screen.getByText('Guardrail').closest('button')!).toHaveTextContent(
+      'Not run: the run stopped at the Adjuster',
+    )
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Run aborted')
+    expect(screen.getByText('Aborted')).toBeInTheDocument()
+    expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
   })
 })

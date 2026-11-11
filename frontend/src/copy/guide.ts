@@ -147,7 +147,7 @@ export const guideCopy = {
     [
       'Press ',
       { label: 'Process' },
-      ' on its row: the run page opens and the four agent cards fill in as each agent finishes.',
+      ' on its row: the run page opens and each card says what the agent concluded as it finishes.',
     ],
     [
       'Read the run page: the status badge is the outcome, and each card opens to show what ' +
@@ -207,8 +207,10 @@ export const guideCopy = {
   runPageHeading: 'Reading a run page',
   runPage:
     'The four cards are the four agents in order: Doc-Parser, Validator, Adjuster, Guardrail. ' +
-    'Each shows what it produced and how long it took, and opens to show the recorded request ' +
-    'and response. The status badge is the run’s outcome: settled, awaiting human, or aborted. ' +
+    'Each card says what the agent concluded and how long it took, and opens to show the ' +
+    'recorded request and response. The status badge is the run’s outcome: Settled, Awaiting ' +
+    'human review, or Aborted; when the claim went to a person, the rules that sent it there ' +
+    'are listed under the header. ' +
     '“View audit log” opens every recorded step of the run with its hash. The Guardrail card ' +
     'lists any refused objections: things the model said were policy citations that the code ' +
     'could not find in the Adjuster’s text, each with the reason it did not count.',

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { demoClaims } from '../fixtures/demoClaims'
 import { guideCopy, guideLinks, type GuideSegment } from './guide'
+import { statusLabel } from './labels'
 
 // Flattens a "Try it" sentence to the text a reader sees.
 const segmentText = (s: GuideSegment): string =>
@@ -92,6 +93,20 @@ describe('guide copy', () => {
     expect(guideCopy.scenarios[1].detail).toContain('$250,000 ceiling')
     expect(guideCopy.scenarios[2].detail).toContain('Coastal Surge Rider')
     expect(guideCopy.scenarios[2].detail).toContain('demo_fixture: true')
+  })
+
+  // Prompt 29: the Guide describes the run page as it now reads.
+  it('says the cards state what each agent concluded, and names the outcomes by their labels', () => {
+    expect(sentenceText(guideCopy.trySteps[2])).toContain(
+      'each card says what the agent concluded as it finishes',
+    )
+    expect(guideCopy.runPage).toContain(
+      'Each card says what the agent concluded and how long it took',
+    )
+    for (const status of ['settled', 'awaiting_human', 'aborted']) {
+      expect(guideCopy.runPage).toContain(statusLabel(status))
+    }
+    expect(guideCopy.runPage).not.toContain('awaiting human,')
   })
 
   it('points readers to the Guardrail card for refused objections', () => {

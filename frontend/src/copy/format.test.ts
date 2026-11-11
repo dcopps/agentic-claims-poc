@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatUsd } from './format'
+import { formatDateTime, formatPercent, formatSeconds, formatUsd } from './format'
 
 describe('formatUsd', () => {
   it('shows whole dollars without cents', () => {
@@ -31,5 +31,21 @@ describe('formatDateTime', () => {
 
   it('returns the raw string when it does not parse', () => {
     expect(formatDateTime('not a date', fixed)).toBe('not a date')
+  })
+})
+
+describe('formatSeconds', () => {
+  it('gives seconds to one decimal place', () => {
+    expect(formatSeconds(3421)).toBe('3.4 s')
+    expect(formatSeconds(0)).toBe('0.0 s')
+    expect(formatSeconds(27900)).toBe('27.9 s')
+  })
+})
+
+describe('formatPercent', () => {
+  it('shows a fraction as a whole percentage', () => {
+    expect(formatPercent(0.92)).toBe('92%')
+    expect(formatPercent(0.585)).toBe('59%')
+    expect(formatPercent(1)).toBe('100%')
   })
 })

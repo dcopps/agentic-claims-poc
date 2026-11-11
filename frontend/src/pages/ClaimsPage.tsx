@@ -31,7 +31,9 @@ export function ClaimsPage() {
   // refreshes the claims list.
   const trigger = (claimId: string, kind: 'process' | 'replay') => {
     const cid = crypto.randomUUID()
-    navigate(`/claims/${claimId}/runs/${cid}`)
+    // `started` tells the run page this run began here, so it shows the awaiting
+    // hint rather than "Run not found" while the first event is on its way.
+    navigate(`/claims/${claimId}/runs/${cid}`, { state: { started: true } })
     const post =
       kind === 'process' ? runPipeline(claimId, cid) : replayPipeline(claimId, cid, REPLAY_VARIANT)
     post

@@ -49,3 +49,41 @@ export function claimTypeLabel(value: string): string {
 export function statusLabel(value: string): string {
   return STATUS_LABELS[value] ?? readableFallback(value)
 }
+
+// --- Prompt 29: the run page -------------------------------------------------
+
+// The replay variants in variants.yaml, as a sentence a visitor can read. The
+// stored name is shown beside the sentence in small type, so the fallback need
+// only be readable, not exact.
+const VARIANT_LABELS: Record<string, string> = {
+  default: 'Standard run',
+  v2_strict_validator: 'Strict Validator run',
+  v1_mistral: 'Mistral run',
+}
+
+export function variantLabel(variant: string): string {
+  return VARIANT_LABELS[variant] ?? `${readableFallback(variant)} run`
+}
+
+// Why the code refused one of the Guardrail model's citation objections (Phase
+// 9.2.2's `llm_flags_discarded[].reason`). The codes stay in the audit trail.
+const REFUSAL_REASONS: Record<string, string> = {
+  no_quote: 'the model gave no quotation',
+  quote_not_in_reasoning: 'those words are not in the Adjuster’s reasoning',
+  quote_not_a_provision: 'those words do not name a policy provision',
+}
+
+export function refusalReason(code: string): string {
+  return REFUSAL_REASONS[code] ?? readableFallback(code)
+}
+
+// What a Guardrail flag of each kind means, as the object of "Failed: …".
+const GUARDRAIL_FINDINGS: Record<string, string> = {
+  hallucinated_citation: 'cited policy wording the policy does not contain',
+  pii: 'personal data in the reasoning',
+  bias: 'biased language in the reasoning',
+}
+
+export function guardrailFinding(kind: string): string {
+  return GUARDRAIL_FINDINGS[kind] ?? readableFallback(kind)
+}

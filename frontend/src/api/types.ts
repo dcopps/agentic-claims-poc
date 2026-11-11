@@ -70,6 +70,30 @@ export interface EscalationDecision {
   reasoning: string
 }
 
+// The Doc-Parser's structured fields (the record's, since Phase 8.2) and its
+// one model-produced line, the narrative summary.
+export interface DocParserOutput {
+  loss_date: string
+  jurisdiction: string
+  claim_type: string
+  claimed_amount: string
+  claimant_identifier: string
+  narrative_summary: string
+}
+
+export interface CitedChunk {
+  chunk_id: string
+  section: string
+}
+
+export interface ValidatorVerdict {
+  covered: boolean
+  confidence: number
+  reasoning: string
+  policy_basis: string
+  cited_chunks: CitedChunk[]
+}
+
 export interface AdjusterOutput {
   recommended_settlement: string
   confidence: number
@@ -86,6 +110,10 @@ export interface PipelineResult {
   claim_id: string
   correlation_id: string
   escalation_decision: EscalationDecision | null
+  // The API has returned the first two since Phase 4; the mirror lacked them
+  // until Prompt 29. Each is null beyond the point an aborted run reached.
+  doc_parser_output: DocParserOutput | null
+  validator_output: ValidatorVerdict | null
   adjuster_output: AdjusterOutput | null
   guardrail_output: GuardrailOutput | null
   aborted_agent?: string | null

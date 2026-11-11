@@ -55,7 +55,7 @@ Auto-approve ($85k water damage)"**, then **Submit Claim**. On the list, click
 > configuration change, not a rewrite, which is exactly the substitutability the
 > gateway exists for."
 
-**Screen:** the outcome is `awaiting_human` — settlement over the $250,000 ceiling.
+**Screen:** the outcome badge reads *Awaiting human review*; under the header, *Why it went to a person* lists the settlement over the $250,000 ceiling with the figure.
 
 ---
 
@@ -69,7 +69,7 @@ Auto-approve ($85k water damage)"**, then **Submit Claim**. On the list, click
 > records `demo_fixture: true`, so the trail is honest about it. The guardrail's
 > *detector* is the real thing; only the input is pinned."
 
-**Screen:** `awaiting_human`, `guardrail_failed`.
+**Screen:** *Awaiting human review*; the Guardrail card reads *Failed: cited policy wording the policy does not contain* with the planted endorsement named beneath, and two rules are listed under the header: the Guardrail check and the ceiling.
 
 ---
 

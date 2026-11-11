@@ -2,10 +2,27 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { AuditEntry } from '../api/types'
 import { agentDescriptions } from '../copy/agent-descriptions'
+import { formatSeconds } from '../copy/format'
+import { refusalReason } from '../copy/labels'
+import { runCopy } from '../copy/run'
 import { useAgentPrompt } from '../hooks/queries'
 import { Badge, JsonBlock, Spinner } from './ui'
 
-export type AgentStatus = 'queued' | 'running' | 'done' | 'escalated' | 'failed'
+// `escalated` is the Guardrail's own failed verdict (the run went to a person);
+// `failed` is an agent that broke; `not_run` is an agent after the one that
+// broke (Prompt 29).
+export type AgentStatus = 'queued' | 'running' | 'done' | 'escalated' | 'failed' | 'not_run'
+
+// What the run page derives for one card (pages/runDerivation.ts): the state,
+// the one-line sentence, an optional line beneath (an exception's message or a
+// Guardrail finding's detail), and the duration with where it came from.
+export interface CardState {
+  status: AgentStatus
+  summary: string
+  detail?: string
+  durationMs?: number
+  durationFromAudit?: boolean
+}
 
 const STATUS_ICON: Record<AgentStatus, string> = {
   queued: '○',
@@ -13,6 +30,7 @@ const STATUS_ICON: Record<AgentStatus, string> = {
   done: '✓',
   escalated: '⚠',
   failed: '✗',
+  not_run: '∅',
 }
 
 // Expected per-agent runtime (ms), empirical from the Phase 8 rehearsal on Render
@@ -44,109 +62,45 @@ function useProgress(active: boolean, expectedMs: number): number {
 interface AgentCardProps {
   agent: string // underscore key, e.g. "doc_parser"
   label: string
-  status: AgentStatus
-  durationMs?: number
-  summary?: Record<string, unknown>
+  state: CardState
   variant: string
   auditEntry?: AuditEntry // this agent's audit-step entry, once written
 }
 
-// One agent in the live pipeline visualisation. Collapsed: status + summary +
-// duration. Expanded (lazy): the prompt the LLM actually received and the agent's
-// response — both read from the audit entry (the single source of truth). The
-// prompt is the *filled* text captured in `llm_call.prompt` (Phase 8.3); for
-// historical runs that pre-date the capture, it falls back to the raw template
-// endpoint with a caveat. The response panel uses the audit entry's existence as
-// the completion signal, not the live SSE event.
-export function AgentCard({
-  agent,
-  label,
-  status,
-  durationMs,
-  summary,
-  variant,
-  auditEntry,
-}: AgentCardProps) {
+// One agent in the pipeline visualisation. Collapsed: the state's icon, the
+// sentence and the duration, with the Validator's passages and the Guardrail's
+// refused objections beneath. Expanded (lazy): the prompt the LLM actually
+// received and the agent's response, both read from the audit entry (the single
+// source of truth). The prompt is the *filled* text captured in
+// `llm_call.prompt` (Phase 8.3); for historical runs that pre-date the capture,
+// it falls back to the raw template endpoint with a caveat.
+export function AgentCard({ agent, label, state, variant, auditEntry }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
   const filledPrompt = extractPrompt(auditEntry)
   // Only fetch the raw template when the filled prompt isn't available — i.e. a
   // historical entry, or an entry not yet written. Lazy on expand as before.
   const prompt = useAgentPrompt(agent, variant, expanded && filledPrompt === null)
   const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
-  const progress = useProgress(status === 'running', expectedMs)
-  const refused = extractRefusedClaims(auditEntry)
-  const passages = extractPassages(auditEntry)
+  const progress = useProgress(state.status === 'running', expectedMs)
 
   return (
     <div className="rounded border border-slate-200 bg-white">
-      <button
-        type="button"
-        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <span className="font-mono text-base" aria-hidden="true">
-          {STATUS_ICON[status]}
-        </span>
-        <span className="w-28 font-medium">{label}</span>
-        <span className="flex-1 text-slate-500">{summary ? JSON.stringify(summary) : status}</span>
-        {durationMs !== undefined && (
-          <span className="font-mono text-xs text-slate-400">{durationMs}ms</span>
-        )}
-        <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
-      </button>
-
-      {/* The Validator's retrieved passages (Prompt 27), shown without expanding
-          and each linked to its place on the Policy page; the ones the verdict
-          cited are marked. Read from the coverage_check row's retrieval block. */}
-      {passages.length > 0 && (
-        <p className="px-3 pb-2 text-xs text-slate-600" data-testid="validator-passages">
-          Passages:{' '}
-          {passages.map((passage, index) => (
-            <span key={passage.chunkId}>
-              {index > 0 && ' · '}
-              <Link
-                to={{ pathname: '/policy', hash: passage.chunkId }}
-                className="text-blue-700 hover:underline"
-              >
-                {passage.section}
-              </Link>
-              {passage.cited && ' (cited)'}
-            </span>
-          ))}
+      <CardLine
+        label={label}
+        state={state}
+        expanded={expanded}
+        onToggle={() => setExpanded((v) => !v)}
+      />
+      {state.detail && (
+        <p className="px-3 pb-2 text-xs text-slate-600" data-testid="card-detail">
+          {state.detail}
         </p>
       )}
-
-      {/* The Guardrail's refused objections (Phase 9.2.2's `llm_flags_discarded`),
-          shown without expanding: the model said these were policy citations
-          and the code could not find them in the Adjuster's text. Called
-          objections, not claims, because on this screen a claim is an
-          insurance claim (Prompt 26). */}
-      {refused.length > 0 && (
-        <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-objections">
-          Refused objections ({refused.length}):{' '}
-          {refused.map((claim) => `“${claim.quote ?? 'no quote'}” — ${claim.reason}`).join('; ')}
-        </p>
+      <PassagesLine passages={extractPassages(auditEntry)} />
+      <RefusedObjectionsLine refused={extractRefusedClaims(auditEntry)} />
+      {state.status === 'running' && (
+        <RunningBar agent={agent} label={label} expectedMs={expectedMs} progress={progress} />
       )}
-
-      {status === 'running' && (
-        <div className="px-3 pb-2" aria-label={`${label} running`}>
-          <p className="text-xs text-slate-500">
-            {agentDescriptions[agent] ?? 'Working…'} · ~{Math.round(expectedMs / 1000)}s
-          </p>
-          <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-slate-100">
-            <div
-              className="h-1.5 rounded bg-blue-500 transition-[width] duration-200 ease-linear"
-              style={{ width: `${progress}%` }}
-              role="progressbar"
-              aria-valuenow={Math.round(progress)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            />
-          </div>
-        </div>
-      )}
-
       {expanded && (
         <div className="space-y-3 border-t border-slate-200 px-3 py-3">
           <div>
@@ -162,10 +116,113 @@ export function AgentCard({
           </div>
           <div>
             <Badge>response</Badge>
-            <ResponsePanel auditEntry={auditEntry} status={status} />
+            <ResponsePanel auditEntry={auditEntry} status={state.status} />
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+interface CardLineProps {
+  label: string
+  state: CardState
+  expanded: boolean
+  onToggle: () => void
+}
+
+// The card's top line: icon, agent, sentence, duration, caret. The duration's
+// title says when it was computed from the audit rows rather than the live event.
+function CardLine({ label, state, expanded, onToggle }: CardLineProps) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm"
+      onClick={onToggle}
+      aria-expanded={expanded}
+    >
+      <span className="font-mono text-base" aria-hidden="true">
+        {STATUS_ICON[state.status]}
+      </span>
+      <span className="w-28 font-medium">{label}</span>
+      <span className="flex-1 text-slate-600">{state.summary}</span>
+      {state.durationMs !== undefined && (
+        <span
+          className="font-mono text-xs text-slate-400"
+          title={state.durationFromAudit ? runCopy.durationFromAudit : undefined}
+        >
+          {formatSeconds(state.durationMs)}
+        </span>
+      )}
+      <span className="text-slate-400">{expanded ? '▾' : '▸'}</span>
+    </button>
+  )
+}
+
+// The Validator's retrieved passages (Prompt 27), shown without expanding and
+// each linked to its place on the Policy page; the ones the verdict cited are
+// marked. Read from the coverage_check row's retrieval block.
+function PassagesLine({ passages }: { passages: RetrievedPassage[] }) {
+  if (passages.length === 0) return null
+  return (
+    <p className="px-3 pb-2 text-xs text-slate-600" data-testid="validator-passages">
+      Passages:{' '}
+      {passages.map((passage, index) => (
+        <span key={passage.chunkId}>
+          {index > 0 && ' · '}
+          <Link
+            to={{ pathname: '/policy', hash: passage.chunkId }}
+            className="text-blue-700 hover:underline"
+          >
+            {passage.section}
+          </Link>
+          {passage.cited && ' (cited)'}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+// The Guardrail's refused objections (Phase 9.2.2's `llm_flags_discarded`),
+// shown without expanding: the model said these were policy citations and the
+// code could not find them in the Adjuster's text. Called objections, not
+// claims, because on this screen a claim is an insurance claim (Prompt 26). The
+// reason is given in words (Prompt 29); its code stays in the audit trail.
+function RefusedObjectionsLine({ refused }: { refused: RefusedClaim[] }) {
+  if (refused.length === 0) return null
+  return (
+    <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-objections">
+      Refused objections ({refused.length}):{' '}
+      {refused
+        .map((claim) => `“${claim.quote ?? 'no quote'}” — ${refusalReason(claim.reason)}`)
+        .join('; ')}
+    </p>
+  )
+}
+
+interface RunningBarProps {
+  agent: string
+  label: string
+  expectedMs: number
+  progress: number
+}
+
+function RunningBar({ agent, label, expectedMs, progress }: RunningBarProps) {
+  return (
+    <div className="px-3 pb-2" aria-label={`${label} running`}>
+      <p className="text-xs text-slate-500">
+        {agentDescriptions[agent] ?? 'Working…'} · ~{Math.round(expectedMs / 1000)}s
+      </p>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-slate-100">
+        <div
+          className="h-1.5 rounded bg-blue-500 transition-[width] duration-200 ease-linear"
+          style={{ width: `${progress}%` }}
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        />
+      </div>
     </div>
   )
 }

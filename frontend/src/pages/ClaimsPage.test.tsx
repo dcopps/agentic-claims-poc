@@ -9,8 +9,16 @@ import { tooltips } from '../copy/tooltips'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { ClaimsPage } from './ClaimsPage'
 
+// Echoes where the page navigated to and whether it marked the run as started
+// here (the run page reads that state, Prompt 29).
 function LocationEcho() {
-  return <div data-testid="location">{useLocation().pathname}</div>
+  const location = useLocation()
+  const started = (location.state as { started?: boolean } | null)?.started === true
+  return (
+    <div data-testid="location" data-started={String(started)}>
+      {location.pathname}
+    </div>
+  )
 }
 
 const CLAIM: ClaimRecord = {
@@ -100,6 +108,7 @@ describe('ClaimsPage', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location').textContent).toMatch(/^\/claims\/claim-1\/runs\//),
     )
+    expect(screen.getByTestId('location')).toHaveAttribute('data-started', 'true')
   })
 
   it('fires the run POST in the background', async () => {

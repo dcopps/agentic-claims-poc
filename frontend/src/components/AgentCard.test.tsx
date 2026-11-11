@@ -3,7 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuditEntry } from '../api/types'
 import { renderWithProviders, stubFetch } from '../test/utils'
-import { AgentCard } from './AgentCard'
+import { AgentCard, type CardState } from './AgentCard'
+
+// The states the run page derives (Prompt 29); the card renders what it is given.
+const DONE: CardState = { status: 'done', summary: 'Done' }
+const RUNNING: CardState = { status: 'running', summary: 'Running' }
 
 // The raw template the fallback endpoint serves — placeholders intact.
 const TEMPLATE = {
@@ -50,7 +54,7 @@ describe('AgentCard', () => {
 
   it('renders collapsed with the label and status', () => {
     renderWithProviders(
-      <AgentCard agent="validator" label="Validator" status="done" variant="default" />,
+      <AgentCard agent="validator" label="Validator" state={DONE} variant="default" />,
     )
     expect(screen.getByText('Validator')).toBeInTheDocument()
     expect(screen.queryByText('FILLED-SYSTEM')).not.toBeInTheDocument()
@@ -63,7 +67,7 @@ describe('AgentCard', () => {
       <AgentCard
         agent="validator"
         label="Validator"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={entryWithPrompt()}
       />,
@@ -82,7 +86,7 @@ describe('AgentCard', () => {
       <AgentCard
         agent="validator"
         label="Validator"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={entryWithoutPrompt()}
       />,
@@ -98,7 +102,7 @@ describe('AgentCard', () => {
       <AgentCard
         agent="validator"
         label="Validator"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={entryWithPrompt()}
       />,
@@ -111,7 +115,7 @@ describe('AgentCard', () => {
   it('shows the waiting state when no entry exists and the agent is not done', async () => {
     const user = userEvent.setup()
     renderWithProviders(
-      <AgentCard agent="validator" label="Validator" status="running" variant="default" />,
+      <AgentCard agent="validator" label="Validator" state={RUNNING} variant="default" />,
     )
     await user.click(screen.getByRole('button'))
     expect(await screen.findByText(/waiting for this agent/i)).toBeInTheDocument()
@@ -120,7 +124,7 @@ describe('AgentCard', () => {
   it('shows an audit-integrity error when no entry exists but the agent is done', async () => {
     const user = userEvent.setup()
     renderWithProviders(
-      <AgentCard agent="validator" label="Validator" status="done" variant="default" />,
+      <AgentCard agent="validator" label="Validator" state={DONE} variant="default" />,
     )
     await user.click(screen.getByRole('button'))
     expect(
@@ -134,7 +138,7 @@ describe('AgentCard running state', () => {
 
   it('shows the description and expected duration while running', () => {
     renderWithProviders(
-      <AgentCard agent="validator" label="Validator" status="running" variant="default" />,
+      <AgentCard agent="validator" label="Validator" state={RUNNING} variant="default" />,
     )
     expect(screen.getByText(/retrieving policy clauses/i)).toBeInTheDocument()
     expect(screen.getByText(/~9s/)).toBeInTheDocument()
@@ -144,7 +148,7 @@ describe('AgentCard running state', () => {
   it('advances the progress bar as time passes', () => {
     vi.useFakeTimers()
     renderWithProviders(
-      <AgentCard agent="guardrail" label="Guardrail" status="running" variant="default" />,
+      <AgentCard agent="guardrail" label="Guardrail" state={RUNNING} variant="default" />,
     )
     const before = Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'))
     act(() => vi.advanceTimersByTime(1000)) // 1s of a 5s expected → ~20%
@@ -154,7 +158,7 @@ describe('AgentCard running state', () => {
 
   it('shows no running bar once the agent is done', () => {
     renderWithProviders(
-      <AgentCard agent="validator" label="Validator" status="done" variant="default" />,
+      <AgentCard agent="validator" label="Validator" state={DONE} variant="default" />,
     )
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.getByText('Validator')).toBeInTheDocument()
@@ -184,7 +188,7 @@ describe('AgentCard refused objections', () => {
       <AgentCard
         agent="guardrail"
         label="Guardrail"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={guardrailEntry([
           {
@@ -198,7 +202,11 @@ describe('AgentCard refused objections', () => {
     )
     const line = screen.getByTestId('refused-objections')
     expect(line).toHaveTextContent('Refused objections (1)')
-    expect(line).toHaveTextContent('“inventory valuation and depreciation” — quote_not_a_provision')
+    // The reason in words (Prompt 29); the code stays in the audit trail.
+    expect(line).toHaveTextContent(
+      '“inventory valuation and depreciation” — those words do not name a policy provision',
+    )
+    expect(line).not.toHaveTextContent('quote_not_a_provision')
   })
 
   it('shows nothing when the list is empty or absent', () => {
@@ -206,7 +214,7 @@ describe('AgentCard refused objections', () => {
       <AgentCard
         agent="guardrail"
         label="Guardrail"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={guardrailEntry([])}
       />,
@@ -237,7 +245,7 @@ describe('AgentCard retrieved passages', () => {
       <AgentCard
         agent="validator"
         label="Validator"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={validatorEntry({
           retrieval: {
@@ -276,11 +284,68 @@ describe('AgentCard retrieved passages', () => {
       <AgentCard
         agent="validator"
         label="Validator"
-        status="done"
+        state={DONE}
         variant="default"
         auditEntry={validatorEntry({ verdict: { covered: false } })}
       />,
     )
     expect(screen.queryByTestId('validator-passages')).not.toBeInTheDocument()
+  })
+})
+
+// Prompt 29: the top line is the derived sentence, the duration reads in seconds,
+// and a state can carry a line beneath (an exception's message, a finding's detail).
+describe('AgentCard derived state', () => {
+  function card(state: CardState) {
+    renderWithProviders(
+      <AgentCard agent="adjuster" label="Adjuster" state={state} variant="default" />,
+    )
+  }
+
+  it('shows the sentence and the duration in seconds to one decimal', () => {
+    card({ status: 'done', summary: 'Recommends $82,500 (85% confident)', durationMs: 3421 })
+    expect(screen.getByText('Recommends $82,500 (85% confident)')).toBeInTheDocument()
+    expect(screen.getByText('3.4 s')).toBeInTheDocument()
+    expect(screen.getByText('3.4 s')).not.toHaveAttribute('title')
+  })
+
+  it('says when the duration came from the audit trail', () => {
+    card({ status: 'done', summary: 'Done', durationMs: 2600, durationFromAudit: true })
+    expect(screen.getByText('2.6 s')).toHaveAttribute('title', 'from the audit trail')
+  })
+
+  it('shows a failed agent with its reason and the message beneath', () => {
+    card({
+      status: 'failed',
+      summary: 'Failed: the Adjuster has no market range for the claim type Smoke damage',
+      detail: "MarketDataTable.lookup: unknown claim_type 'smoke_damage'",
+    })
+    expect(screen.getByText(/^Failed: the Adjuster has no market range/)).toBeInTheDocument()
+    expect(screen.getByTestId('card-detail')).toHaveTextContent("unknown claim_type 'smoke_damage'")
+    expect(screen.getByText('✗')).toBeInTheDocument()
+  })
+
+  it('shows an agent that was not run, and a queued one as Waiting', () => {
+    card({ status: 'not_run', summary: 'Not run: the run stopped at the Validator' })
+    expect(screen.getByText('Not run: the run stopped at the Validator')).toBeInTheDocument()
+    expect(screen.getByText('∅')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
+  })
+
+  it('marks the Guardrail’s own failed verdict with ⚠ and the finding’s detail beneath', () => {
+    renderWithProviders(
+      <AgentCard
+        agent="guardrail"
+        label="Guardrail"
+        variant="default"
+        state={{
+          status: 'escalated',
+          summary: 'Failed: cited policy wording the policy does not contain',
+          detail: "endorsement 'Coastal Surge Rider' not in retrieved chunks",
+        }}
+      />,
+    )
+    expect(screen.getByText('⚠')).toBeInTheDocument()
+    expect(screen.getByTestId('card-detail')).toHaveTextContent('Coastal Surge Rider')
   })
 })

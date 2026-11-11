@@ -46,3 +46,17 @@ export function formatDateTime(iso: string, options: DateTimeOptions = {}): stri
     timeZone: options.timeZone,
   }).format(date)
 }
+
+// Milliseconds as seconds to one decimal: 3421 → "3.4 s", 0 → "0.0 s" (Prompt 29).
+// A card's duration is read at a glance, so one decimal is the whole of the
+// precision shown; the millisecond value stays in the audit trail.
+export function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`
+}
+
+// A confidence held as a fraction, shown as a whole percentage: 0.92 → "92%".
+// Dermot, 11 November 2026: a confidence is shown as a percentage in brackets,
+// "Covered (92% confident)", so the fraction never reaches the page.
+export function formatPercent(fraction: number): string {
+  return `${Math.round(fraction * 100)}%`
+}

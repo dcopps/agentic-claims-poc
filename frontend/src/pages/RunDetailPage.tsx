@@ -1,90 +1,57 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
-import type { AuditEntry, PipelineEvent } from '../api/types'
-import { AgentCard, type AgentStatus } from '../components/AgentCard'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import type { FiredRule } from '../api/types'
+import { AgentCard } from '../components/AgentCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
 import { integrationsCopy } from '../copy/integrations'
+import { statusLabel, variantLabel } from '../copy/labels'
+import { failureReason, ruleLine, runCopy } from '../copy/run'
 import { useAuditEntries, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
+import {
+  AGENTS,
+  type AbortInfo,
+  agentLabel,
+  deriveAbort,
+  deriveCards,
+  deriveFiredRules,
+  deriveStatus,
+  deriveVariant,
+} from './runDerivation'
 
-// The four agents in pipeline order, with their SSE name, display label, and the
-// audit step their response lands under.
-const AGENTS = [
-  { key: 'doc_parser', label: 'Doc-Parser', step: 'doc_extract' },
-  { key: 'validator', label: 'Validator', step: 'coverage_check' },
-  { key: 'adjuster', label: 'Adjuster', step: 'settlement_estimate' },
-  { key: 'guardrail', label: 'Guardrail', step: 'output_check' },
-]
-
+// The run page reads the audit rows first and the live stream second
+// (runDerivation.ts), so a run reads the same while it happens and afterwards.
 export function RunDetailPage() {
   const { claimId = '', correlationId = '' } = useParams()
+  // The Claims page's trigger navigates here with `started`; a page opened any
+  // other way with nothing recorded for the id is a run that does not exist.
+  const startedHere = (useLocation().state as { started?: boolean } | null)?.started === true
   const events = useRunStream(correlationId, claimId)
   const run = useRun(correlationId)
   const audit = useAuditEntries(correlationId)
-  // Subscribe to the run-scoped error the ClaimsPage trigger writes on a POST
-  // failure (fix #6). enabled:false — nothing fetches; this only re-renders when
-  // setQueryData(['runError', cid], …) fires.
-  const runError = useQuery<string | null>({
-    queryKey: ['runError', correlationId],
-    queryFn: async () => null,
-    enabled: false,
-  }).data
+  const runError = useRunError(correlationId)
 
-  const variant = _variant(events, audit.data)
-  const completed = events.find((e) => e.event_type === 'pipeline_completed')
-  const aborted = events.find((e) => e.event_type === 'pipeline_aborted')
-  const status = completed?.status ?? (aborted ? 'aborted' : run.data?.status)
-  // Before the first SSE event, the runs/audit queries 404 (the run hasn't
-  // written anything yet) — that is expected in-flight state, not an error.
-  const awaiting = events.length === 0 && !completed && !aborted && !runError
+  const rows = audit.data ?? []
+  const variant = deriveVariant(rows, events)
+  const cards = deriveCards(rows, events)
+  // Before the first event or row the runs/audit queries 404: expected in-flight
+  // state for a run started here, "not found" for one that was not.
+  const silent = events.length === 0 && rows.length === 0 && !runError
 
   return (
     <div className="space-y-4">
-      <Card title="Pipeline run">
-        <div className="space-y-2 text-sm text-slate-500">
-          <p>
-            variant: <span className="font-mono">{variant}</span>
-            {status && (
-              <>
-                {' · '}
-                <StatusBadge status={status} />
-              </>
-            )}
-          </p>
-          {/* Full correlation id, copyable, with a one-click jump to the audit
-              view of this same run (filter pre-populated via the query param). */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span>run</span>
-            <span className="break-all font-mono text-xs text-slate-700">{correlationId}</span>
-            <CopyButton value={correlationId} />
-            <Link
-              to={`/audit?correlation_id=${correlationId}`}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              View audit log
-            </Link>
-            {/* A ready-made question for an MCP client, so the id is never read
-                aloud in a demonstration (Phase 10). */}
-            <CopyButton
-              value={integrationsCopy.copyQuestion(correlationId)}
-              label="Copy question for Claude"
-            />
-          </div>
-        </div>
-      </Card>
-
-      {runError && <ErrorBanner message={`Could not start the run: ${runError}`} />}
-      {aborted && (
-        <ErrorBanner
-          message={`Pipeline aborted at ${aborted.failing_agent}: ${aborted.error_type}${aborted.message ? ` — ${aborted.message}` : ''}`}
-        />
-      )}
-      {awaiting && (
-        <p className="text-sm text-slate-500" data-testid="awaiting-hint">
-          Awaiting pipeline_started…
-        </p>
-      )}
-
+      <RunHeader
+        correlationId={correlationId}
+        variant={variant}
+        status={deriveStatus(rows, events, run.data)}
+        rules={deriveFiredRules(rows, run.data)}
+      />
+      <RunNotices
+        runError={runError}
+        abort={deriveAbort(rows, events)}
+        awaiting={silent && startedHere}
+        notFound={silent && !startedHere && run.isError && audit.isError}
+      />
       <div className="space-y-2" aria-label="Pipeline agents">
         {AGENTS.map((agent) => (
           <AgentCard
@@ -92,10 +59,8 @@ export function RunDetailPage() {
             agent={agent.key}
             label={agent.label}
             variant={variant}
-            status={_status(agent.key, events)}
-            durationMs={_duration(agent.key, events)}
-            summary={_summary(agent.key, events)}
-            auditEntry={_entry(agent.step, audit.data)}
+            state={cards[agent.key]}
+            auditEntry={rows.find((e) => e.step === agent.step)}
           />
         ))}
       </div>
@@ -103,35 +68,107 @@ export function RunDetailPage() {
   )
 }
 
-function _variant(events: PipelineEvent[], audit?: AuditEntry[]): string {
-  const started = events.find((e) => e.event_type === 'pipeline_started')
-  if (started?.variant) return started.variant
-  const auditStart = audit?.find((e) => e.step === 'pipeline_started')?.payload
-  return (auditStart?.variant as string) ?? 'default'
+// Subscribe to the run-scoped error the ClaimsPage trigger writes on a POST
+// failure (fix #6). enabled:false — nothing fetches; this only re-renders when
+// setQueryData(['runError', cid], …) fires.
+function useRunError(correlationId: string): string | null | undefined {
+  return useQuery<string | null>({
+    queryKey: ['runError', correlationId],
+    queryFn: async () => null,
+    enabled: false,
+  }).data
 }
 
-function _agentEvents(key: string, events: PipelineEvent[]): PipelineEvent[] {
-  return events.filter((e) => e.agent === key)
+interface RunNoticesProps {
+  runError?: string | null
+  abort: AbortInfo | null
+  awaiting: boolean
+  notFound: boolean
 }
 
-function _status(key: string, events: PipelineEvent[]): AgentStatus {
-  const mine = _agentEvents(key, events)
-  if (mine.some((e) => e.event_type === 'agent_completed')) return 'done'
-  if (mine.some((e) => e.event_type === 'agent_started')) return 'running'
-  return 'queued'
+// The banners and hints between the header and the cards: a POST that failed,
+// an abort (from the audit row or the live event, in the same words as the
+// failed card), the awaiting hint for a run started here, "Run not found" for
+// an id nothing has recorded.
+function RunNotices({ runError, abort, awaiting, notFound }: RunNoticesProps) {
+  return (
+    <>
+      {runError && <ErrorBanner message={`Could not start the run: ${runError}`} />}
+      {abort && (
+        <ErrorBanner
+          message={runCopy.aborted(
+            failureReason(agentLabel(abort.failingAgent), abort.errorType, abort.message),
+          )}
+        />
+      )}
+      {awaiting && (
+        <p className="text-sm text-slate-500" data-testid="awaiting-hint">
+          Awaiting pipeline_started…
+        </p>
+      )}
+      {notFound && (
+        <p className="text-sm text-slate-500" data-testid="run-not-found">
+          {runCopy.notFound}
+        </p>
+      )}
+    </>
+  )
 }
 
-function _duration(key: string, events: PipelineEvent[]): number | undefined {
-  return _agentEvents(key, events).find((e) => e.event_type === 'agent_completed')?.duration_ms
+interface RunHeaderProps {
+  correlationId: string
+  variant: string
+  status?: string
+  rules: FiredRule[]
 }
 
-function _summary(key: string, events: PipelineEvent[]): Record<string, unknown> | undefined {
-  return _agentEvents(key, events).find((e) => e.event_type === 'agent_completed')?.summary
-}
-
-// The audit entry for an agent's step, or undefined before it is written. The
-// card derives both its filled prompt and its response from this single entry, so
-// the audit log stays the one source of truth for what each agent did.
-function _entry(step: string, audit?: AuditEntry[]): AuditEntry | undefined {
-  return audit?.find((e) => e.step === step)
+// The outcome badge in plain words, the variant as a sentence with its stored
+// name beside it, the copyable id with its links, and the fired escalation
+// rules when the run went to a person.
+function RunHeader({ correlationId, variant, status, rules }: RunHeaderProps) {
+  return (
+    <Card title="Pipeline run">
+      <div className="space-y-2 text-sm text-slate-500">
+        <p>
+          <span data-testid="run-variant">{variantLabel(variant)}</span>{' '}
+          <span className="font-mono text-xs text-slate-400">{variant}</span>
+          {status && (
+            <>
+              {' · '}
+              <StatusBadge status={status} label={statusLabel(status)} />
+            </>
+          )}
+        </p>
+        {/* Full correlation id, copyable, with a one-click jump to the audit
+            view of this same run (filter pre-populated via the query param). */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span>run</span>
+          <span className="break-all font-mono text-xs text-slate-700">{correlationId}</span>
+          <CopyButton value={correlationId} />
+          <Link
+            to={`/audit?correlation_id=${correlationId}`}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            View audit log
+          </Link>
+          {/* A ready-made question for an MCP client, so the id is never read
+              aloud in a demonstration (Phase 10). */}
+          <CopyButton
+            value={integrationsCopy.copyQuestion(correlationId)}
+            label="Copy question for Claude"
+          />
+        </div>
+        {rules.length > 0 && (
+          <div data-testid="fired-rules">
+            <p className="font-medium text-slate-700">{runCopy.rulesHeading}</p>
+            <ul className="list-disc pl-5 text-slate-700">
+              {rules.map((rule) => (
+                <li key={rule.name}>{ruleLine(rule)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
 }

@@ -1,15 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, type RenderResult } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom'
 import { vi, type Mock } from 'vitest'
+
+// A route for the MemoryRouter: a path, or a location with navigation state
+// (the run page reads `state.started` from the Claims page trigger, Prompt 29).
+type Route = NonNullable<MemoryRouterProps['initialEntries']>[number]
 
 // Render a component inside the providers the app uses: a fresh QueryClient with
 // retries off (tests assert on first response) and a MemoryRouter (so routing
 // hooks work and deep-links can be exercised via `route`).
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/', client }: { route?: string; client?: QueryClient } = {},
+  { route = '/', client }: { route?: Route; client?: QueryClient } = {},
 ): RenderResult {
   const queryClient =
     client ??
@@ -30,8 +34,7 @@ export function stubFetch(routes: Array<[string, unknown]>): Mock {
   const fn = vi.fn((input: unknown) => {
     // fetch may be called with a string, a URL, or a Request — coerce to a URL
     // string so substring matching is robust.
-    const url =
-      typeof input === 'string' ? input : ((input as { url?: string })?.url ?? '')
+    const url = typeof input === 'string' ? input : ((input as { url?: string })?.url ?? '')
     for (const [match, body] of routes) {
       if (url.includes(match)) {
         return Promise.resolve(
