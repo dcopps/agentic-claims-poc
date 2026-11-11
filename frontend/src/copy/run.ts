@@ -31,6 +31,15 @@ export const runCopy = {
   failed: (reason: string) => `Failed: ${reason}`,
   guardrailThrew: 'Failed: the check itself raised an error, so the claim went to a person',
   notFound: 'Run not found.',
+  // Shown in place of the cards while the run and audit queries are in flight.
+  // Azure wakes from zero replicas in about half a minute; four cards reading
+  // "Waiting" for that long would look like the fault Prompt 29 fixed.
+  loading: 'Loading this run…',
+  // The claim the run belongs to, after the claimant's name (which is the link
+  // back to the claim page): "Water damage · $85,000 · claim CLM-2026-9BB57A86".
+  claimDetails: (claimType: string, amount: string, claimNumber: string) =>
+    `${claimTypeLabel(claimType)} · ${formatUsd(amount)} · claim ${claimNumber}`,
+  claimUnavailable: 'The claim this run belongs to could not be loaded.',
   rulesHeading: 'Why it went to a person',
   // The run's wall time for an agent, from the difference between its audit
   // row and the row before it (plan D2); shown as the duration's title.

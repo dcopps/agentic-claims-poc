@@ -4,9 +4,28 @@
 // Coral Bay Guardrail failure e9566e92, the smoke_damage abort 0aca331d, and the
 // fail-closed path from the orchestrator's `_finalise_guardrail_throw`. Payloads
 // carry only the keys the page reads plus what identifies the row.
-import type { AuditEntry } from '../api/types'
+import type { AuditEntry, ClaimRecord } from '../api/types'
 
 const START = Date.parse('2026-11-10T16:20:00.000Z')
+
+/** The claim the fixture rows name (`claim_id: 'c1'`), shaped as GET /api/claims/{id} returns it. */
+export const CLAIM: ClaimRecord = {
+  claim_id: 'c1',
+  claim_number: 'CLM-2026-9BB57A86',
+  line_of_business: 'commercial_property',
+  claimant_name: 'Harborline Logistics Ltd',
+  policy_number: 'CP-2026-9001',
+  loss_date: '2026-04-18',
+  reported_date: '2026-04-19',
+  jurisdiction: 'United Kingdom',
+  narrative: 'Burst supply line flooded the warehouse mezzanine.',
+  claim_type: 'water_damage',
+  reported_amount: '85000.00',
+  status: 'settled',
+  scenario_tag: 'auto_approve',
+  created_at: '2026-11-10T16:19:40.000Z',
+  updated_at: '2026-11-10T16:20:09.000Z',
+}
 
 // Wall time per step in milliseconds, so a derived duration is checkable.
 const STEP_MS = {

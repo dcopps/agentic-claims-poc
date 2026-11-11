@@ -74,6 +74,23 @@ export function deriveAbort(rows: AuditEntry[], events: PipelineEvent[]): AbortI
   }
 }
 
+// The claim the run belongs to, from the run's own record: the pipeline_started
+// row, else the live pipeline_started event, else the reconstructed run. The
+// address's claim id is not consulted here, so the page names the right claim
+// however it was reached; the page falls back to the address only when nothing
+// recorded names a claim.
+export function deriveClaimId(
+  rows: AuditEntry[],
+  events: PipelineEvent[],
+  run?: PipelineResult,
+): string | undefined {
+  const row = rows.find((r) => r.step === 'pipeline_started')?.payload
+  if (typeof row?.claim_id === 'string' && row.claim_id !== '') return row.claim_id
+  const started = events.find((e) => e.event_type === 'pipeline_started')
+  if (started?.claim_id) return started.claim_id
+  return run?.claim_id || undefined
+}
+
 export function deriveVariant(rows: AuditEntry[], events: PipelineEvent[]): string {
   const started = events.find((e) => e.event_type === 'pipeline_started')
   if (started?.variant) return started.variant

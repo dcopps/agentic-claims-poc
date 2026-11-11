@@ -11,6 +11,7 @@ import {
 import {
   deriveAbort,
   deriveCards,
+  deriveClaimId,
   deriveFiredRules,
   deriveStatus,
   deriveVariant,
@@ -303,5 +304,28 @@ describe('the header', () => {
       'guardrail_failed',
     ])
     expect(deriveFiredRules(settledRows(), run)).toEqual([])
+  })
+})
+
+// The claim the run belongs to comes from the run's own record, so the page
+// names the right claim however it was reached (Dermot, 11 November 2026).
+describe('deriveClaimId', () => {
+  const started = event({ event_type: 'pipeline_started', claim_id: 'c-event' })
+  const run = { claim_id: 'c-run' } as Parameters<typeof deriveClaimId>[2]
+
+  it('reads the pipeline_started row first', () => {
+    expect(deriveClaimId(settledRows(), [started], run)).toBe('c1')
+  })
+
+  it('falls back to the live pipeline_started event, then the reconstructed run', () => {
+    expect(deriveClaimId([], [started], run)).toBe('c-event')
+    expect(deriveClaimId([], [], run)).toBe('c-run')
+  })
+
+  it('is undefined when nothing recorded names a claim', () => {
+    expect(deriveClaimId([], [], undefined)).toBeUndefined()
+    expect(deriveClaimId([], [event({ event_type: 'agent_started', agent: 'doc_parser' })])).toBe(
+      undefined,
+    )
   })
 })

@@ -3,7 +3,13 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { PipelineEvent } from '../api/types'
-import { ABORT_MESSAGE, abortedRows, guardrailFailureRows, settledRows } from '../test/runFixtures'
+import {
+  ABORT_MESSAGE,
+  abortedRows,
+  CLAIM,
+  guardrailFailureRows,
+  settledRows,
+} from '../test/runFixtures'
 import { renderWithProviders, stubFetch } from '../test/utils'
 
 // useRunStream uses an EventSource (a no-op stub in tests), so mock it to return
@@ -19,6 +25,17 @@ const ROUTE = '/claims/c1/runs/cid-1'
 // The Claims page's trigger navigates with `started` (Prompt 29).
 const STARTED_HERE = { pathname: ROUTE, state: { started: true } }
 
+// A fetch that answers nothing until `release` is called, then 404s every held
+// call: the backend waking from zero replicas, as the run page sees it.
+function holdFetch(): () => void {
+  let release = () => {}
+  const held = new Promise<Response>((resolve) => {
+    release = () => resolve(new Response('{"detail":"not found"}', { status: 404 }))
+  })
+  ;(globalThis as unknown as { fetch: unknown }).fetch = vi.fn(() => held)
+  return release
+}
+
 describe('RunDetailPage', () => {
   beforeEach(() => {
     streamState.events = []
@@ -32,6 +49,36 @@ describe('RunDetailPage', () => {
     expect(screen.getByText('Doc-Parser')).toBeInTheDocument()
     expect(screen.getAllByText('Waiting')).toHaveLength(4)
     expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+  })
+
+  it('says "Loading this run…" in place of the cards until the queries answer', async () => {
+    const release = holdFetch()
+    renderWithProviders(<App />, { route: STARTED_HERE })
+    expect(screen.getByTestId('run-loading')).toHaveTextContent('Loading this run…')
+    expect(screen.queryByText('Waiting')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+    release()
+    await waitFor(() => expect(screen.getByTestId('awaiting-hint')).toBeInTheDocument())
+    expect(screen.getAllByText('Waiting')).toHaveLength(4)
+    expect(screen.queryByTestId('run-loading')).not.toBeInTheDocument()
+  })
+
+  it('does not say "Run not found" while the queries are still in flight', async () => {
+    const release = holdFetch()
+    renderWithProviders(<App />, { route: ROUTE })
+    expect(screen.getByTestId('run-loading')).toBeInTheDocument()
+    expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+    release()
+    await waitFor(() => expect(screen.getByTestId('run-not-found')).toBeInTheDocument())
+    expect(screen.queryByTestId('run-loading')).not.toBeInTheDocument()
+  })
+
+  it('names the claim from the address for a run started here with nothing recorded yet', async () => {
+    stubFetch([['/api/claims/c1', CLAIM]])
+    renderWithProviders(<App />, { route: STARTED_HERE })
+    const link = await screen.findByRole('link', { name: 'Harborline Logistics Ltd' })
+    expect(link).toHaveAttribute('href', '/claims/c1')
   })
 
   it('says "Run not found" for an id opened from elsewhere that nothing has recorded', async () => {
@@ -151,6 +198,36 @@ describe('RunDetailPage after the event (audit rows, no live events)', () => {
     expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
     expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
     expect(screen.queryByTestId('fired-rules')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('run-loading')).not.toBeInTheDocument()
+  })
+
+  it('names the claim from the audit rows, not the address, linking back to the claim page', async () => {
+    const fetchMock = stubFetch([
+      ['/api/runs/', RUN],
+      ['/api/audit', settledRows()],
+      ['/api/claims/c1', CLAIM],
+    ])
+    renderWithProviders(<App />, { route: '/claims/c-address/runs/cid-1' })
+    const link = await screen.findByRole('link', { name: 'Harborline Logistics Ltd' })
+    expect(link).toHaveAttribute('href', '/claims/c1')
+    expect(screen.getByTestId('run-claim')).toHaveTextContent(
+      'Harborline Logistics Ltd · Water damage · $85,000 · claim CLM-2026-9BB57A86',
+    )
+    const requested = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(requested.some((url) => url.includes('/api/claims/c-address'))).toBe(false)
+  })
+
+  it('says so when the claim the rows name cannot be loaded', async () => {
+    stubFetch([
+      ['/api/runs/', RUN],
+      ['/api/audit', settledRows()],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(screen.getByTestId('run-claim')).toHaveTextContent(
+        'The claim this run belongs to could not be loaded.',
+      ),
+    )
   })
 
   it('renders an aborted run: the failed agent with its reason and message, the later agent not run', async () => {

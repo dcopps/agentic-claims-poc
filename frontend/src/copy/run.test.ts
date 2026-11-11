@@ -45,9 +45,22 @@ describe('run copy: the cards', () => {
       'Failed: the check itself raised an error, so the claim went to a person',
     )
     expect(runCopy.notFound).toBe('Run not found.')
+    expect(runCopy.loading).toBe('Loading this run…')
     expect(runCopy.aborted('the Adjuster raised ValueError')).toBe(
       'Run aborted: the Adjuster raised ValueError',
     )
+  })
+})
+
+describe('run copy: the claim line', () => {
+  it('gives the type, amount and claim number in plain words after the claimant’s name', () => {
+    expect(runCopy.claimDetails('water_damage', '85000.00', 'CLM-2026-9BB57A86')).toBe(
+      'Water damage · $85,000 · claim CLM-2026-9BB57A86',
+    )
+    expect(runCopy.claimDetails('smoke_damage', '29925.00', 'CLM-2026-56AF95EC')).toBe(
+      'Smoke damage · $29,925 · claim CLM-2026-56AF95EC',
+    )
+    expect(runCopy.claimUnavailable).toBe('The claim this run belongs to could not be loaded.')
   })
 })
 

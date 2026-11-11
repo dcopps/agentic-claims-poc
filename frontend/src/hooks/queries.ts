@@ -30,11 +30,14 @@ export function useClaims(): UseQueryResult<ClaimRecord[]> {
   return useQuery({ queryKey: ['claims'], queryFn: () => listClaims(), staleTime: FRESH })
 }
 
-export function useClaim(claimId: string): UseQueryResult<ClaimRecord> {
+// `enabled` lets the run page hold the fetch until it knows which claim the run
+// recorded, rather than asking for the address's claim id and correcting later.
+export function useClaim(claimId: string, enabled = true): UseQueryResult<ClaimRecord> {
   return useQuery({
     queryKey: ['claim', claimId],
     queryFn: () => getClaim(claimId),
     staleTime: FRESH,
+    enabled,
   })
 }
 
