@@ -20,6 +20,12 @@ export const tooltips = {
   verifyChain:
     'In production, the audit ledger is SQL Server with Ledger Tables; chain ' +
     'verification is a single `sys.sp_verify_database_ledger` call.',
+  // Beside "Refused objections" on the Guardrail card (Dermot's wording, 12
+  // November 2026): what the line is and why the objections did not count.
+  refusedObjections:
+    'The Guardrail’s model said these words cite policy wording that is not in the policy. ' +
+    'The code checked each one and found it does not name a policy provision, so the ' +
+    'objection did not count and is recorded here.',
 } as const
 
 export type TooltipKey = keyof typeof tooltips

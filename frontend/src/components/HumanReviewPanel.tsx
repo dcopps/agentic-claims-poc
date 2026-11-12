@@ -5,6 +5,7 @@ import { submitHumanDecision } from '../api/client'
 import type { AuditEntry, RunSummary } from '../api/types'
 import { useAuditEntries } from '../hooks/queries'
 import { Badge, Button, Card, Spinner } from './ui'
+import { WakingNotice } from './WakingNotice'
 
 // The human-review panel. Evidence is assembled from the latest run's *audit
 // entries* — `ValidatorVerdict.cited_chunks` carries chunk IDs without the clause
@@ -36,6 +37,7 @@ export function HumanReviewPanel({ claimId, runs }: { claimId: string; runs: Run
   return (
     <Card title="Human review">
       {audit.isLoading && <Spinner label="Loading evidence…" />}
+      <WakingNotice waiting={audit.isLoading} />
       {audit.data && <Evidence entries={audit.data} />}
       <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
         <input

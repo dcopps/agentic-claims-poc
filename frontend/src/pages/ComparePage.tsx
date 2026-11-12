@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { compareRuns } from '../api/client'
 import type { DiffSummary } from '../api/types'
 import { Card, Spinner } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 
 // Deep-linkable comparison view: the two correlation ids come from the URL, so a
 // specific comparison is shareable. The diff fields are highlighted.
@@ -14,7 +15,14 @@ export function ComparePage() {
     retry: false,
   })
 
-  if (compare.isLoading) return <Spinner />
+  if (compare.isLoading) {
+    return (
+      <div className="space-y-1">
+        <Spinner />
+        <WakingNotice waiting />
+      </div>
+    )
+  }
   if (compare.error || !compare.data)
     return <p className="text-red-600">Could not compare these runs.</p>
 
@@ -55,12 +63,8 @@ function DiffTable({ diff }: { diff: DiffSummary }) {
         <tr>
           <td className="py-1">Fired rules Δ</td>
           <td colSpan={2}>
-            <span className="text-green-700">
-              +{diff.fired_rules_added.join(', ') || '∅'}
-            </span>{' '}
-            <span className="text-red-700">
-              −{diff.fired_rules_removed.join(', ') || '∅'}
-            </span>
+            <span className="text-green-700">+{diff.fired_rules_added.join(', ') || '∅'}</span>{' '}
+            <span className="text-red-700">−{diff.fired_rules_removed.join(', ') || '∅'}</span>
           </td>
         </tr>
       </tbody>

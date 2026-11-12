@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -122,5 +122,35 @@ describe('ClaimsPage', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     )
+  })
+})
+
+// Prompt 29: the shared waking notice, seen here on the first page a visitor
+// opens. The fetch is held so the claims query waits past the threshold.
+describe('ClaimsPage while the server wakes', () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('says the server is waking after three seconds and not before', async () => {
+    let release = () => {}
+    const held = new Promise<Response>((resolve) => {
+      release = () =>
+        resolve(
+          new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        )
+    })
+    ;(globalThis as unknown as { fetch: unknown }).fetch = vi.fn(() => held)
+    renderWithProviders(<ClaimsPage />)
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    act(() => vi.advanceTimersByTime(2500))
+    expect(screen.queryByTestId('waking-notice')).not.toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(600))
+    expect(screen.getByTestId('waking-notice')).toHaveTextContent('Waking the server.')
+    release()
+    await waitFor(() => expect(screen.getByText(/no claims yet/i)).toBeInTheDocument())
+    expect(screen.queryByTestId('waking-notice')).not.toBeInTheDocument()
   })
 })

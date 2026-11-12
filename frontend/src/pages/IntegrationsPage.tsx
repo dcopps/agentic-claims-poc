@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { mcpEndpointUrl } from '../api/client'
 import type { McpCatalogue, McpTool, ToolCallRecord } from '../api/types'
 import { Badge, Card, CopyButton, ErrorBanner, Spinner } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { integrationsCopy } from '../copy/integrations'
 import { useMcpCatalogue } from '../hooks/queries'
 import { useMcpActivity } from '../hooks/useMcpActivity'
@@ -21,6 +22,7 @@ export function IntegrationsPage() {
       <p className="text-sm text-slate-600">{integrationsCopy.intro}</p>
 
       {catalogue.isLoading && <Spinner label="Loading the tool catalogue…" />}
+      <WakingNotice waiting={catalogue.isLoading} />
       {catalogue.error && (
         <ErrorBanner message={`Could not load the tool catalogue: ${catalogue.error.message}`} />
       )}

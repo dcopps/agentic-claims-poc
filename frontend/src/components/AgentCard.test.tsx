@@ -1,7 +1,8 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuditEntry } from '../api/types'
+import { tooltips } from '../copy/tooltips'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { AgentCard, type CardState } from './AgentCard'
 
@@ -207,6 +208,12 @@ describe('AgentCard refused objections', () => {
       '“inventory valuation and depreciation” — those words do not name a policy provision',
     )
     expect(line).not.toHaveTextContent('quote_not_a_provision')
+    // The ⓘ beside the heading explains the line in Dermot's words (12 November 2026).
+    fireEvent.focus(within(line).getByRole('button', { name: 'About refused objections' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent(tooltips.refusedObjections)
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      'The Guardrail’s model said these words cite policy wording that is not in the policy.',
+    )
   })
 
   it('shows nothing when the list is empty or absent', () => {

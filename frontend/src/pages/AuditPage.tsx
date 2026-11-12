@@ -4,6 +4,7 @@ import { verifyChain } from '../api/client'
 import type { AuditEntry, ChainVerification } from '../api/types'
 import { Tooltip } from '../components/Tooltip'
 import { Badge, Button, Card, JsonBlock, Spinner } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { tooltips } from '../copy/tooltips'
 import { useAuditEntries } from '../hooks/queries'
 
@@ -71,6 +72,7 @@ function AuditContent({ cid }: { cid: string }) {
       }
     >
       {audit.isLoading && <Spinner />}
+      <WakingNotice waiting={audit.isLoading} />
       {audit.error && <p className="text-sm text-red-600">No entries for this id.</p>}
       {audit.data && (
         <table className="w-full text-left text-sm" aria-label="Audit entries">
@@ -95,9 +97,7 @@ function AuditContent({ cid }: { cid: string }) {
 
 function VerifyResult({ result }: { result: ChainVerification }) {
   if (result.ok)
-    return (
-      <Badge tone="success">Chain verified · {result.rows_checked} rows (whole ledger)</Badge>
-    )
+    return <Badge tone="success">Chain verified · {result.rows_checked} rows (whole ledger)</Badge>
   return (
     <Badge tone="danger">
       Chain break at audit_id {result.first_break?.audit_id} ({result.first_break?.kind})

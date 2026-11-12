@@ -5,7 +5,9 @@ import { agentDescriptions } from '../copy/agent-descriptions'
 import { formatSeconds } from '../copy/format'
 import { refusalReason } from '../copy/labels'
 import { runCopy } from '../copy/run'
+import { tooltips } from '../copy/tooltips'
 import { useAgentPrompt } from '../hooks/queries'
+import { Tooltip } from './Tooltip'
 import { Badge, JsonBlock, Spinner } from './ui'
 
 // `escalated` is the Guardrail's own failed verdict (the run went to a person);
@@ -192,7 +194,9 @@ function RefusedObjectionsLine({ refused }: { refused: RefusedClaim[] }) {
   if (refused.length === 0) return null
   return (
     <p className="px-3 pb-2 text-xs text-amber-700" data-testid="refused-objections">
-      Refused objections ({refused.length}):{' '}
+      <Tooltip text={tooltips.refusedObjections} label="About refused objections">
+        <span>Refused objections ({refused.length}):</span>
+      </Tooltip>{' '}
       {refused
         .map((claim) => `“${claim.quote ?? 'no quote'}” — ${refusalReason(claim.reason)}`)
         .join('; ')}

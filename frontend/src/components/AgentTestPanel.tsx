@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { testAgent } from '../api/client'
 import { Button, Card, JsonBlock } from './ui'
+import { WakingNotice } from './WakingNotice'
 
 // One agent's test-bench panel. The request body is a JSON textarea (pre-filled
 // with a valid sample); submit posts to the agent's test endpoint and renders the
@@ -50,6 +51,7 @@ export function AgentTestPanel({
         <Button onClick={run} disabled={busy}>
           {busy ? 'Running…' : `Run ${label}`}
         </Button>
+        <WakingNotice waiting={busy} />
       </div>
       {result !== null && (
         <div className="mt-3">

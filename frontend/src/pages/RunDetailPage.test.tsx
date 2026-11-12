@@ -194,6 +194,8 @@ describe('RunDetailPage after the event (audit rows, no live events)', () => {
     expect(cardText('Adjuster')).toHaveTextContent('Recommends $82,500 (85% confident)')
     expect(cardText('Guardrail')).toHaveTextContent('Passed')
     expect(screen.getByTestId('run-variant')).toHaveTextContent('Standard run')
+    // The sentence is enough: the stored name is not shown (Dermot, 12 November 2026).
+    expect(screen.getByTestId('run-variant').parentElement).not.toHaveTextContent('default')
     expect(screen.getByText('Settled')).toBeInTheDocument()
     expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
     expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()

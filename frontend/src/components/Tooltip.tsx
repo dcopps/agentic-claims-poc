@@ -11,6 +11,10 @@ import {
 interface TooltipProps {
   text: string
   children: ReactNode
+  // What the ⓘ button is called for a screen reader. The default suits the
+  // action buttons it was written for; a tooltip on a line of text names the
+  // line instead (the Guardrail card's refused objections, Prompt 29).
+  label?: string
 }
 
 // The widest a tooltip grows before its text wraps (Prompt 28).
@@ -31,7 +35,7 @@ const GAP_PX = 4
 // measures itself before paint: if it would pass the right edge of the viewport
 // it anchors to the group's right edge instead, and if it would pass the bottom
 // it opens above. So it never leaves the visible page.
-export function Tooltip({ text, children }: TooltipProps) {
+export function Tooltip({ text, children, label = 'About this action' }: TooltipProps) {
   const [open, setOpen] = useState(false)
   const tip = useRef<HTMLSpanElement>(null)
   const id = useId()
@@ -57,7 +61,7 @@ export function Tooltip({ text, children }: TooltipProps) {
       {described}
       <button
         type="button"
-        aria-label="About this action"
+        aria-label={label}
         className="rounded text-xs text-slate-400 hover:text-slate-600 focus:text-slate-600 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-400"
       >
         ⓘ

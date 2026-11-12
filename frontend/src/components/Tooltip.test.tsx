@@ -36,6 +36,16 @@ describe('Tooltip', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
+  it('names its button as the caller asks, for a tooltip on a line of text', () => {
+    render(
+      <Tooltip text="Why these did not count." label="About refused objections">
+        <span>Refused objections (1):</span>
+      </Tooltip>,
+    )
+    expect(screen.getByRole('button', { name: 'About refused objections' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'About this action' })).not.toBeInTheDocument()
+  })
+
   it('appears on keyboard focus and goes when focus leaves', async () => {
     const user = userEvent.setup()
     render(

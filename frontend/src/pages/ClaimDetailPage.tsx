@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import type { RunSummary } from '../api/types'
 import { HumanReviewPanel } from '../components/HumanReviewPanel'
 import { Button, Card, Spinner, StatusBadge } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { useClaim, useClaimRuns } from '../hooks/queries'
 
 export function ClaimDetailPage() {
@@ -10,7 +11,14 @@ export function ClaimDetailPage() {
   const claim = useClaim(claimId)
   const runs = useClaimRuns(claimId)
 
-  if (claim.isLoading) return <Spinner />
+  if (claim.isLoading) {
+    return (
+      <div className="space-y-1">
+        <Spinner />
+        <WakingNotice waiting />
+      </div>
+    )
+  }
   if (claim.error || !claim.data) return <p className="text-red-600">Claim not found.</p>
 
   return (
@@ -37,12 +45,11 @@ export function ClaimDetailPage() {
 
       <Card title="Runs">
         {runs.isLoading && <Spinner />}
+        <WakingNotice waiting={runs.isLoading} />
         {runs.data && runs.data.length === 0 && (
           <p className="text-sm text-slate-500">No runs yet — process this claim.</p>
         )}
-        {runs.data && runs.data.length > 0 && (
-          <RunsList claimId={claimId} runs={runs.data} />
-        )}
+        {runs.data && runs.data.length > 0 && <RunsList claimId={claimId} runs={runs.data} />}
       </Card>
     </div>
   )

@@ -7,6 +7,7 @@ import { Tooltip } from '../components/Tooltip'
 import { formatDateTime, formatUsd } from '../copy/format'
 import { claimTypeLabel, statusLabel } from '../copy/labels'
 import { Button, Card, Spinner, StatusBadge } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { guideCopy } from '../copy/guide'
 import { tooltips } from '../copy/tooltips'
 import { useClaims } from '../hooks/queries'
@@ -56,6 +57,7 @@ export function ClaimsPage() {
       </Card>
       <Card title="Claims">
         {isLoading && <Spinner />}
+        <WakingNotice waiting={isLoading} />
         {error && <p className="text-sm text-red-600">Failed to load claims.</p>}
         {claims && claims.length === 0 && (
           <p className="text-sm text-slate-500">No claims yet — submit one above.</p>

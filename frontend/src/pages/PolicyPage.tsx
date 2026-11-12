@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { PolicyPassage, PolicySection } from '../api/types'
 import { Card, CopyButton, ErrorBanner, Spinner } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { policyCopy } from '../copy/policy'
 import { usePolicy } from '../hooks/queries'
 import { typography } from '../styles/tokens'
@@ -27,6 +28,7 @@ export function PolicyPage() {
       </Card>
 
       {policy.isLoading && <Spinner label="Loading the policy…" />}
+      <WakingNotice waiting={policy.isLoading} />
       {policy.error && <ErrorBanner message={policyCopy.loadFailed} />}
 
       {policy.data && policy.data.passage_count === 0 && (

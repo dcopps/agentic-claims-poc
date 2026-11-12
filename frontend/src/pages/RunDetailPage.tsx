@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import type { AuditEntry, FiredRule } from '../api/types'
 import { AgentCard, type CardState } from '../components/AgentCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
+import { WakingNotice } from '../components/WakingNotice'
 import { integrationsCopy } from '../copy/integrations'
 import { statusLabel, variantLabel } from '../copy/labels'
 import { failureReason, ruleLine, runCopy } from '../copy/run'
@@ -61,9 +62,12 @@ export function RunDetailPage() {
         notFound={silent && !startedHere && run.isError && audit.isError}
       />
       {loading ? (
-        <p className="text-sm text-slate-500" role="status" data-testid="run-loading">
-          {runCopy.loading}
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-slate-500" role="status" data-testid="run-loading">
+            {runCopy.loading}
+          </p>
+          <WakingNotice waiting />
+        </div>
       ) : (
         <AgentCards cards={deriveCards(rows, events)} rows={rows} variant={variant} />
       )}
@@ -152,16 +156,15 @@ interface RunHeaderProps {
 }
 
 // Whose claim this is, the outcome badge in plain words, the variant as a
-// sentence with its stored name beside it, the copyable id with its links, and
-// the fired escalation rules when the run went to a person.
+// sentence (the stored name is in the audit trail, not here), the copyable id
+// with its links, and the fired escalation rules when the run went to a person.
 function RunHeader({ correlationId, claimId, variant, status, rules }: RunHeaderProps) {
   return (
     <Card title="Pipeline run">
       <div className="space-y-2 text-sm text-slate-500">
         <ClaimLine claimId={claimId} />
         <p>
-          <span data-testid="run-variant">{variantLabel(variant)}</span>{' '}
-          <span className="font-mono text-xs text-slate-400">{variant}</span>
+          <span data-testid="run-variant">{variantLabel(variant)}</span>
           {status && (
             <>
               {' · '}
