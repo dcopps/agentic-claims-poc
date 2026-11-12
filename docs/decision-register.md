@@ -559,3 +559,25 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 **Status.** Resolved. Both incidents are also recorded in the build log and the Prompt 28 report.
 
 *Technical detail:* commits `0b3d830` (red) and `6291f43` (fix), 10 November 2026; `frontend/src/components/Tooltip.tsx` (`place()`, called from `useLayoutEffect`); the ESLint rules `react-hooks/set-state-in-effect` and `react-refresh/only-export-components`; report `28-claims-page-polish-report.md`; build log, entry *Prompt 28*; `CLAUDE.md`, *Standing Instructions*, *Commit protocol*.
+
+### R-23 — Prompt 29's decision at the gate: the run page first, the re-run rules as their own prompt, and the queue reordered
+
+**TL;DR:** The run-page prompt asked for three things: a run that reads the same live and afterwards, cards in plain words, and rules for when a claim may be run again. The first two change only what the page shows; the third changes what the system refuses, which is a different kind of change with its own approvals. At the gate Dermot kept the two together and moved the third to its own prompt. The same day the order of the next prompts changed, so the claim page comes next and the re-run rules after it. Wednesday 11 November 2026.
+
+**Technologies:** the plan-first process itself; the run page (React).
+
+**Date and phase.** 11 November 2026, Prompt 29 (the run page), at the plan's approval gate.
+
+**What happened.** The plan set out Parts 1 and 2 (presentation only) and Part 3 (two interface changes: a refusal from the pipeline endpoints after a person has decided a claim, and a new field on the claim record) and asked, as its first decision, whether Part 3 should be its own prompt. Dermot approved D1 to D6 as recommended, made Part 3 its own prompt with D7 and D8 waiting for it, and asked for one wording change: a confidence shown as a percentage in brackets. On the same day, with Parts 1 and 2 live, Dermot saved the claim-page prompt as Prompt 30 and made the re-run rules Prompt 31.
+
+**Why it mattered.** A presentation change can be verified by reading the page; a refusal in the API needs its own plan, its own tests on the backend, and a decision on how the MCP tool answers. Shipping them together would have held the fixes a visitor sees behind the one part that needs more care, and would have put an interface-stability event into a point release.
+
+**What was decided, and by whom.** Dermot, at the gate, in writing: "Approved: D1 to D6 as recommended, with Part 3 as its own prompt; D7 and D8 wait for it." And at the second fix round: "the order of the next prompts has changed. Prompt 30 is the claim page … the re-run rules deferred from this prompt become Prompt 31."
+
+**What was done.** Parts 1 and 2 and the Guide built and deployed as `0.10.1.2`; five further changes at Dermot's request before the close-out, each with tests and no version change. Plan §4 (Part 3) stands as the starting point for Prompt 31. The backlog's run-page items are marked done except *Process can be pressed repeatedly on the same claim*, which carries the Prompt 31 label.
+
+**How it was proven.** Verified on the Azure frontend on 11 and 12 November: the five recorded runs and the not-found case read as designed, the loading line and the waking notice seen on a cold start. The plan's two live checks (a settlement reloaded, an abort watched) were not run in this prompt and are recorded as outstanding in the report.
+
+**Status.** Resolved for Prompt 29; the deferred part is open as Prompt 31.
+
+*Technical detail:* plan `29-run-page-plan.md` §4 and §10 (D1, D7, D8) with its *Approval* footer; report `29-run-page-report.md`; commits `2a1aa32` (prompt and approved plan), `3394ca6` (the build), `d2335d7` and `4ea4b6d` (the fix rounds); `docs/prompts/30-claim-page.md`; `docs/BACKLOG.md` *Phase 8.7*.

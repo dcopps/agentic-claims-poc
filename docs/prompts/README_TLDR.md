@@ -114,3 +114,7 @@ Every coverage decision in the system rests on the policy wording, but a visitor
 
 The repository's About link sends a visitor straight to the Claims page, and until this prompt that page showed the system's insides: amounts as `850000.00`, claim types and statuses as the database spells them, a form whose field names vanished as soon as they were filled, no date on any row, and a second button called "Re-process with v2". This prompt changed only what the page shows, not what the system stores or does. It also gave the application its name, *Agentic Insurance Claims Processor*, in the menu and the browser tab — finished on Tuesday 10 November 2026.
 
+### [29 — Prompt 29: the run page reads the audit trail, so a run looks the same live and afterwards](README.md#entry-29)
+
+The run page is where a visitor watches the four agents work on a claim. Until this prompt it only knew what it had seen happen: open an old run and every agent showed as *queued* under a header that said *settled*, and if a run broke, the agent that broke stayed *running* for ever. Now the page reads the audit trail first and watches the live feed only for what the trail has not yet recorded, so a run reads the same the moment it happens and a week later. The cards speak in plain words, the header names the claim and the rules that sent it to a person, and every page now explains the half-minute wait while the server wakes — finished on Thursday 12 November 2026.
+
