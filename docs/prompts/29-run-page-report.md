@@ -54,6 +54,12 @@ Backend **527 passed, 0 failed, 18 skipped** (unchanged; nothing under `backend/
 
 None. No HTTP or SSE shape, stored value, database column or setting changed; `PipelineResult` in `api/types.ts` only names two fields the API has returned since Phase 4. No new dependency.
 
+## Addendum (13 November 2026)
+
+- **Plan §7 step 3 is done.** On 12 November Dermot ran a new Harborline claim live on the Azure frontend (run `0eb6b1cc`: settled at $82,500, one objection refused by the Guardrail's code check) and reopened it from its claim page; the reloaded page read as designed. **Step 4, the live abort, remains open** for the next run of an unsupported-type claim on Azure.
+- **The waking notice is no longer on the Agents test bench** (Dermot, 13 November): a warm model call there often takes more than three seconds, so the notice would have said the server was waking when it was not. The finding above that describes the bench records the state at 12 November. The notice stays on every page that loads data.
+- **The hint under the header now reads "Waiting for the run to begin…"** (the suggestion below, taken up), and lives in `copy/run.ts` as `runCopy.awaiting` with the other sentences; `run.test.ts` asserts the text and the page test asserts it is rendered. Frontend 148 passed (two existing tests extended, none added); tsc, ESLint and Prettier clean on the touched files.
+
 ## Suggestions (not in scope)
 
 - The Guide's *Reading a run page* could name the claim line and the waking notice in one sentence each.

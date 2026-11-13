@@ -46,6 +46,7 @@ describe('run copy: the cards', () => {
     )
     expect(runCopy.notFound).toBe('Run not found.')
     expect(runCopy.loading).toBe('Loading this run…')
+    expect(runCopy.awaiting).toBe('Waiting for the run to begin…')
     expect(runCopy.aborted('the Adjuster raised ValueError')).toBe(
       'Run aborted: the Adjuster raised ValueError',
     )

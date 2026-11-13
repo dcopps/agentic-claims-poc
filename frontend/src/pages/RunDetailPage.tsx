@@ -135,7 +135,7 @@ function RunNotices({ runError, abort, awaiting, notFound }: RunNoticesProps) {
       )}
       {awaiting && (
         <p className="text-sm text-slate-500" data-testid="awaiting-hint">
-          Awaiting pipeline_started…
+          {runCopy.awaiting}
         </p>
       )}
       {notFound && (

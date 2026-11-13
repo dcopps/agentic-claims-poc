@@ -46,6 +46,7 @@ describe('RunDetailPage', () => {
   it('renders waiting cards and an awaiting hint for a run started here with no data yet', async () => {
     renderWithProviders(<App />, { route: STARTED_HERE })
     await waitFor(() => expect(screen.getByTestId('awaiting-hint')).toBeInTheDocument())
+    expect(screen.getByTestId('awaiting-hint')).toHaveTextContent('Waiting for the run to begin…')
     expect(screen.getByText('Doc-Parser')).toBeInTheDocument()
     expect(screen.getAllByText('Waiting')).toHaveLength(4)
     expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()

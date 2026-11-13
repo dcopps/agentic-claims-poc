@@ -31,6 +31,9 @@ export const runCopy = {
   failed: (reason: string) => `Failed: ${reason}`,
   guardrailThrew: 'Failed: the check itself raised an error, so the claim went to a person',
   notFound: 'Run not found.',
+  // Under the header while a run started from the Claims page has not yet
+  // sent its first event.
+  awaiting: 'Waiting for the run to begin…',
   // Shown in place of the cards while the run and audit queries are in flight.
   // Azure wakes from zero replicas in about half a minute; four cards reading
   // "Waiting" for that long would look like the fault Prompt 29 fixed.
