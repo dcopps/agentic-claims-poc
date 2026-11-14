@@ -118,3 +118,7 @@ The repository's About link sends a visitor straight to the Claims page, and unt
 
 The run page is where a visitor watches the four agents work on a claim. Until this prompt it only knew what it had seen happen: open an old run and every agent showed as *queued* under a header that said *settled*, and if a run broke, the agent that broke stayed *running* for ever. Now the page reads the audit trail first and watches the live feed only for what the trail has not yet recorded, so a run reads the same the moment it happens and a week later. The cards speak in plain words, the header names the claim and the rules that sent it to a person, and every page now explains the half-minute wait while the server wakes — finished on Thursday 12 November 2026.
 
+### [30 — Prompt 30: the claim page in plain words, and what a person decided](README.md#entry-30)
+
+The claim page sits between the list of claims and the page for a single run, and it was the last screen on that path still showing what the database stores: a type like `smoke_damage`, an amount like `29925.00`, runs listed by an internal name with no time. Now it shows the claim in words, lists each run by when it started with its outcome, and when a claim went to a person it leads with why. Once a person has decided, the page says who decided, what, when and their comment, read from the audit trail, and so does the run it was decided on. A claim a person rejected now reads *Rejected*, not *Aborted*. Finished on Saturday 14 November 2026.
+

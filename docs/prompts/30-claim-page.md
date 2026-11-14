@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-30), entry 30.*
+
 # Prompt 30 — The claim page and the human review panel
 
 ## Why this prompt exists

@@ -581,3 +581,47 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 **Status.** Resolved for Prompt 29; the deferred part is open as Prompt 31.
 
 *Technical detail:* plan `29-run-page-plan.md` §4 and §10 (D1, D7, D8) with its *Approval* footer; report `29-run-page-report.md`; commits `2a1aa32` (prompt and approved plan), `3394ca6` (the build), `d2335d7` and `4ea4b6d` (the fix rounds); `docs/prompts/30-claim-page.md`; `docs/BACKLOG.md` *Phase 8.7*.
+
+### R-24 — Prompt 30's decision at the gate: a claim a person has rejected reads *Rejected*, not *Aborted*
+
+**TL;DR:** The system stores the same word, "aborted", for two different things: a run that broke because an agent failed, and a claim that a person rejected after review. The plan proposed keeping the stored word on the claim page so the page and the Claims list would agree. Dermot ruled instead that a claim only ever reaches that state through a person's rejection, so wherever a claim's status is shown the word is *Rejected*, while a run that broke still reads *Aborted*. The label that served both was split in two. Saturday 14 November 2026.
+
+**Technologies:** the plan-first process itself; the claim page and the Claims list (React).
+
+**Date and phase.** 14 November 2026, Prompt 30 (the claim page and the human review panel), at the plan's approval gate.
+
+**What happened.** The plan's fourth decision asked whether a rejected claim's badge should stay *Aborted*, the stored value's label as the Claims list showed it, with the new Decision card beside it saying a person rejected the claim; the recommendation was to keep *Aborted* so the two pages agreed. Dermot approved the other six decisions as recommended, corrected a date in the record (the plan's seventh decision: the live Harborline run of Prompt 29 was on 11 November, not 12), and changed the fourth: a claim is stored "aborted" by one path only, a person's rejection, so a claim's status reads *Rejected* on both pages, a run's status keeps *Aborted*, and the sentence under the *Reject* button reads "Reject marks the claim Rejected; no settlement is made."
+
+**Why it mattered.** A visitor reading *Aborted* on a claim would take it for a failure of the system, when it records a person's judgement. The word on the badge is the one thing a visitor reads without opening anything. Keeping one label function for both a claim and a run had hidden the fact that the same stored word means two different things.
+
+**What was decided, and by whom.** Dermot, at the gate, in writing: "a claim's stored status 'aborted' only ever comes from a person's rejection, so label it 'Rejected' wherever a claim's status is shown (the Claims list and the claim page), keeping 'Aborted' for a run's status; add a claim-status label separate from the run-status label if they share one today."
+
+**What was done.** The one label function became two, one for a claim's status and one for a run's; every page that shows a status was moved to the right one; the stored value and the badge's colour are unchanged. Tests cover the Claims list, the claim page and the label maps. The three date corrections were made in the Prompt 29 report, the build log and the project's status file.
+
+**How it was proven.** The frontend's tests (189 at the build, 195 at the close) include one that a claim stored "aborted" shows *Rejected* and never *Aborted* on the Claims list, and one for the claim page's badge. Read on the Azure frontend on 14 November: the rejected claim of 26 October shows *Rejected* with its Decision card; a background claim whose run broke shows the run as *Aborted at the Adjuster*.
+
+**Status.** Resolved.
+
+*Technical detail:* plan `30-claim-page-plan.md` §9 (D4, D7) and its *Approval* footer; `frontend/src/copy/labels.ts` (`claimStatusLabel`, `runStatusLabel`); report `30-claim-page-report.md`; commits `2c669d3` (the approval) and `9915ac7` (the build).
+
+### R-25 — Prompt 30's verification approved an existing claim, not a fresh one as the plan asked
+
+**TL;DR:** The plan's verification asked for a new claim to be submitted, processed and approved on the deployed system, so that the first approval on record would not touch any run the project's documents already cite. Dermot instead approved the existing Northwood claim, whose run is cited in the Phase 10 verification and in several reports. The run itself and its seven audit rows are unchanged; one approval row was added after them, and the claim now reads *Settled*. The deviation is recorded here and noted wherever that run is described. Saturday 14 November 2026.
+
+**Technologies:** the human review panel (React); the audit trail (PostgreSQL) on the Azure installation.
+
+**Date and phase.** 14 November 2026, Prompt 30, the deployed verification (plan §6, step 4).
+
+**What happened.** Step 4 of the verification read: "a new Northwood claim submitted from the Claims page and processed (not a run the register or the build log names), approved in the panel with a name and a comment." The prompt's constraints said the same: "Choose a scenario claim created for the purpose in that session, not one of the runs the decision register or the build log names." On 14 November Dermot opened the existing Northwood claim `CLM-2026-2FFB0434`, whose run `67bdf225` is the ceiling-escalation run of the Phase 10 verification of 4 November, and approved it in the panel as "Dermot Copps" with the comment "Testing approved claim via Human Review". The audit trail shows the run's seven rows of 4 November unchanged (rows 99 to 105) and one `human_approval` row (185) written at 17:25 UTC on 14 November; the claim's status is `settled`.
+
+**Why it mattered.** The constraint existed so that the runs the documents cite would stay exactly as described. The approval does not alter the run: the audit chain is append-only, the human row sits after the run's rows under the same reference, and the run's own status stays *awaiting human review* as the system records it. What changed is the claim's status and what the pages now say about it: the claim reads *Settled* with a Decision card, and since this prompt's additions the run page reads *Approved* with the decision under its header. Every document that describes `67bdf225` as awaiting a person describes the state on 4 November; this entry and a note beside each such description keep the record straight.
+
+**What was decided, and by whom.** Dermot, on 14 November, in writing: "For the record: on 14 November Dermot approved the existing Northwood claim CLM-2026-2FFB0434 (run 67bdf225, the Phase 10 verification run of 4 November), not a fresh claim as plan step 4 asked. The run and its audit rows are unchanged; the approval row was added after them and the claim now reads Settled. Say so in the report and the build-log entry, with a decision-register entry for the deviation, and note it wherever CLAUDE.md describes that run."
+
+**What was done.** The report and the build-log entry for Prompt 30 record the approval as made; the project's status file notes it beside each description of the run; this entry records the deviation. Nothing in the database was altered or removed.
+
+**How it was proven.** The claim, its run list and its audit rows were read from the Azure backend on 14 November (read-only): eight rows under the run, the first seven dated 4 November, the eighth the approval; the claim `settled`, updated at 17:25:49 UTC. The claim page, the Claims list and the run page were then read on the Azure frontend after the additions deployed.
+
+**Status.** Resolved; the record is annotated. The plan's step as written (a fresh claim approved) was not performed and is not outstanding: the Decision card's appearance without a reload is covered by a test, and the approval made exercised the same path.
+
+*Technical detail:* plan `30-claim-page-plan.md` §6 step 4 and the prompt's *Constraints*; report `30-claim-page-report.md` (*Deployed verification* and *Findings*); Azure claim `2ffb0434-bf3f-4019-ab76-69c0d289270a`, run `67bdf225-0ca4-4669-b6d0-c8f7f42ea619`, audit rows 99–105 and 185; `CLAUDE.md` *Current Status* (Prompt 29 §7 steps 1 and 2; the Phase 10 connector verification).

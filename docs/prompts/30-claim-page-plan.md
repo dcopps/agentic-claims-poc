@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-30), entry 30.*
+
 # Prompt 30 — Plan: the claim page and the human review panel
 
 **Prompt:** `30-claim-page.md`. **Scope:** the claim page (Parts 1 and 2), the human review panel (Part 3) and the Guide's sentences about them. Presentation only. **Written:** 13 November 2026. **Status:** approved 14 November 2026 (see *Approval*).
