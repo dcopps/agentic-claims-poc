@@ -9,7 +9,7 @@
 // rows without a browser or a stream.
 import type { AuditEntry, FiredRule, PipelineEvent, PipelineResult } from '../api/types'
 import type { CardState } from '../components/AgentCard'
-import { readableFallback, statusLabel } from '../copy/labels'
+import { readableFallback, runStatusLabel } from '../copy/labels'
 import { failureReason, runCopy } from '../copy/run'
 
 // The four agents in pipeline order, with their SSE name, display label, and the
@@ -233,7 +233,7 @@ function describeRow(
     case 'guardrail':
       return describeGuardrailRow(payload, output)
     default:
-      return { status: 'done', summary: statusLabel('done') }
+      return { status: 'done', summary: runStatusLabel('done') }
   }
 }
 
@@ -273,7 +273,7 @@ function cardFromEvents(agent: Agent, events: PipelineEvent[]): CardState {
     }
   }
   if (mine.some((e) => e.event_type === 'agent_started')) {
-    return { status: 'running', summary: statusLabel('running') }
+    return { status: 'running', summary: runStatusLabel('running') }
   }
   return { status: 'queued', summary: runCopy.waiting }
 }
@@ -289,7 +289,7 @@ function summaryFromEvent(key: string, summary: Payload): string {
     case 'guardrail':
       return summary.passed === false ? runCopy.guardrailFailed([]) : runCopy.guardrailPassed(0)
     default:
-      return statusLabel('done')
+      return runStatusLabel('done')
   }
 }
 

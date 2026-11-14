@@ -56,7 +56,7 @@ None. No HTTP or SSE shape, stored value, database column or setting changed; `P
 
 ## Addendum (13 November 2026)
 
-- **Plan §7 step 3 is done.** On 12 November Dermot ran a new Harborline claim live on the Azure frontend (run `0eb6b1cc`: settled at $82,500, one objection refused by the Guardrail's code check) and reopened it from its claim page; the reloaded page read as designed. **Step 4, the live abort, remains open** for the next run of an unsupported-type claim on Azure.
+- **Plan §7 step 3 is done.** On 11 November Dermot ran a new Harborline claim live on the Azure frontend (run `0eb6b1cc`, started 10:27 UTC: settled at $82,500, one objection refused by the Guardrail's code check) and reopened it from its claim page; the reloaded page read as designed. (First written as 12 November from memory; corrected to the audit trail's date on 14 November, Prompt 30 plan D7.) **Step 4, the live abort, remains open** for the next run of an unsupported-type claim on Azure.
 - **The waking notice is no longer on the Agents test bench** (Dermot, 13 November): a warm model call there often takes more than three seconds, so the notice would have said the server was waking when it was not. The finding above that describes the bench records the state at 12 November. The notice stays on every page that loads data.
 - **The hint under the header now reads "Waiting for the run to begin…"** (the suggestion below, taken up), and lives in `copy/run.ts` as `runCopy.awaiting` with the other sentences; `run.test.ts` asserts the text and the page test asserts it is rendered. Frontend 148 passed (two existing tests extended, none added); tsc, ESLint and Prettier clean on the touched files.
 

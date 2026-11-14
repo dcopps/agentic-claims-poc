@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatPercent, formatSeconds, formatUsd } from './format'
+import { formatDate, formatDateTime, formatPercent, formatSeconds, formatUsd } from './format'
 
 describe('formatUsd', () => {
   it('shows whole dollars without cents', () => {
@@ -31,6 +31,26 @@ describe('formatDateTime', () => {
 
   it('returns the raw string when it does not parse', () => {
     expect(formatDateTime('not a date', fixed)).toBe('not a date')
+  })
+})
+
+// Prompt 30: the loss and reported dates are calendar dates.
+describe('formatDate', () => {
+  it('gives a short date with no time', () => {
+    expect(formatDate('2026-02-10', { locale: 'en-GB' })).toBe('10 Feb 2026')
+    expect(formatDate('2026-11-01', { locale: 'en-US' })).toBe('Nov 1, 2026')
+  })
+
+  it('does not shift the day with the zone, which formatDateTime would', () => {
+    // The hazard: "2026-02-10" is midnight UTC, the evening of the 9th in New York.
+    expect(
+      formatDateTime('2026-02-10', { locale: 'en-GB', timeZone: 'America/New_York' }),
+    ).toContain('9 Feb 2026')
+    expect(formatDate('2026-02-10', { locale: 'en-GB' })).toBe('10 Feb 2026')
+  })
+
+  it('returns the raw string when it does not parse', () => {
+    expect(formatDate('yesterday', { locale: 'en-GB' })).toBe('yesterday')
   })
 })
 

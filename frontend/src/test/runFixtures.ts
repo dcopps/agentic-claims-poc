@@ -4,7 +4,7 @@
 // Coral Bay Guardrail failure e9566e92, the smoke_damage abort 0aca331d, and the
 // fail-closed path from the orchestrator's `_finalise_guardrail_throw`. Payloads
 // carry only the keys the page reads plus what identifies the row.
-import type { AuditEntry, ClaimRecord } from '../api/types'
+import type { AuditEntry, ClaimRecord, RunStatus, RunSummary } from '../api/types'
 
 const START = Date.parse('2026-11-10T16:20:00.000Z')
 
@@ -262,4 +262,72 @@ export function guardrailThrewRows(): AuditEntry[] {
       afterMs: STEP_MS.terminal,
     },
   ])
+}
+
+// --- Prompt 30: the claim page ---------------------------------------------------
+
+function summary(
+  correlationId: string,
+  status: RunStatus,
+  startedAt: string,
+  variant = 'default',
+): RunSummary {
+  const finished = status !== 'running'
+  return {
+    correlation_id: correlationId,
+    variant,
+    status,
+    started_at: startedAt,
+    completed_at: finished ? startedAt : null,
+    escalate: status === 'awaiting_human' ? true : finished ? false : null,
+  }
+}
+
+/** Harborline's three settled runs of 10 November 2026, newest first as the API orders them. */
+export const RUN_SUMMARIES: RunSummary[] = [
+  summary('f8d3cc84-0000-4000-8000-000000000001', 'settled', '2026-11-10T17:24:00.000Z'),
+  summary('432cbc91-0000-4000-8000-000000000002', 'settled', '2026-11-10T17:19:00.000Z'),
+  summary('f368c2c5-0000-4000-8000-000000000003', 'settled', '2026-11-10T16:20:00.000Z'),
+]
+
+/** One run that broke at the Adjuster (Background Claimant 04). */
+export const ABORTED_SUMMARY = summary(
+  '0aca331d-0000-4000-8000-000000000004',
+  'aborted',
+  '2026-11-10T15:30:00.000Z',
+)
+
+/** Northwood's run, awaiting a person. */
+export const AWAITING_SUMMARY = summary(
+  '67bdf225-0000-4000-8000-000000000005',
+  'awaiting_human',
+  '2026-11-04T11:08:00.000Z',
+)
+
+/** A run with no terminal row yet. */
+export const RUNNING_SUMMARY = summary(
+  'aaaaaaaa-0000-4000-8000-000000000006',
+  'running',
+  '2026-11-13T09:00:00.000Z',
+)
+
+export const DECIDED_AT = '2026-11-10T18:50:06.000Z'
+
+/** Northwood's rows, then the human row api/human.py writes under the same run. */
+export function decisionRows(
+  decision: 'approved' | 'rejected',
+  comment: string | null = 'Test rejection',
+): AuditEntry[] {
+  const rows = ceilingRows()
+  return [
+    ...rows,
+    {
+      audit_id: rows.length + 1,
+      agent: 'human',
+      step: decision === 'approved' ? 'human_approval' : 'human_rejection',
+      created_at: DECIDED_AT,
+      payload: { decision, decided_by: 'Dermot', comment, decided_at: DECIDED_AT },
+      chain_hash: `hash-${rows.length + 1}`,
+    },
+  ]
 }

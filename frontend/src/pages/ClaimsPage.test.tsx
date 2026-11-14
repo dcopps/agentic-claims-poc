@@ -70,6 +70,16 @@ describe('ClaimsPage', () => {
     expect(screen.getByRole('columnheader', { name: 'Submitted' })).toBeInTheDocument()
   })
 
+  // Prompt 30 (D4): a claim's stored `aborted` is a person's rejection.
+  it('labels a rejected claim Rejected, never Aborted', async () => {
+    stubFetch([['/api/claims', [{ ...CLAIM, status: 'aborted' }]]])
+    renderWithProviders(<ClaimsPage />)
+    await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
+    const row = screen.getByText('Acme Logistics Ltd').closest('tr') as HTMLElement
+    expect(within(row).getByText('Rejected')).toHaveClass('bg-red-100')
+    expect(row).not.toHaveTextContent('Aborted')
+  })
+
   it('names the second action and says why it is disabled before a finished run', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ClaimsPage />)

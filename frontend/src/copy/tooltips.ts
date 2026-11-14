@@ -17,6 +17,13 @@ export const tooltips = {
     'deployment pipeline would trigger it.',
   // Prefixed to strictRerun while the button is disabled.
   disabledNoFinishedRun: 'Not yet available: this claim has no finished run. ',
+  // The claim page's Compare selected button (Prompt 30).
+  compareSelected:
+    'Opens the two runs side by side: the settlement, whether each went to a person, the ' +
+    'Guardrail’s verdict and the rules that differed. In production the same comparison would ' +
+    'be run before a model is promoted.',
+  // Prefixed to compareSelected while fewer or more than two runs are ticked.
+  disabledCompareNeedsTwo: 'Not yet available: tick exactly two runs. ',
   verifyChain:
     'In production, the audit ledger is SQL Server with Ledger Tables; chain ' +
     'verification is a single `sys.sp_verify_database_ledger` call.',

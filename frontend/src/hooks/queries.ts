@@ -58,12 +58,18 @@ export function useRun(correlationId: string): UseQueryResult<PipelineResult> {
   })
 }
 
-export function useAuditEntries(correlationId: string): UseQueryResult<AuditEntry[]> {
+// `enabled` lets the claim page hold the fetch until the runs list names a
+// latest run (Prompt 30), so a claim never run costs no audit request.
+export function useAuditEntries(
+  correlationId: string,
+  enabled = true,
+): UseQueryResult<AuditEntry[]> {
   return useQuery({
     queryKey: ['audit', correlationId],
     queryFn: () => listAuditEntries(correlationId),
     staleTime: 0,
     retry: false,
+    enabled,
   })
 }
 

@@ -27,6 +27,13 @@ describe('tooltips', () => {
     )
   })
 
+  // Prompt 30: the claim page's compare button.
+  it('explain Compare selected and why it is disabled', () => {
+    expect(tooltips.compareSelected).toMatch(/^Opens the two runs side by side/)
+    expect(tooltips.compareSelected).toContain('before a model is promoted')
+    expect(tooltips.disabledCompareNeedsTwo).toBe('Not yet available: tick exactly two runs. ')
+  })
+
   it('explain the disabled second action', () => {
     expect(tooltips.disabledNoFinishedRun).toBe(
       'Not yet available: this claim has no finished run. ',

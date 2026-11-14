@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  claimStatusLabel,
   claimTypeLabel,
   guardrailFinding,
   readableFallback,
   refusalReason,
-  statusLabel,
+  runStatusLabel,
   variantLabel,
 } from './labels'
 
@@ -39,7 +40,9 @@ describe('labels', () => {
     ])
   })
 
-  it('maps every claim status and the run status', () => {
+  // Prompt 30 (D4): a claim is stored `aborted` only by a person's rejection,
+  // so the claim's word is Rejected; a run's `aborted` means an agent broke.
+  it('maps every claim status, reading a stored aborted claim as Rejected', () => {
     expect(
       [
         'received',
@@ -50,8 +53,7 @@ describe('labels', () => {
         'settled',
         'awaiting_human',
         'aborted',
-        'running',
-      ].map(statusLabel),
+      ].map(claimStatusLabel),
     ).toEqual([
       'Received',
       'Summarised',
@@ -60,8 +62,16 @@ describe('labels', () => {
       'Guardrail checked',
       'Settled',
       'Awaiting human review',
-      'Aborted',
+      'Rejected',
+    ])
+  })
+
+  it('maps the run statuses, keeping Aborted for a run that broke', () => {
+    expect(['running', 'settled', 'awaiting_human', 'aborted'].map(runStatusLabel)).toEqual([
       'Running',
+      'Settled',
+      'Awaiting human review',
+      'Aborted',
     ])
   })
 
@@ -72,7 +82,8 @@ describe('labels', () => {
   })
 
   it('shows an unmapped status the same way', () => {
-    expect(statusLabel('under_review')).toBe('Under review')
+    expect(claimStatusLabel('under_review')).toBe('Under review')
+    expect(runStatusLabel('timed_out')).toBe('Timed out')
     expect(readableFallback('  two__words ')).toBe('Two words')
   })
 

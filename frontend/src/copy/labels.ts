@@ -2,7 +2,8 @@
 // is never altered: these functions are for display only, and a value they do
 // not know is shown in a readable fallback form rather than hidden or rejected.
 // Written for every page; used by the Claims page first, the other pages follow
-// in their own prompts.
+// in their own prompts. Prompt 30 split the status label in two: a claim's and
+// a run's statuses share values but not, for `aborted`, their meaning.
 
 const CLAIM_TYPE_LABELS: Record<string, string> = {
   // The six the form offers (and the market-data table prices).
@@ -20,7 +21,20 @@ const CLAIM_TYPE_LABELS: Record<string, string> = {
   windstorm: 'Windstorm',
 }
 
-const STATUS_LABELS: Record<string, string> = {
+// The statuses a claim and a run share the words for. `aborted` is deliberately
+// absent: it means something different for each (below), so each map adds its own.
+const SHARED_STATUS_LABELS: Record<string, string> = {
+  settled: 'Settled',
+  awaiting_human: 'Awaiting human review',
+}
+
+// A claim's stored status. The four mid-pipeline values are where the latest
+// run got to. A claim is stored `aborted` by one path only, a person's
+// rejection in api/human.py (a run that broke leaves the claim's status where
+// it was), so the word a reader sees is Rejected (Dermot, 14 November 2026,
+// Prompt 30 D4). The stored value is unchanged; the colour still keys on it.
+const CLAIM_STATUS_LABELS: Record<string, string> = {
+  ...SHARED_STATUS_LABELS,
   received: 'Received',
   // Since Phase 8.2 the Doc-Parser produces only the narrative summary.
   extracted: 'Summarised',
@@ -28,11 +42,15 @@ const STATUS_LABELS: Record<string, string> = {
   coverage_verified: 'Coverage checked',
   estimated: 'Settlement estimated',
   guardrail_checked: 'Guardrail checked',
-  settled: 'Settled',
-  awaiting_human: 'Awaiting human review',
-  aborted: 'Aborted',
-  // A run status, not a claim status; here for the pages that show runs.
+  aborted: 'Rejected',
+}
+
+// A run's status, as the run summaries and the run page's badge report it. A
+// run is `aborted` when an agent broke, so the word stays Aborted.
+const RUN_STATUS_LABELS: Record<string, string> = {
+  ...SHARED_STATUS_LABELS,
   running: 'Running',
+  aborted: 'Aborted',
 }
 
 // Underscores to spaces, first letter capitalised: "hail_storm" → "Hail storm".
@@ -46,8 +64,12 @@ export function claimTypeLabel(value: string): string {
   return CLAIM_TYPE_LABELS[value] ?? readableFallback(value)
 }
 
-export function statusLabel(value: string): string {
-  return STATUS_LABELS[value] ?? readableFallback(value)
+export function claimStatusLabel(value: string): string {
+  return CLAIM_STATUS_LABELS[value] ?? readableFallback(value)
+}
+
+export function runStatusLabel(value: string): string {
+  return RUN_STATUS_LABELS[value] ?? readableFallback(value)
 }
 
 // --- Prompt 29: the run page -------------------------------------------------

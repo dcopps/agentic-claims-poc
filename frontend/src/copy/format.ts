@@ -47,6 +47,23 @@ export function formatDateTime(iso: string, options: DateTimeOptions = {}): stri
   }).format(date)
 }
 
+// A date-only value, "2026-02-10" → "10 Feb 2026" (Prompt 30). The loss and
+// reported dates are calendar dates with no time, and `new Date('2026-02-10')`
+// is midnight UTC, which `formatDateTime` would print as 9 February anywhere
+// west of Greenwich. So the zone is fixed to UTC here and is not an option: a
+// calendar date must read the same in every zone. Unparseable input is returned
+// as is, like the others.
+export function formatDate(isoDate: string, options: Pick<DateTimeOptions, 'locale'> = {}): string {
+  const date = new Date(isoDate)
+  if (Number.isNaN(date.getTime())) return isoDate
+  return new Intl.DateTimeFormat(options.locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date)
+}
+
 // Milliseconds as seconds to one decimal: 3421 → "3.4 s", 0 → "0.0 s" (Prompt 29).
 // A card's duration is read at a glance, so one decimal is the whole of the
 // precision shown; the millisecond value stays in the audit trail.

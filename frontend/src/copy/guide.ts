@@ -163,17 +163,18 @@ export const guideCopy = {
   ],
   tryMore: [
     [
-      'To decide an escalated claim, open it from the Claims list by the claimant’s name and use ',
+      'To decide an escalated claim, open it from the Claims list by the claimant’s name, read ' +
+        'why it is there, and use ',
       { label: 'Approve' },
       ' or ',
       { label: 'Reject' },
-      ' in the Human review panel.',
+      ' in the Human review panel; the claim page then records who decided and when.',
     ],
     [
       'To see the same claim handled a second way, press ',
       { label: 'Strict re-run' },
       ' on its row, which runs the Validator under a stricter instruction, then open the ' +
-        'claim, tick the two runs and press ',
+        'claim, tick the two runs in its Runs list and press ',
       { label: 'Compare selected' },
       '.',
     ],
@@ -213,7 +214,9 @@ export const guideCopy = {
     'are listed under the header. ' +
     '“View audit log” opens every recorded step of the run with its hash. The Guardrail card ' +
     'lists any refused objections: things the model said were policy citations that the code ' +
-    'could not find in the Adjuster’s text, each with the reason it did not count.',
+    'could not find in the Adjuster’s text, each with the reason it did not count. ' +
+    'The claimant’s name under the header opens the claim page, which lists every run of the ' +
+    'claim by the time it started, with its outcome.',
 
   linksHeading: 'Links',
   // An in-app link, rendered with <Link> like the Integrations line (Prompt 27).

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { demoClaims } from '../fixtures/demoClaims'
 import { guideCopy, guideLinks, type GuideSegment } from './guide'
-import { statusLabel } from './labels'
+import { runStatusLabel } from './labels'
 
 // Flattens a "Try it" sentence to the text a reader sees.
 const segmentText = (s: GuideSegment): string =>
@@ -104,9 +104,21 @@ describe('guide copy', () => {
       'Each card says what the agent concluded and how long it took',
     )
     for (const status of ['settled', 'awaiting_human', 'aborted']) {
-      expect(guideCopy.runPage).toContain(statusLabel(status))
+      expect(guideCopy.runPage).toContain(runStatusLabel(status))
     }
     expect(guideCopy.runPage).not.toContain('awaiting human,')
+  })
+
+  // Prompt 30: the Guide describes the claim page as it now reads.
+  it('describes the claim page: why a claim is there, the Decision, the Runs list', () => {
+    const decide = sentenceText(guideCopy.tryMore[0])
+    expect(decide).toContain('read why it is there')
+    expect(decide).toContain('the claim page then records who decided and when')
+    expect(sentenceText(guideCopy.tryMore[1])).toContain('tick the two runs in its Runs list')
+    expect(guideCopy.runPage).toContain(
+      'The claimant’s name under the header opens the claim page, which lists every run of the ' +
+        'claim by the time it started, with its outcome.',
+    )
   })
 
   it('points readers to the Guardrail card for refused objections', () => {

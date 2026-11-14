@@ -5,7 +5,7 @@ import { AgentCard, type CardState } from '../components/AgentCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
 import { WakingNotice } from '../components/WakingNotice'
 import { integrationsCopy } from '../copy/integrations'
-import { statusLabel, variantLabel } from '../copy/labels'
+import { runStatusLabel, variantLabel } from '../copy/labels'
 import { failureReason, ruleLine, runCopy } from '../copy/run'
 import { useAuditEntries, useClaim, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
@@ -168,7 +168,7 @@ function RunHeader({ correlationId, claimId, variant, status, rules }: RunHeader
           {status && (
             <>
               {' · '}
-              <StatusBadge status={status} label={statusLabel(status)} />
+              <StatusBadge status={status} label={runStatusLabel(status)} />
             </>
           )}
         </p>

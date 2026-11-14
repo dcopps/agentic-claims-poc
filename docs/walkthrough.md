@@ -97,7 +97,7 @@ shown. Read the evidence, type a reviewer name, click **Approve**.
 > audit log. I approve it, and that decision is written back as a `human` audit
 > entry. The claim moves to settled."
 
-**Screen:** status flips to `settled`.
+**Screen:** the badge reads *Settled*, and a *Decision* card in the panel's place records who approved the claim, when, and their comment, read from the audit trail.
 
 ---
 

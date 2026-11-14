@@ -1,32 +1,47 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { submitHumanDecision } from '../api/client'
-import type { AuditEntry, RunSummary } from '../api/types'
-import { useAuditEntries } from '../hooks/queries'
+import type { AuditEntry } from '../api/types'
+import { claimCopy } from '../copy/claim'
+import { ruleLine } from '../copy/run'
+import { deriveWhyHere } from '../pages/claimDerivation'
+import { deriveCards } from '../pages/runDerivation'
 import { Badge, Button, Card, Spinner } from './ui'
 import { WakingNotice } from './WakingNotice'
 
-// The human-review panel. Evidence is assembled from the latest run's *audit
-// entries* — `ValidatorVerdict.cited_chunks` carries chunk IDs without the clause
-// text, so the passages shown are the coverage_check payload's *retrieved* chunks,
-// each linked to its place on the Policy page and badged when the verdict cited
-// it (Prompt 27). Approve/Reject post a typed decision and optimistically refresh.
-export function HumanReviewPanel({ claimId, runs }: { claimId: string; runs: RunSummary[] }) {
-  const latest = runs[0]?.correlation_id
-  const audit = useAuditEntries(latest ?? '')
+type Decision = 'approved' | 'rejected'
+
+interface HumanReviewPanelProps {
+  claimId: string
+  // The latest run: api/human.py writes the decision's audit row under it.
+  correlationId: string
+  rows: AuditEntry[]
+  loading: boolean
+}
+
+// The human review panel (Phase 6; rewritten by Prompt 30). The evidence is the
+// latest run's audit rows, which the claim page loads once and passes down, in
+// the order a reviewer needs it: why the claim is here, the figure, the
+// reasoning, the Guardrail's verdict, the passages. The sentences are the run
+// page's own, so a reviewer reads one vocabulary on both pages.
+export function HumanReviewPanel({ claimId, correlationId, rows, loading }: HumanReviewPanelProps) {
   const queryClient = useQueryClient()
-  const [decidedBy, setDecidedBy] = useState('')
-  const [comment, setComment] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const decide = async (decision: 'approved' | 'rejected') => {
+  const decide = async (decision: Decision, decidedBy: string, comment: string) => {
     setError(null)
     setBusy(true)
     try {
       await submitHumanDecision(claimId, { decision, decided_by: decidedBy, comment })
-      await queryClient.invalidateQueries({ queryKey: ['claim', claimId] })
+      // The claim's status changes and the human row lands under this run, so
+      // both caches are refreshed and the page swaps this panel for the
+      // Decision card without a reload.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['claim', claimId] }),
+        queryClient.invalidateQueries({ queryKey: ['audit', correlationId] }),
+      ])
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -35,111 +50,208 @@ export function HumanReviewPanel({ claimId, runs }: { claimId: string; runs: Run
   }
 
   return (
-    <Card title="Human review">
-      {audit.isLoading && <Spinner label="Loading evidence…" />}
-      <WakingNotice waiting={audit.isLoading} />
-      {audit.data && <Evidence entries={audit.data} />}
-      <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
-        <input
-          aria-label="Decided by"
-          placeholder="Your name"
-          className="rounded border border-slate-300 px-2 py-1 text-sm"
-          value={decidedBy}
-          onChange={(e) => setDecidedBy(e.target.value)}
-        />
-        <textarea
-          aria-label="Comment"
-          placeholder="Comment (optional)"
-          className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
-          rows={2}
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="space-x-2">
-          <Button onClick={() => decide('approved')} disabled={busy || !decidedBy.trim()}>
-            Approve
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => decide('rejected')}
-            disabled={busy || !decidedBy.trim()}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
+    <Card title={claimCopy.panelHeading}>
+      {loading && <Spinner label={claimCopy.loadingEvidence} />}
+      <WakingNotice waiting={loading} />
+      {rows.length > 0 && <Evidence rows={rows} />}
+      <DecisionForm busy={busy} error={error} onDecide={decide} />
     </Card>
   )
 }
 
 type Obj = Record<string, unknown>
 
-function _obj(value: unknown): Obj | undefined {
-  return value && typeof value === 'object' ? (value as Obj) : undefined
+function obj(value: unknown): Obj {
+  return typeof value === 'object' && value !== null ? (value as Obj) : {}
 }
 
-function Evidence({ entries }: { entries: AuditEntry[] }) {
-  const payload = (step: string): Obj | undefined => entries.find((e) => e.step === step)?.payload
-  const adjusterOut = _obj(payload('settlement_estimate')?.output)
-  const coverage = payload('coverage_check')
-  const chunks = _obj(coverage?.retrieval)?.chunks
-  const guardrailOut = _obj(payload('output_check')?.output)
-  const chunkList = Array.isArray(chunks) ? (chunks as Obj[]) : []
-  const cited = _citedIds(coverage)
+// Card states that say nothing yet about what the agent concluded.
+const UNDECIDED = new Set(['queued', 'running', 'not_run'])
 
+function Evidence({ rows }: { rows: AuditEntry[] }) {
+  const rules = deriveWhyHere(rows)
+  const cards = deriveCards(rows, [])
+  const adjusterRow = rows.find((r) => r.step === 'settlement_estimate')?.payload
+  const reasoning = obj(adjusterRow?.output).reasoning
+  const coverage = rows.find((r) => r.step === 'coverage_check')?.payload
   return (
-    <dl className="space-y-2 text-sm">
-      {adjusterOut && (
-        <div>
-          <dt className="text-slate-500">Recommended settlement</dt>
-          <dd className="font-mono">{String(adjusterOut.recommended_settlement)}</dd>
-          <dd className="text-slate-600">{String(adjusterOut.reasoning)}</dd>
-        </div>
+    <dl className="space-y-3 text-sm">
+      {rules.length > 0 && (
+        <Section heading={claimCopy.whyHeading} testId="why-here">
+          <ul className="list-disc pl-5 text-slate-700">
+            {rules.map((rule) => (
+              <li key={rule.name}>{ruleLine(rule)}</li>
+            ))}
+          </ul>
+        </Section>
       )}
-      {chunkList.length > 0 && (
-        <div>
-          <dt className="text-slate-500">Retrieved policy passages</dt>
-          {chunkList.map((chunk, i) => (
-            <dd key={i} className="text-slate-600">
-              <Link
-                to={{ pathname: '/policy', hash: String(chunk.chunk_id) }}
-                className="font-medium text-blue-700 hover:underline"
-              >
-                {String(chunk.section)}
-              </Link>
-              {cited.has(String(chunk.chunk_id)) && (
-                <>
-                  {' '}
-                  <Badge tone="success">cited</Badge>
-                </>
-              )}
-              : {String(chunk.content_excerpt)}
-            </dd>
-          ))}
-        </div>
+      {cards.adjuster.status === 'done' && (
+        <Section heading={claimCopy.settlementHeading} testId="settlement">
+          {cards.adjuster.summary}
+        </Section>
       )}
-      {guardrailOut && (
-        <div>
-          <dt className="text-slate-500">Guardrail</dt>
-          <dd>
-            {guardrailOut.passed ? 'passed' : 'flagged'} — {String(guardrailOut.summary)}
-          </dd>
-        </div>
+      {typeof reasoning === 'string' && reasoning !== '' && (
+        <Section heading={claimCopy.reasoningHeading} testId="reasoning">
+          <p className="text-slate-700">{reasoning}</p>
+        </Section>
       )}
+      {!UNDECIDED.has(cards.guardrail.status) && (
+        <Section heading={claimCopy.guardrailHeading} testId="guardrail-verdict">
+          {cards.guardrail.summary}
+          {cards.guardrail.detail && (
+            <span className="block text-xs text-slate-500">{cards.guardrail.detail}</span>
+          )}
+        </Section>
+      )}
+      <Passages coverage={coverage} />
     </dl>
   )
 }
 
-// The chunk ids the Validator's verdict cited, so the retrieved list can mark
-// which of the three passages the decision actually rested on.
-function _citedIds(coverage: Obj | undefined): Set<string> {
-  const cited = _obj(coverage?.verdict)?.cited_chunks
+function Section({
+  heading,
+  testId,
+  children,
+}: {
+  heading: string
+  testId: string
+  children: ReactNode
+}) {
+  return (
+    <div data-testid={testId}>
+      <dt className="text-slate-500">{heading}</dt>
+      <dd className="text-slate-700">{children}</dd>
+    </div>
+  )
+}
+
+// The Validator's retrieved passages (Prompt 27): `cited_chunks` carries chunk
+// ids without the text, so the list is the coverage_check payload's retrieved
+// chunks, each linked to its place on the Policy page and badged when the
+// verdict cited it.
+function Passages({ coverage }: { coverage: Obj | undefined }) {
+  const chunks = obj(coverage?.retrieval).chunks
+  const chunkList = Array.isArray(chunks) ? chunks.map(obj) : []
+  if (chunkList.length === 0) return null
+  const cited = citedIds(coverage)
+  return (
+    <Section heading={claimCopy.passagesHeading} testId="passages">
+      {chunkList.map((chunk, i) => (
+        <p key={i} className="text-slate-600">
+          <Link
+            to={{ pathname: '/policy', hash: String(chunk.chunk_id) }}
+            className="font-medium text-blue-700 hover:underline"
+          >
+            {String(chunk.section)}
+          </Link>
+          {cited.has(String(chunk.chunk_id)) && (
+            <>
+              {' '}
+              <Badge tone="success">{claimCopy.cited}</Badge>
+            </>
+          )}
+          : {String(chunk.content_excerpt)}
+        </p>
+      ))}
+    </Section>
+  )
+}
+
+function citedIds(coverage: Obj | undefined): Set<string> {
+  const cited = obj(coverage?.verdict).cited_chunks
   if (!Array.isArray(cited)) return new Set()
   return new Set(
     cited.flatMap((c) => {
-      const id = _obj(c)?.chunk_id
+      const id = obj(c).chunk_id
       return typeof id === 'string' ? [id] : []
     }),
+  )
+}
+
+interface DecisionFormProps {
+  busy: boolean
+  error: string | null
+  onDecide: (decision: Decision, decidedBy: string, comment: string) => void
+}
+
+const INPUT_CLASS = 'rounded border border-slate-300 px-2 py-1 text-sm'
+
+// Labelled inputs, the two buttons, and under them what each does. The buttons
+// stay disabled until a name is typed, and a line says so (plan D5), as the
+// Claims page explains its disabled action.
+function DecisionForm({ busy, error, onDecide }: DecisionFormProps) {
+  const [decidedBy, setDecidedBy] = useState('')
+  const [comment, setComment] = useState('')
+  const id = useId()
+  const named = decidedBy.trim() !== ''
+  return (
+    <div className="mt-4 space-y-2 border-t border-slate-200 pt-3 text-sm">
+      <LabelledField id={`${id}-name`} label={claimCopy.nameLabel}>
+        <input
+          id={`${id}-name`}
+          className={`${INPUT_CLASS} max-w-xs`}
+          value={decidedBy}
+          onChange={(e) => setDecidedBy(e.target.value)}
+        />
+      </LabelledField>
+      <LabelledField id={`${id}-comment`} label={claimCopy.commentLabel}>
+        <textarea
+          id={`${id}-comment`}
+          className={`${INPUT_CLASS} w-full`}
+          rows={2}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+        />
+      </LabelledField>
+      {error && <p className="text-red-600">{error}</p>}
+      <div className="space-x-2">
+        <Button onClick={() => onDecide('approved', decidedBy, comment)} disabled={busy || !named}>
+          {claimCopy.approve}
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => onDecide('rejected', decidedBy, comment)}
+          disabled={busy || !named}
+        >
+          {claimCopy.reject}
+        </Button>
+      </div>
+      {!named && (
+        <p className="text-xs text-slate-500" data-testid="name-required">
+          {claimCopy.nameRequired}
+        </p>
+      )}
+      <WhatTheButtonsDo />
+    </div>
+  )
+}
+
+// A visible label over its control, as the claim form's fields have.
+function LabelledField({
+  id,
+  label,
+  children,
+}: {
+  id: string
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-slate-600">
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function WhatTheButtonsDo() {
+  return (
+    <ul className="space-y-0.5 text-xs text-slate-600" data-testid="button-effects">
+      <li>{claimCopy.approveDoes}</li>
+      <li>{claimCopy.rejectDoes}</li>
+      <li>{claimCopy.decisionRecorded}</li>
+    </ul>
   )
 }

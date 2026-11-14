@@ -11,6 +11,9 @@ export type ClaimStatus =
   | 'guardrail_checked'
   | 'settled'
   | 'awaiting_human'
+  // A person's rejection (api/human.py, Phase 6). The mirror lacked it until
+  // Prompt 30; the API had been returning it for one Azure claim all along.
+  | 'aborted'
 
 export type ClaimType = 'water_damage' | 'fire' | 'wind' | 'theft' | 'flood' | 'storm_complex'
 

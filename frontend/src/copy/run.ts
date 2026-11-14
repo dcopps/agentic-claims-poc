@@ -19,7 +19,7 @@ export const RULE_THRESHOLDS: Record<string, string> = {
 // The description the orchestrator writes on the synthetic guardrail_failed
 // rule when the Guardrail itself threw (fail-closed), as distinct from the
 // policy file's "Guardrail output check did not pass".
-const FAIL_CLOSED_DESCRIPTION = 'Guardrail check raised an exception; failing closed'
+export const FAIL_CLOSED_DESCRIPTION = 'Guardrail check raised an exception; failing closed'
 
 // The message shape of the Adjuster's market-range failure, the one abort the
 // background claims produce today. Captures the claim type between the quotes.

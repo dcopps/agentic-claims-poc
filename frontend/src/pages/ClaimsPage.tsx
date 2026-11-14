@@ -5,7 +5,7 @@ import type { ClaimRecord } from '../api/types'
 import { ClaimForm } from '../components/ClaimForm'
 import { Tooltip } from '../components/Tooltip'
 import { formatDateTime, formatUsd } from '../copy/format'
-import { claimTypeLabel, statusLabel } from '../copy/labels'
+import { claimStatusLabel, claimTypeLabel } from '../copy/labels'
 import { Button, Card, Spinner, StatusBadge } from '../components/ui'
 import { WakingNotice } from '../components/WakingNotice'
 import { guideCopy } from '../copy/guide'
@@ -113,7 +113,7 @@ function ClaimRow({
       <td className="whitespace-nowrap px-2 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>
       <td className="px-2 py-1.5">
-        <StatusBadge status={claim.status} label={statusLabel(claim.status)} />
+        <StatusBadge status={claim.status} label={claimStatusLabel(claim.status)} />
       </td>
       <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">
         {formatDateTime(claim.created_at)}
