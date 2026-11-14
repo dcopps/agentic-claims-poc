@@ -9,12 +9,17 @@ the two surfaces cannot drift). Pure reads: nothing here writes.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import psycopg
 from pydantic import BaseModel, ConfigDict
+
+# The same two words as claims.models.HumanDecisionKind; spelt here because the
+# claims module imports this one, and the audit layer imports nothing above it.
+HumanDecisionKind = Literal["approved", "rejected"]
 
 
 class AuditEntry(BaseModel):
@@ -64,3 +69,36 @@ class AuditRepository:
                 (correlation_id,),
             )
             return cur.fetchone() is not None
+
+    @staticmethod
+    def human_decisions(
+        conn: psycopg.Connection, claim_ids: Sequence[UUID]
+    ) -> dict[UUID, HumanDecisionKind]:
+        """
+        What a person decided about each claim, from the trail (Prompt 31).
+
+        The question is answered here, not from `claims.status`, because the
+        pipeline and an approval both write `settled`; only the human row says a
+        person decided. One grouped query for a page of claims (on
+        `audit_log_claim_id_idx`); the last human row per claim wins, though
+        api/human.py allows only one. Claims with no row are absent, so callers
+        read with a default of None. An empty input returns `{}` without a query.
+        """
+        if not claim_ids:
+            return {}
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT ON (claim_id) claim_id, step FROM audit_log "
+                "WHERE agent = 'human' AND step = ANY(%s) AND claim_id = ANY(%s) "
+                "ORDER BY claim_id, created_at DESC, audit_id DESC",
+                (list(_HUMAN_STEPS), list(claim_ids)),
+            )
+            rows = cur.fetchall()
+        return {claim_id: _HUMAN_STEPS[step] for claim_id, step in rows}
+
+
+# The two steps api/human.py writes, and the decision each records.
+_HUMAN_STEPS: dict[str, HumanDecisionKind] = {
+    "human_approval": "approved",
+    "human_rejection": "rejected",
+}

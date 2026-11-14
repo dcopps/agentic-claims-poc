@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tooltips } from './tooltips'
+import { disabledClosed, tooltips } from './tooltips'
 
 describe('tooltips', () => {
   it('say first what the button does here', () => {
@@ -38,5 +38,17 @@ describe('tooltips', () => {
     expect(tooltips.disabledNoFinishedRun).toBe(
       'Not yet available: this claim has no finished run. ',
     )
+  })
+
+  // Prompt 31: a claim a person has decided is closed to further runs.
+  it('say why both actions are off on a decided claim, the decision named', () => {
+    expect(tooltips.disabledClosedApproved).toBe(
+      'Closed: a person approved this claim; it cannot be run again. ',
+    )
+    expect(tooltips.disabledClosedRejected).toBe(
+      'Closed: a person rejected this claim; it cannot be run again. ',
+    )
+    expect(disabledClosed('approved')).toBe(tooltips.disabledClosedApproved)
+    expect(disabledClosed('rejected')).toBe(tooltips.disabledClosedRejected)
   })
 })

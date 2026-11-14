@@ -74,6 +74,8 @@ def test_approve_settles_claim(
         resp = client.post(f"/api/claims/{claim_id}/human-decision", json=_decision())
     assert resp.status_code == 200
     assert resp.json()["status"] == "settled"
+    # Prompt 31: the response reads the decision back from the row just written.
+    assert resp.json()["human_decision"] == "approved"
     with clean_db.cursor() as cur:
         cur.execute(
             "SELECT agent, step FROM audit_log WHERE correlation_id = %s "
@@ -96,6 +98,7 @@ def test_reject_aborts_claim(
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "aborted"
+    assert resp.json()["human_decision"] == "rejected"
 
 
 def test_decision_on_non_awaiting_claim_409(

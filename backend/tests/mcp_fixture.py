@@ -105,3 +105,30 @@ def _rebind_ids(payload: dict[str, Any], claim_id: UUID, cid: UUID) -> dict[str,
     if isinstance(inner, dict) and "claim_id" in inner:
         inner["claim_id"] = str(claim_id)
     return payload
+
+
+def seed_human_decision(
+    conn: psycopg.Connection, claim_id: UUID, correlation_id: UUID, decision: str
+) -> None:
+    """
+    Append the human row api/human.py writes under a run (Prompt 31 tests).
+
+    The claim's status is deliberately not touched: the refusal and the
+    `human_decision` field must come from the trail alone.
+    """
+    now = datetime.now(UTC)
+    AuditWriter(conn).append(
+        AuditEvent(
+            correlation_id=correlation_id,
+            claim_id=claim_id,
+            agent="human",
+            step="human_approval" if decision == "approved" else "human_rejection",
+            payload={
+                "decision": decision,
+                "decided_by": "A. Reviewer",
+                "comment": None,
+                "decided_at": now.isoformat(),
+            },
+            created_at=now,
+        )
+    )

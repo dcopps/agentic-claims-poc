@@ -158,6 +158,7 @@ describe('HumanReviewPanel', () => {
       claimCopy.approveDoes,
       claimCopy.rejectDoes,
       claimCopy.decisionRecorded,
+      claimCopy.decisionCloses,
     ])
     expect(claimCopy.rejectDoes).toContain('marks the claim Rejected')
 

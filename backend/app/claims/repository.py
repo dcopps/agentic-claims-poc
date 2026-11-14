@@ -18,7 +18,13 @@ from uuid import UUID, uuid4
 
 import psycopg
 
-from backend.app.claims.models import ClaimRecord, ClaimStatus, ClaimSubmission
+from backend.app.audit.repository import AuditRepository
+from backend.app.claims.models import (
+    ClaimRecord,
+    ClaimStatus,
+    ClaimSubmission,
+    HumanDecisionKind,
+)
 
 # The columns every read/write round-trips, in a fixed order so the row-to-model
 # mapping has a single source of truth.
@@ -92,7 +98,10 @@ class ClaimsRepository:
                 f"SELECT {_COLUMNS} FROM claims WHERE claim_id = %s", (claim_id,)
             )
             row = cur.fetchone()
-        return _row_to_record(row) if row is not None else None
+        if row is None:
+            return None
+        record = _row_to_record(row)
+        return _with_decisions(conn, [record])[0]
 
     @staticmethod
     def list_claims(
@@ -120,7 +129,7 @@ class ClaimsRepository:
                 tuple(params),
             )
             rows = cur.fetchall()
-        return [_row_to_record(row) for row in rows]
+        return _with_decisions(conn, [_row_to_record(row) for row in rows])
 
     @staticmethod
     def update_status(
@@ -149,6 +158,18 @@ class ClaimsRepository:
                     "ClaimsRepository.update_status: claim not found; "
                     f"claim_id={claim_id}"
                 )
+
+
+# A record straight from the row carries no decision (an insert never has one);
+# the reads attach it from the audit trail in one grouped query (Prompt 31).
+def _with_decisions(conn: psycopg.Connection, records: list[ClaimRecord]) -> list[ClaimRecord]:
+    decided: dict[UUID, HumanDecisionKind] = AuditRepository.human_decisions(
+        conn, [record.claim_id for record in records]
+    )
+    return [
+        record.model_copy(update={"human_decision": decided.get(record.claim_id)})
+        for record in records
+    ]
 
 
 def _row_to_record(row: tuple[Any, ...]) -> ClaimRecord:

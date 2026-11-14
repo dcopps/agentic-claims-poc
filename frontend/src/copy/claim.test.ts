@@ -98,6 +98,9 @@ describe('claimCopy', () => {
     expect(claimCopy.decisionRecorded).toBe(
       'Your name, your comment and the time are written to the audit trail under this run.',
     )
+    // Prompt 31 (O1): a decision is final.
+    expect(claimCopy.decisionCloses).toBe('Either decision closes the claim to further runs.')
+    expect(claimCopy.closedToRuns).toBe('The claim is closed to further runs.')
   })
 
   it('records a decision in one sentence with the run linked', () => {

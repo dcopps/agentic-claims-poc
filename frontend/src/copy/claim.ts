@@ -2,8 +2,11 @@
 // Decision card can show (Prompt 30). The page used to print the record's
 // stored values; these are the words a visitor reads instead. Stored values are
 // never altered, and no wording lives inline in the components.
+import type { HumanDecisionKind } from '../api/types'
 import { formatUsd } from './format'
 import { runStatusLabel } from './labels'
+
+export type { HumanDecisionKind }
 
 /** A piece of a sentence: plain text, or an in-app link rendered with <Link>. */
 export type Segment = string | { readonly link: string; readonly to: string }
@@ -16,8 +19,6 @@ export type RunOutcome =
   | { kind: 'decided'; decision: HumanDecisionKind }
   | { kind: 'awaiting_human' }
   | { kind: 'running' }
-
-export type HumanDecisionKind = 'approved' | 'rejected'
 
 // The word for what a person did, shared by the run line, the run page's
 // badge and the Decision card, so the three never disagree.
@@ -104,6 +105,8 @@ export const claimCopy = {
     'Your name, your comment and the time are written to the audit trail under this run.',
   // While the buttons are disabled for want of a name (plan D5).
   nameRequired: 'Enter your name to decide.',
+  // The fourth sentence under the buttons (Prompt 31, O1): a decision is final.
+  decisionCloses: 'Either decision closes the claim to further runs.',
 
   // --- The Decision card, in the panel's place once a person has decided.
   decisionHeading: 'Decision',
@@ -115,4 +118,7 @@ export const claimCopy = {
     { link: 'the run', to },
     ' it was made on.',
   ],
+  // At the foot of the Decision card (Prompt 31): the backend refuses a run on
+  // a decided claim, and the Claims page's buttons are disabled for it.
+  closedToRuns: 'The claim is closed to further runs.',
 } as const

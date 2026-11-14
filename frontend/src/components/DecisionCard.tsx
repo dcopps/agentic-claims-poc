@@ -16,6 +16,9 @@ export function DecisionCard({ decision, runPath }: { decision: HumanDecision; r
         <p className="text-xs text-slate-500">
           <Sentence segments={claimCopy.decisionInAudit(runPath)} />
         </p>
+        <p className="text-xs text-slate-500" data-testid="closed-to-runs">
+          {claimCopy.closedToRuns}
+        </p>
       </div>
     </Card>
   )

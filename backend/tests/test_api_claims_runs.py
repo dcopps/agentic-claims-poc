@@ -22,6 +22,7 @@ from backend.app.audit import AuditEvent, AuditWriter
 from backend.app.claims import ClaimsRepository, ClaimSubmission
 from backend.app.main import create_app
 from backend.settings import Settings
+from backend.tests.mcp_fixture import seed_human_decision
 
 from .test_api_pipeline import _StubOrchestrator
 
@@ -242,3 +243,27 @@ def test_get_run_missing_404(
     with _client(db_settings) as client:
         resp = client.get(f"/api/runs/{uuid4()}")
     assert resp.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Prompt 31: every claim response carries `human_decision`, from the trail
+# --------------------------------------------------------------------------- #
+
+
+def test_claim_responses_carry_human_decision(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    fresh = _insert_claim(clean_db)
+    approved = _insert_claim(clean_db)
+    rejected = _insert_claim(clean_db)
+    seed_human_decision(clean_db, approved, _seed_completed(clean_db, approved), "approved")
+    seed_human_decision(clean_db, rejected, _seed_completed(clean_db, rejected), "rejected")
+    with _client(db_settings) as client:
+        listed = {c["claim_id"]: c["human_decision"] for c in client.get("/api/claims").json()}
+        one = client.get(f"/api/claims/{approved}").json()
+        submitted = client.post("/api/claims", json=_body()).json()
+    assert listed[str(fresh)] is None
+    assert listed[str(approved)] == "approved"
+    assert listed[str(rejected)] == "rejected"
+    assert one["human_decision"] == "approved"
+    assert submitted["human_decision"] is None

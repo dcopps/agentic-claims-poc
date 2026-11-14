@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaimRecord } from '../api/types'
 import { formatDateTime } from '../copy/format'
 import { guideCopy } from '../copy/guide'
+import { claimsCopy } from '../copy/claims'
 import { tooltips } from '../copy/tooltips'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { ClaimsPage } from './ClaimsPage'
@@ -37,6 +38,7 @@ const CLAIM: ClaimRecord = {
   scenario_tag: null,
   created_at: '2026-11-04T11:08:00Z',
   updated_at: '2026-11-04T11:08:00Z',
+  human_decision: null,
 }
 
 describe('ClaimsPage', () => {
@@ -176,5 +178,159 @@ describe('ClaimsPage while the server wakes', () => {
     release()
     await waitFor(() => expect(screen.getByText(/no claims yet/i)).toBeInTheDocument())
     expect(screen.queryByTestId('waking-notice')).not.toBeInTheDocument()
+  })
+})
+
+// Prompt 31: when a claim may be run again.
+describe('ClaimsPage: when a claim may be run again', () => {
+  const SETTLED: ClaimRecord = {
+    ...CLAIM,
+    claim_id: 'settled-1',
+    claimant_name: 'Harborline Logistics Ltd',
+    status: 'settled',
+  }
+  const SETTLED_TOO: ClaimRecord = {
+    ...CLAIM,
+    claim_id: 'settled-2',
+    claimant_name: 'Northwood Manufacturing Inc',
+    status: 'settled',
+  }
+  const AWAITING: ClaimRecord = {
+    ...CLAIM,
+    claim_id: 'awaiting-1',
+    claimant_name: 'Coral Bay Holdings',
+    status: 'awaiting_human',
+  }
+
+  function stubClaims(claims: ClaimRecord[]) {
+    return stubFetch([
+      ['/api/pipeline/run/', { status: 'settled' }],
+      ['/api/claims', claims],
+    ])
+  }
+  const rowOf = (claimant: string) => screen.getByText(claimant).closest('tr') as HTMLElement
+  const awaitRows = () => screen.findByRole('table', { name: 'Claims' })
+  const postedRuns = (fetchMock: ReturnType<typeof stubFetch>) =>
+    fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/pipeline/run/')).length
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads Process for a claim never run and Run again once it has had one', async () => {
+    stubClaims([CLAIM, SETTLED, AWAITING])
+    renderWithProviders(<ClaimsPage />)
+    await awaitRows()
+    expect(
+      within(rowOf(CLAIM.claimant_name)).getByRole('button', { name: 'Process' }),
+    ).toBeEnabled()
+    expect(
+      within(rowOf(SETTLED.claimant_name)).getAllByRole('button', { name: 'Run again' }),
+    ).toHaveLength(1)
+    expect(
+      within(rowOf(AWAITING.claimant_name)).getByRole('button', { name: 'Run again' }),
+    ).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: 'Process' })).toHaveLength(1)
+  })
+
+  it('asks once before a settled claim is run again, and Cancel runs nothing', async () => {
+    const user = userEvent.setup()
+    const fetchMock = stubClaims([SETTLED])
+    renderWithProviders(<ClaimsPage />)
+    await awaitRows()
+    await user.click(screen.getByRole('button', { name: 'Run again' }))
+    const panel = screen.getByTestId('confirm-rerun')
+    expect(panel).toHaveTextContent(claimsCopy.confirmRerun)
+    expect(panel).toHaveClass('absolute')
+    expect(screen.getByTestId('claim-actions')).toContainElement(panel)
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6)
+    await user.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTestId('confirm-rerun')).not.toBeInTheDocument()
+    expect(postedRuns(fetchMock)).toBe(0)
+  })
+
+  it('runs the settled claim once the question is answered Run again', async () => {
+    const user = userEvent.setup()
+    const fetchMock = stubClaims([SETTLED])
+    renderWithProviders(
+      <>
+        <ClaimsPage />
+        <LocationEcho />
+      </>,
+    )
+    await awaitRows()
+    await user.click(screen.getByRole('button', { name: 'Run again' }))
+    await user.click(
+      within(screen.getByTestId('confirm-rerun')).getByRole('button', { name: 'Run again' }),
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toMatch(/^\/claims\/settled-1\/runs\//),
+    )
+    await waitFor(() => expect(postedRuns(fetchMock)).toBe(1))
+    expect(
+      String(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/pipeline/run/'))![0]),
+    ).toContain('/api/pipeline/run/settled-1')
+  })
+
+  it('closes the question on Escape, on a click outside, and when another row opens its own', async () => {
+    const user = userEvent.setup()
+    stubClaims([SETTLED, SETTLED_TOO])
+    renderWithProviders(<ClaimsPage />)
+    await awaitRows()
+    const first = within(rowOf(SETTLED.claimant_name)).getByRole('button', { name: 'Run again' })
+    const second = within(rowOf(SETTLED_TOO.claimant_name)).getByRole('button', {
+      name: 'Run again',
+    })
+
+    await user.click(first)
+    expect(screen.getByTestId('confirm-rerun')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByTestId('confirm-rerun')).not.toBeInTheDocument()
+
+    await user.click(first)
+    expect(screen.getByTestId('confirm-rerun')).toBeInTheDocument()
+    await user.click(screen.getByRole('columnheader', { name: 'Claimant' }))
+    expect(screen.queryByTestId('confirm-rerun')).not.toBeInTheDocument()
+
+    await user.click(first)
+    await user.click(second)
+    const panels = screen.getAllByTestId('confirm-rerun')
+    expect(panels).toHaveLength(1)
+    expect(rowOf(SETTLED_TOO.claimant_name)).toContainElement(panels[0])
+  })
+
+  it('does not ask before running a claim that is awaiting a person again', async () => {
+    const user = userEvent.setup()
+    const fetchMock = stubClaims([AWAITING])
+    renderWithProviders(<ClaimsPage />)
+    await awaitRows()
+    await user.click(screen.getByRole('button', { name: 'Run again' }))
+    expect(screen.queryByTestId('confirm-rerun')).not.toBeInTheDocument()
+    await waitFor(() => expect(postedRuns(fetchMock)).toBe(1))
+  })
+
+  it('disables both actions for a claim a person decided, saying why', async () => {
+    const user = userEvent.setup()
+    stubClaims([
+      { ...SETTLED, human_decision: 'approved' },
+      { ...AWAITING, status: 'aborted', human_decision: 'rejected' },
+    ])
+    renderWithProviders(<ClaimsPage />)
+    await awaitRows()
+    const approvedRow = rowOf(SETTLED.claimant_name)
+    const rejectedRow = rowOf(AWAITING.claimant_name)
+    for (const row of [approvedRow, rejectedRow]) {
+      expect(within(row).getByRole('button', { name: 'Run again' })).toBeDisabled()
+      expect(within(row).getByRole('button', { name: 'Strict re-run' })).toBeDisabled()
+    }
+    const [approvedInfo] = within(approvedRow).getAllByRole('button', { name: 'About this action' })
+    await user.hover(approvedInfo)
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      tooltips.disabledClosedApproved + tooltips.processClaim,
+    )
+    await user.unhover(approvedInfo)
+    const rejectedInfos = within(rejectedRow).getAllByRole('button', { name: 'About this action' })
+    await user.hover(rejectedInfos[1])
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      tooltips.disabledClosedRejected + tooltips.strictRerun,
+    )
   })
 })

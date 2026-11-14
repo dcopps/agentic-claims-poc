@@ -19,8 +19,9 @@ All asyncio lives here, at the edge; the orchestrator never sees it.
 Status-code policy: a run that ends `settled`, `awaiting_human`, or `aborted`
 (an agent failed mid-run) is a successful *pipeline outcome* and returns 200 with
 the typed body. Only request-level failures use 4xx — an unknown claim id is a
-pre-flight 404 (so a bad request never writes a started/aborted audit pair), and
-a malformed path UUID is FastAPI's automatic 422.
+pre-flight 404 (so a bad request never writes a started/aborted audit pair), a
+claim a person has approved or rejected is a 409 (closed to further runs,
+Prompt 31), and a malformed path UUID is FastAPI's automatic 422.
 """
 
 from __future__ import annotations
@@ -31,11 +32,11 @@ from collections.abc import AsyncIterator, Callable
 from uuid import UUID, uuid4
 
 import fastapi
-import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
 
+from backend.app.claims import ClaimRecord, ClaimsRepository
 from backend.app.orchestrator import (
     PipelineEventBus,
     PipelineOrchestrator,
@@ -132,8 +133,9 @@ async def run_pipeline(
     settings: Settings = Depends(get_settings),
 ) -> PipelineResult:
     """Run the pipeline for `claim_id` (optionally under a variant)."""
-    await _require_known_claim(settings, claim_id)
+    claim = await _require_known_claim(settings, claim_id)
     _require_known_variant(registry, variant)
+    _require_open_claim(claim)
     await _reject_if_active(settings, claim_id)
     return await execute_run(factory(variant), claim_id, correlation_id, variant, bus)
 
@@ -155,8 +157,9 @@ async def replay_pipeline(
     replay) and mints a fresh correlation_id so the prior run is never
     overwritten; both runs sit side-by-side in the audit vault.
     """
-    await _require_known_claim(settings, claim_id)
+    claim = await _require_known_claim(settings, claim_id)
     _require_known_variant(registry, variant)
+    _require_open_claim(claim)
     await _require_prior_terminal_run(settings, claim_id)
     await _reject_if_active(settings, claim_id)
     return await execute_run(factory(variant), claim_id, correlation_id, variant, bus)
@@ -258,15 +261,48 @@ def _has_terminal_run(settings: Settings, claim_id: UUID) -> bool:
     return any(summary.status != "running" for summary in summaries)
 
 
-async def _require_known_claim(settings: Settings, claim_id: UUID) -> None:
-    """404 if the claim is not in the claims table — a pre-flight bad-request guard."""
-    exists = await run_in_threadpool(_claim_exists, settings, claim_id)
-    if not exists:
+async def _require_known_claim(settings: Settings, claim_id: UUID) -> ClaimRecord:
+    """
+    404 if the claim is not in the claims table — a pre-flight bad-request guard.
+
+    Returns the record, which carries `human_decision` and the claim number the
+    closed-claim refusal names, so one read serves both checks.
+    """
+    claim = await run_in_threadpool(_load_claim, settings, claim_id)
+    if claim is None:
         raise HTTPException(status_code=404, detail=f"claim not found: {claim_id}")
+    return claim
 
 
-def _claim_exists(settings: Settings, claim_id: UUID) -> bool:
-    conn: psycopg.Connection
-    with open_connection(settings) as conn, conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM claims WHERE claim_id = %s", (claim_id,))
-        return cur.fetchone() is not None
+def _load_claim(settings: Settings, claim_id: UUID) -> ClaimRecord | None:
+    with open_connection(settings) as conn:
+        return ClaimsRepository.get(conn, claim_id)
+
+
+def _require_open_claim(claim: ClaimRecord) -> None:
+    """
+    409 if a person has approved or rejected the claim (Prompt 31).
+
+    Checked before the active-run and prior-run guards (plan D8): a decision is
+    the permanent reason, so a closed claim is refused as closed whatever else
+    is true of it. The decision comes from the audit trail (the record's field
+    is filled from it), never from the status.
+    """
+    if claim.human_decision is not None:
+        raise HTTPException(status_code=409, detail=closed_claim_detail(claim))
+
+
+def closed_claim_detail(claim: ClaimRecord) -> str:
+    """
+    The one sentence for a claim closed by a person's decision, named by its
+    claim number as a visitor reads it in the run page's banner. Shared with the
+    MCP `run_scenario` tool's `claim_closed` error so the two never differ.
+    """
+    if claim.human_decision is None:
+        raise ValueError(
+            f"closed_claim_detail: claim {claim.claim_number} has no human decision"
+        )
+    return (
+        f"claim {claim.claim_number} was {claim.human_decision} by a person "
+        "and is closed to further runs"
+    )

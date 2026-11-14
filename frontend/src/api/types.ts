@@ -47,9 +47,15 @@ export interface ClaimRecord {
   scenario_tag: ScenarioTag | null
   created_at: string
   updated_at: string
+  human_decision: HumanDecisionKind | null
 }
 
 export type RunStatus = 'running' | 'settled' | 'awaiting_human' | 'aborted'
+
+// What a person decided about a claim, read by the backend from the audit
+// trail's human row on every claim response (Prompt 31). A decided claim is
+// closed to further runs.
+export type HumanDecisionKind = 'approved' | 'rejected'
 
 export interface RunSummary {
   correlation_id: string

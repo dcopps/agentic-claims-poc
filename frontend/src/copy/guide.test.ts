@@ -114,6 +114,8 @@ describe('guide copy', () => {
     const decide = sentenceText(guideCopy.tryMore[0])
     expect(decide).toContain('read why it is there')
     expect(decide).toContain('the claim page then records who decided and when')
+    // Prompt 31: a decision closes the claim to further runs.
+    expect(decide).toContain('and the claim is closed to further runs')
     expect(sentenceText(guideCopy.tryMore[1])).toContain('tick the two runs in its Runs list')
     expect(guideCopy.runPage).toContain(
       'The claimant’s name under the header opens the claim page, which lists every run of the ' +

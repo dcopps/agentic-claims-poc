@@ -25,6 +25,7 @@ export const CLAIM: ClaimRecord = {
   scenario_tag: 'auto_approve',
   created_at: '2026-11-10T16:19:40.000Z',
   updated_at: '2026-11-10T16:20:09.000Z',
+  human_decision: null,
 }
 
 // Wall time per step in milliseconds, so a derived duration is checkable.

@@ -21,6 +21,7 @@ import psycopg
 from fastapi.testclient import TestClient
 
 from backend.app.api.pipeline import get_event_bus, get_orchestrator_factory
+from backend.app.audit import AuditEvent, AuditWriter
 from backend.app.escalation.models import EscalationDecision
 from backend.app.main import create_app
 from backend.app.orchestrator.models import (
@@ -32,6 +33,7 @@ from backend.app.orchestrator.models import (
     PipelineStatus,
 )
 from backend.settings import Settings
+from backend.tests.mcp_fixture import seed_human_decision
 
 
 def _now() -> datetime:
@@ -202,3 +204,122 @@ def test_stream_emits_event_sequence(db_settings: Settings) -> None:
     assert "event: pipeline_started" in resp.text
     assert "event: pipeline_completed" in resp.text
     assert str(cid) in resp.text
+
+
+# --------------------------------------------------------------------------- #
+# Prompt 31: a claim a person has approved or rejected is closed to further runs
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class _CountingStub(_StubOrchestrator):
+    """Records every run it is asked for, so a refusal can prove nothing ran."""
+
+    ran: list[UUID] = field(default_factory=list)
+
+    def run(
+        self,
+        claim_id: UUID,
+        *,
+        correlation_id: UUID | None = None,
+        emit: EventEmitter | None = None,
+        variant: str = "default",
+    ) -> PipelineResult:
+        self.ran.append(claim_id)
+        return super().run(claim_id, correlation_id=correlation_id, emit=emit, variant=variant)
+
+
+def _seed_decided_run(conn: psycopg.Connection, claim_id: UUID, decision: str) -> UUID:
+    """A finished run that went to a person, then the person's row. Status untouched."""
+    cid = uuid4()
+    now = _now()
+    for step, payload in (
+        ("pipeline_started", {"claim_id": str(claim_id), "variant": "default"}),
+        ("pipeline_awaiting_human", {"status": "awaiting_human"}),
+    ):
+        AuditWriter(conn).append(
+            AuditEvent(
+                correlation_id=cid, claim_id=claim_id, agent="orchestrator",
+                step=step, payload=payload, created_at=now,
+            )
+        )
+    seed_human_decision(conn, claim_id, cid, decision)
+    return cid
+
+
+def _seed_in_flight(conn: psycopg.Connection, claim_id: UUID) -> None:
+    AuditWriter(conn).append(
+        AuditEvent(
+            correlation_id=uuid4(), claim_id=claim_id, agent="orchestrator",
+            step="pipeline_started", payload={"claim_id": str(claim_id)}, created_at=_now(),
+        )
+    )
+
+
+CLOSED_APPROVED = "claim API-TEST-0001 was approved by a person and is closed to further runs"
+CLOSED_REJECTED = "claim API-TEST-0001 was rejected by a person and is closed to further runs"
+
+
+def test_run_refused_after_an_approval(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim_id = _insert_claim(clean_db)
+    _seed_decided_run(clean_db, claim_id, "approved")
+    stub = _CountingStub()
+    with _client(db_settings, stub) as client:
+        resp = client.post(f"/api/pipeline/run/{claim_id}")
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == CLOSED_APPROVED
+    assert stub.ran == []
+
+
+def test_run_refused_after_a_rejection_whatever_the_status_says(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    # The claim row still says `received`: the refusal reads the trail, not the status.
+    claim_id = _insert_claim(clean_db)
+    _seed_decided_run(clean_db, claim_id, "rejected")
+    stub = _CountingStub()
+    with _client(db_settings, stub) as client:
+        resp = client.post(f"/api/pipeline/run/{claim_id}")
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == CLOSED_REJECTED
+    assert stub.ran == []
+
+
+def test_replay_refused_after_a_decision(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim_id = _insert_claim(clean_db)
+    _seed_decided_run(clean_db, claim_id, "approved")
+    stub = _CountingStub()
+    with _client(db_settings, stub) as client:
+        resp = client.post(f"/api/pipeline/replay/{claim_id}")
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == CLOSED_APPROVED
+    assert stub.ran == []
+
+
+def test_closed_claim_is_refused_as_closed_before_the_active_run_check(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    # Plan D8: a decided claim with a run in flight names the permanent reason.
+    claim_id = _insert_claim(clean_db)
+    _seed_decided_run(clean_db, claim_id, "approved")
+    _seed_in_flight(clean_db, claim_id)
+    with _client(db_settings, _CountingStub()) as client:
+        resp = client.post(f"/api/pipeline/run/{claim_id}")
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == CLOSED_APPROVED
+    assert "in flight" not in resp.json()["detail"]
+
+
+def test_an_undecided_claim_still_runs(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim_id = _insert_claim(clean_db)
+    stub = _CountingStub()
+    with _client(db_settings, stub) as client:
+        resp = client.post(f"/api/pipeline/run/{claim_id}")
+    assert resp.status_code == 200
+    assert stub.ran == [claim_id]

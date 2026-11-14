@@ -59,6 +59,10 @@ ScenarioTag = Literal[
     "guardrail_escalation",
 ]
 
+# What a person decided about a claim, read from the audit trail's human row
+# (Prompt 31). Never stored on the claim: the trail is the record of decisions.
+HumanDecisionKind = Literal["approved", "rejected"]
+
 
 class ClaimSubmission(BaseModel):
     """Request body for `POST /api/claims` — the pipeline-driving fields only."""
@@ -120,3 +124,8 @@ class ClaimRecord(BaseModel):
     scenario_tag: ScenarioTag | None
     created_at: datetime
     updated_at: datetime
+    # Filled from the audit rows on every read (Prompt 31, additive): `settled`
+    # is written by the pipeline and by an approval alike, so the status cannot
+    # say whether a person decided. Defaults to None so a record built from the
+    # row alone (an insert) is valid; the repository's reads set it.
+    human_decision: HumanDecisionKind | None = None

@@ -252,6 +252,7 @@ function WhatTheButtonsDo() {
       <li>{claimCopy.approveDoes}</li>
       <li>{claimCopy.rejectDoes}</li>
       <li>{claimCopy.decisionRecorded}</li>
+      <li>{claimCopy.decisionCloses}</li>
     </ul>
   )
 }

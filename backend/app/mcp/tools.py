@@ -27,7 +27,12 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.agents_test import AgentPromptView, load_agent_prompts
 from backend.app.api.claims import DEFAULT_LIST_LIMIT
-from backend.app.api.pipeline import OrchestratorFactory, execute_run, make_orchestrator_factory
+from backend.app.api.pipeline import (
+    OrchestratorFactory,
+    closed_claim_detail,
+    execute_run,
+    make_orchestrator_factory,
+)
 from backend.app.audit import AuditRepository, verify_chain
 from backend.app.claims import ClaimRecord, ClaimsRepository, ClaimStatus
 from backend.app.mcp.explain import agent_rows, chain_report, compose_explanation, strip_prompts
@@ -258,7 +263,8 @@ def _register_action_tool(server: MCPServer, deps: _Deps) -> None:
         should escalate over the settlement ceiling; coral_bay: should escalate on the
         Guardrail) and run the pipeline on it, returning the outcome and the run's
         correlation id. Pass claim_id to re-run an existing claim that carries that
-        scenario's tag instead of submitting a new one. The only tool that changes anything."""
+        scenario's tag instead of submitting a new one; a claim a person has approved or
+        rejected is closed and refused. The only tool that changes anything."""
         call = ToolCall("run_scenario", {"name": name, "claim_id": _optional_id(claim_id)})
 
         async def body() -> ScenarioRun:
@@ -293,6 +299,10 @@ def _prepare_scenario_claim(settings: Settings, name: str, claim_id: UUID | None
                 f"not_a_scripted_claim: claim {claim_id} carries scenario_tag "
                 f"{existing.scenario_tag!r}, not {tag!r}"
             )
+        # A person's decision is final (Prompt 31): the same sentence the API's 409
+        # carries, checked before the in-flight guard as there (plan D8).
+        if existing.human_decision is not None:
+            raise ToolError(f"claim_closed: {closed_claim_detail(existing)}")
         if RunsRepository.is_run_active(conn, claim_id):
             raise ToolError(f"run_in_flight: claim {claim_id} already has a run in progress")
         return existing
@@ -320,6 +330,8 @@ def _read_claims(settings: Settings, status: ClaimStatus | None) -> ClaimListing
     with open_connection(settings) as conn:
         records = ClaimsRepository.list_claims(conn, limit=DEFAULT_LIST_LIMIT, status=status)
         counts = RunsRepository.count_runs_by_claim(conn, [record.claim_id for record in records])
+    # `human_decision` is already on each record (the repository fills it); the
+    # listing carries it so a client can tell a closed claim before run_scenario.
     return ClaimListing(
         claims=[
             ClaimListItem(
@@ -331,6 +343,7 @@ def _read_claims(settings: Settings, status: ClaimStatus | None) -> ClaimListing
                 status=record.status,
                 scenario_tag=record.scenario_tag,
                 run_count=counts.get(record.claim_id, 0),
+                human_decision=record.human_decision,
             )
             for record in records
         ]

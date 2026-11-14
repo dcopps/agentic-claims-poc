@@ -93,6 +93,9 @@ class ClaimListItem(BaseModel):
     status: str
     scenario_tag: str | None
     run_count: int = Field(ge=0)
+    # What a person decided, from the audit trail (Prompt 31): a closed claim
+    # cannot be run again, and run_scenario refuses it.
+    human_decision: Literal["approved", "rejected"] | None = None
 
 
 class ClaimListing(BaseModel):

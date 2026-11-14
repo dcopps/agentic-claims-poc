@@ -17,6 +17,10 @@ export const tooltips = {
     'deployment pipeline would trigger it.',
   // Prefixed to strictRerun while the button is disabled.
   disabledNoFinishedRun: 'Not yet available: this claim has no finished run. ',
+  // Prefixed to processClaim and strictRerun while both are disabled because a
+  // person has decided the claim (Prompt 31). The backend refuses the run too.
+  disabledClosedApproved: 'Closed: a person approved this claim; it cannot be run again. ',
+  disabledClosedRejected: 'Closed: a person rejected this claim; it cannot be run again. ',
   // The claim page's Compare selected button (Prompt 30).
   compareSelected:
     'Opens the two runs side by side: the settlement, whether each went to a person, the ' +
@@ -36,3 +40,7 @@ export const tooltips = {
 } as const
 
 export type TooltipKey = keyof typeof tooltips
+
+export function disabledClosed(decision: 'approved' | 'rejected'): string {
+  return decision === 'approved' ? tooltips.disabledClosedApproved : tooltips.disabledClosedRejected
+}

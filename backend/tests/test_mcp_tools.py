@@ -32,6 +32,7 @@ from backend.tests.mcp_fixture import (
     FIXTURE_DISCARDED_QUOTE,
     insert_harborline_claim,
     seed_fixture_run,
+    seed_human_decision,
 )
 
 
@@ -148,6 +149,7 @@ def test_list_claims_counts_runs(clean_db: psycopg.Connection, db_settings: Sett
     assert len(data["claims"]) == 1
     assert data["claims"][0]["claim_number"] == claim.claim_number
     assert data["claims"][0]["run_count"] == 2
+    assert data["claims"][0]["human_decision"] is None
     assert _last_call(clean_db) == ("list_claims", "ok", None)
 
 
@@ -452,3 +454,40 @@ def test_run_scenario_refuses_a_claim_with_a_run_in_flight(
         )
 
     assert "run_in_flight:" in _error_text(_call(db_settings, scenario, _StubOrchestrator(ran=[])))
+
+
+# Prompt 31: a claim a person has decided is closed, on this route as on the API.
+def test_run_scenario_refuses_a_decided_claim(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim = insert_harborline_claim(clean_db)
+    cid = seed_fixture_run(clean_db, claim.claim_id)
+    seed_human_decision(clean_db, claim.claim_id, cid, "approved")
+    stub = _StubOrchestrator(ran=[])
+
+    async def scenario(client: Client) -> Any:
+        return await client.call_tool(
+            "run_scenario", {"name": "harborline", "claim_id": str(claim.claim_id)}
+        )
+
+    text = _error_text(_call(db_settings, scenario, stub))
+    assert text.endswith(
+        f"claim_closed: claim {claim.claim_number} was approved by a person "
+        "and is closed to further runs"
+    )
+    assert stub.ran == []
+    assert _last_call(clean_db) == ("run_scenario", "error", "ToolError")
+
+
+def test_list_claims_says_which_claims_a_person_decided(
+    clean_db: psycopg.Connection, db_settings: Settings
+) -> None:
+    claim = insert_harborline_claim(clean_db)
+    cid = seed_fixture_run(clean_db, claim.claim_id)
+    seed_human_decision(clean_db, claim.claim_id, cid, "rejected")
+
+    async def scenario(client: Client) -> Any:
+        return await client.call_tool("list_claims", {})
+
+    data = _structured(_call(db_settings, scenario))
+    assert data["claims"][0]["human_decision"] == "rejected"

@@ -168,7 +168,8 @@ export const guideCopy = {
       { label: 'Approve' },
       ' or ',
       { label: 'Reject' },
-      ' in the Human review panel; the claim page then records who decided and when.',
+      ' in the Human review panel; the claim page then records who decided and when, and the ' +
+        'claim is closed to further runs.',
     ],
     [
       'To see the same claim handled a second way, press ',

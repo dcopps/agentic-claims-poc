@@ -110,6 +110,26 @@ describe('RunDetailPage', () => {
     )
   })
 
+  // Prompt 31: the closed-claim refusal reaches the banner, the claimant link is
+  // the way back, and the waiting hint stays off.
+  it('shows the closed-claim 409 in the banner with the claimant as the way back', async () => {
+    stubFetch([['/api/claims/c1', CLAIM]])
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(
+      ['runError', 'cid-1'],
+      'claim CLM-2026-9BB57A86 was approved by a person and is closed to further runs',
+    )
+    renderWithProviders(<App />, { route: STARTED_HERE, client })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not start the run: claim CLM-2026-9BB57A86 was approved by a person and is closed ' +
+        'to further runs',
+    )
+    const link = await screen.findByRole('link', { name: 'Harborline Logistics Ltd' })
+    expect(link).toHaveAttribute('href', '/claims/c1')
+    expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('run-not-found')).not.toBeInTheDocument()
+  })
+
   it('renders an error banner when a run-error was recorded for this correlation id', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

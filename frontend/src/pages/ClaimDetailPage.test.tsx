@@ -209,6 +209,10 @@ describe('ClaimDetailPage', () => {
     expect(screen.queryByText('Human review')).not.toBeInTheDocument()
     // The run's summary still says awaiting; the line reads the human row.
     expect(runLines()[0]).toHaveTextContent('Rejected after human review')
+    // Prompt 31: the card says the claim is closed to further runs.
+    expect(within(card).getByTestId('closed-to-runs')).toHaveTextContent(
+      'The claim is closed to further runs.',
+    )
     expect(runLines()[0]).not.toHaveTextContent('Awaiting human review')
   })
 
