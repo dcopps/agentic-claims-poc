@@ -28,6 +28,10 @@ export const statusBadgeClass: Record<string, string> = {
   aborted: 'bg-red-100 text-red-800',
   // Run statuses
   running: 'bg-blue-100 text-blue-800 animate-pulse',
+  // A run after a person's decision (derived from its human audit row; Prompt 30):
+  // the same colours as the claim statuses the decision writes.
+  approved: 'bg-green-100 text-green-800',
+  rejected: 'bg-red-100 text-red-800',
 }
 
 export const typography = {

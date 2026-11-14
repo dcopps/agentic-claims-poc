@@ -70,6 +70,20 @@ describe('ClaimsPage', () => {
     expect(screen.getByRole('columnheader', { name: 'Submitted' })).toBeInTheDocument()
   })
 
+  // Prompt 30 addition: the claim number as a second line under the name, in
+  // the same cell, so the table gains no column.
+  it('shows the claim number under the claimant’s name, small, grey and monospace', async () => {
+    renderWithProviders(<ClaimsPage />)
+    await waitFor(() => expect(screen.getByText('Acme Logistics Ltd')).toBeInTheDocument())
+    const number = screen.getByTestId('claim-number')
+    expect(number).toHaveTextContent('CLM-2026-AAAA')
+    expect(number).toHaveClass('block', 'font-mono', 'text-xs', 'text-slate-500')
+    expect(number.closest('td')).toContainElement(
+      screen.getByRole('link', { name: 'Acme Logistics Ltd' }),
+    )
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6)
+  })
+
   // Prompt 30 (D4): a claim's stored `aborted` is a person's rejection.
   it('labels a rejected claim Rejected, never Aborted', async () => {
     stubFetch([['/api/claims', [{ ...CLAIM, status: 'aborted' }]]])

@@ -7,13 +7,13 @@
 // the rows alone, so everything the page says beyond the stored status comes
 // through here. Pure functions, no React, in the manner of runDerivation.ts.
 import type { AuditEntry, ClaimStatus, FiredRule, RunStatus, RunSummary } from '../api/types'
-import type { RunOutcome } from '../copy/claim'
+import type { HumanDecisionKind, RunOutcome } from '../copy/claim'
 import { FAIL_CLOSED_DESCRIPTION } from '../copy/run'
 import { agentLabel, deriveAbort, deriveFiredRules } from './runDerivation'
 
 /** A person's decision, from the `human` audit row api/human.py writes. */
 export interface HumanDecision {
-  decision: 'approved' | 'rejected'
+  decision: HumanDecisionKind
   decidedBy: string
   comment: string | null
   decidedAt: string
@@ -39,10 +39,14 @@ export function latestRun(runs: readonly RunSummary[]): RunSummary | undefined {
   return runs[0]
 }
 
-// The latest run's outcome with what its rows add: the settled figure from the
+// The latest run's outcome with what its rows add: a person's decision from the
+// human row (the summary's status does not change when a person decides, so
+// the rows are the only place it shows), the settled figure from the
 // pipeline_settled row, the failing agent from the pipeline_aborted row. The
 // other outcomes carry nothing more than the summary's word.
 export function deriveRunOutcome(status: RunStatus, rows: AuditEntry[]): RunOutcome {
+  const decision = deriveDecision(rows)
+  if (decision) return { kind: 'decided', decision: decision.decision }
   switch (status) {
     case 'settled': {
       const settlement = rows.find((r) => r.step === 'pipeline_settled')?.payload.settlement

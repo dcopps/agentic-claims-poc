@@ -66,13 +66,12 @@ describe('labels', () => {
     ])
   })
 
-  it('maps the run statuses, keeping Aborted for a run that broke', () => {
-    expect(['running', 'settled', 'awaiting_human', 'aborted'].map(runStatusLabel)).toEqual([
-      'Running',
-      'Settled',
-      'Awaiting human review',
-      'Aborted',
-    ])
+  it('maps the run statuses, keeping Aborted for a run that broke, and the two decision words', () => {
+    expect(
+      ['running', 'settled', 'awaiting_human', 'aborted', 'approved', 'rejected'].map(
+        runStatusLabel,
+      ),
+    ).toEqual(['Running', 'Settled', 'Awaiting human review', 'Aborted', 'Approved', 'Rejected'])
   })
 
   it('shows an unmapped claim type in a readable fallback form, never hidden', () => {

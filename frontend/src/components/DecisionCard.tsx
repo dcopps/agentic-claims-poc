@@ -12,24 +12,35 @@ export function DecisionCard({ decision, runPath }: { decision: HumanDecision; r
   return (
     <Card title={claimCopy.decisionHeading}>
       <div className="space-y-2 text-sm text-slate-700" data-testid="decision-card">
-        <p>
-          {claimCopy.decided(
-            decision.decision,
-            decision.decidedBy,
-            formatDateTime(decision.decidedAt),
-          )}
-        </p>
-        {decision.comment ? (
-          <blockquote className="border-l-2 border-slate-300 pl-3 text-slate-600">
-            {decision.comment}
-          </blockquote>
-        ) : (
-          <p className="text-slate-500">{claimCopy.noComment}</p>
-        )}
+        <DecisionSummary decision={decision} />
         <p className="text-xs text-slate-500">
           <Sentence segments={claimCopy.decisionInAudit(runPath)} />
         </p>
       </div>
     </Card>
+  )
+}
+
+// Who decided, what and when, then the comment: the card's first two lines,
+// shared with the run page's header so a decision reads the same on the claim
+// it closed and on the run it was made on.
+export function DecisionSummary({ decision }: { decision: HumanDecision }) {
+  return (
+    <>
+      <p>
+        {claimCopy.decided(
+          decision.decision,
+          decision.decidedBy,
+          formatDateTime(decision.decidedAt),
+        )}
+      </p>
+      {decision.comment ? (
+        <blockquote className="border-l-2 border-slate-300 pl-3 text-slate-600">
+          {decision.comment}
+        </blockquote>
+      ) : (
+        <p className="text-slate-500">{claimCopy.noComment}</p>
+      )}
+    </>
   )
 }

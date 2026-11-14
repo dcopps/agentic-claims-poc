@@ -207,6 +207,9 @@ describe('ClaimDetailPage', () => {
     expect(screen.getByText('Rejected')).toHaveClass('bg-red-100')
     expect(screen.queryByText('Aborted')).not.toBeInTheDocument()
     expect(screen.queryByText('Human review')).not.toBeInTheDocument()
+    // The run's summary still says awaiting; the line reads the human row.
+    expect(runLines()[0]).toHaveTextContent('Rejected after human review')
+    expect(runLines()[0]).not.toHaveTextContent('Awaiting human review')
   })
 
   it('shows an approval with no comment', async () => {
@@ -217,6 +220,7 @@ describe('ClaimDetailPage', () => {
     expect(screen.getByTestId('decision-card')).toHaveTextContent('Approved by Dermot on')
     expect(screen.getByTestId('decision-card')).toHaveTextContent('No comment was left.')
     expect(screen.getByText('Settled')).toHaveClass('bg-green-100')
+    expect(runLines()[0]).toHaveTextContent('Approved after human review')
   })
 
   it('says when the claim cannot be found', async () => {

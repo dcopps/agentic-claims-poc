@@ -3,10 +3,13 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { PipelineEvent } from '../api/types'
+import { formatDateTime } from '../copy/format'
 import {
   ABORT_MESSAGE,
   abortedRows,
   CLAIM,
+  DECIDED_AT,
+  decisionRows,
   guardrailFailureRows,
   settledRows,
 } from '../test/runFixtures'
@@ -276,6 +279,58 @@ describe('RunDetailPage after the event (audit rows, no live events)', () => {
         .map((li) => li.textContent),
     ).toEqual(['Guardrail check did not pass', 'Settlement over the $250,000 ceiling: $1,400,000'])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+// Prompt 30 addition: a person's decision does not change the run's recorded
+// status, so the page reads the human row under the run.
+describe('RunDetailPage after a person has decided', () => {
+  const AWAITING = { status: 'awaiting_human', escalation_decision: null }
+
+  beforeEach(() => {
+    streamState.events = []
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads an approval: the badge says Approved and the header says who, when and why', async () => {
+    stubFetch([
+      ['/api/runs/', AWAITING],
+      ['/api/audit', decisionRows('approved', 'Within the reinsurance layer.')],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() => expect(screen.getByTestId('run-decision')).toBeInTheDocument())
+    const line = screen.getByTestId('run-decision')
+    expect(line).toHaveTextContent(`Approved by Dermot on ${formatDateTime(DECIDED_AT)}.`)
+    expect(line).toHaveTextContent('Within the reinsurance layer.')
+    expect(screen.getByText('Approved')).toHaveClass('bg-green-100')
+    expect(screen.queryByText('Awaiting human review')).not.toBeInTheDocument()
+    // The rules that sent the claim to the person stay above the decision.
+    expect(screen.getByTestId('fired-rules')).toHaveTextContent(
+      'Settlement over the $250,000 ceiling',
+    )
+  })
+
+  it('reads a rejection, saying when no comment was left', async () => {
+    stubFetch([
+      ['/api/runs/', AWAITING],
+      ['/api/audit', decisionRows('rejected', null)],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() =>
+      expect(screen.getByTestId('run-decision')).toHaveTextContent('Rejected by Dermot on'),
+    )
+    expect(screen.getByTestId('run-decision')).toHaveTextContent('No comment was left.')
+    expect(screen.getByText('Rejected')).toHaveClass('bg-red-100')
+  })
+
+  it('keeps the recorded status while no person has decided', async () => {
+    stubFetch([
+      ['/api/runs/', AWAITING],
+      ['/api/audit', guardrailFailureRows()],
+    ])
+    renderWithProviders(<App />, { route: ROUTE })
+    await waitFor(() => expect(screen.getByText('Awaiting human review')).toBeInTheDocument())
+    expect(screen.queryByTestId('run-decision')).not.toBeInTheDocument()
   })
 })
 

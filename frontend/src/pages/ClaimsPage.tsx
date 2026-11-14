@@ -109,6 +109,11 @@ function ClaimRow({
         <Link to={`/claims/${claim.claim_id}`} className="text-blue-700 hover:underline">
           {claim.claimant_name}
         </Link>
+        {/* The claim number as a second line in the same cell: no new column, so the
+            table keeps the width measured in Prompt 28 (Prompt 30 addition). */}
+        <span className="block font-mono text-xs text-slate-500" data-testid="claim-number">
+          {claim.claim_number}
+        </span>
       </td>
       <td className="whitespace-nowrap px-2 py-1.5">{claimTypeLabel(claim.claim_type)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums">{formatUsd(claim.reported_amount)}</td>

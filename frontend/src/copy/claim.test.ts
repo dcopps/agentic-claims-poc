@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claimCopy } from './claim'
+import { claimCopy, decisionWord } from './claim'
 
 // Every sentence the claim page can show, verbatim (Prompt 30).
 describe('claimCopy', () => {
@@ -42,6 +42,19 @@ describe('claimCopy', () => {
     expect(claimCopy.runOutcome({ kind: 'aborted' })).toBe('Aborted')
     expect(claimCopy.runOutcome({ kind: 'awaiting_human' })).toBe('Awaiting human review')
     expect(claimCopy.runOutcome({ kind: 'running' })).toBe('Running')
+  })
+
+  // A person's decision does not change the run's recorded status, so the
+  // line says what the rows hold (Prompt 30 addition).
+  it('says a person decided the latest run’s claim, in the word the badge uses', () => {
+    expect(claimCopy.runOutcome({ kind: 'decided', decision: 'approved' })).toBe(
+      'Approved after human review',
+    )
+    expect(claimCopy.runOutcome({ kind: 'decided', decision: 'rejected' })).toBe(
+      'Rejected after human review',
+    )
+    expect(decisionWord('approved')).toBe('Approved')
+    expect(decisionWord('rejected')).toBe('Rejected')
   })
 
   it('explains the runs list', () => {

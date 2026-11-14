@@ -46,11 +46,15 @@ const CLAIM_STATUS_LABELS: Record<string, string> = {
 }
 
 // A run's status, as the run summaries and the run page's badge report it. A
-// run is `aborted` when an agent broke, so the word stays Aborted.
+// run is `aborted` when an agent broke, so the word stays Aborted. A summary
+// stays `awaiting_human` after a person decides; the two decision words are
+// for a run whose audit rows hold the human row (claimDerivation.deriveDecision).
 const RUN_STATUS_LABELS: Record<string, string> = {
   ...SHARED_STATUS_LABELS,
   running: 'Running',
   aborted: 'Aborted',
+  approved: 'Approved',
+  rejected: 'Rejected',
 }
 
 // Underscores to spaces, first letter capitalised: "hail_storm" → "Hail storm".

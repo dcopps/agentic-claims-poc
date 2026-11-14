@@ -12,8 +12,18 @@ export type Segment = string | { readonly link: string; readonly to: string }
 export type RunOutcome =
   | { kind: 'settled'; settlement?: string }
   | { kind: 'aborted'; failingAgent?: string }
+  // A person decided the run's claim: the human row sits under this run.
+  | { kind: 'decided'; decision: HumanDecisionKind }
   | { kind: 'awaiting_human' }
   | { kind: 'running' }
+
+export type HumanDecisionKind = 'approved' | 'rejected'
+
+// The word for what a person did, shared by the run line, the run page's
+// badge and the Decision card, so the three never disagree.
+export function decisionWord(decision: HumanDecisionKind): string {
+  return runStatusLabel(decision)
+}
 
 export const claimCopy = {
   notFound: 'Claim not found.',
@@ -58,6 +68,9 @@ export const claimCopy = {
         return outcome.failingAgent
           ? `Aborted at the ${outcome.failingAgent}`
           : runStatusLabel('aborted')
+      // The summary still says awaiting; the rows say a person has decided.
+      case 'decided':
+        return `${decisionWord(outcome.decision)} after human review`
       default:
         return runStatusLabel(outcome.kind)
     }
@@ -94,8 +107,8 @@ export const claimCopy = {
 
   // --- The Decision card, in the panel's place once a person has decided.
   decisionHeading: 'Decision',
-  decided: (decision: 'approved' | 'rejected', decidedBy: string, decidedAt: string) =>
-    `${decision === 'approved' ? 'Approved' : 'Rejected'} by ${decidedBy} on ${decidedAt}.`,
+  decided: (decision: HumanDecisionKind, decidedBy: string, decidedAt: string) =>
+    `${decisionWord(decision)} by ${decidedBy} on ${decidedAt}.`,
   noComment: 'No comment was left.',
   decisionInAudit: (to: string): Segment[] => [
     'The decision is recorded in the audit trail under ',

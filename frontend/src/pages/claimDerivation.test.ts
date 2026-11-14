@@ -40,6 +40,17 @@ describe('deriveRunOutcome', () => {
     })
   })
 
+  it('reads a person’s decision from the human row, whatever the summary still says', () => {
+    expect(deriveRunOutcome('awaiting_human', decisionRows('approved'))).toEqual({
+      kind: 'decided',
+      decision: 'approved',
+    })
+    expect(deriveRunOutcome('awaiting_human', decisionRows('rejected'))).toEqual({
+      kind: 'decided',
+      decision: 'rejected',
+    })
+  })
+
   it('carries the word alone when the rows are not there yet', () => {
     expect(deriveRunOutcome('settled', [])).toEqual({ kind: 'settled', settlement: undefined })
     expect(deriveRunOutcome('aborted', [])).toEqual({ kind: 'aborted', failingAgent: undefined })

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
-import type { AuditEntry, FiredRule } from '../api/types'
+import type { AuditEntry, FiredRule, PipelineEvent, PipelineResult } from '../api/types'
 import { AgentCard, type CardState } from '../components/AgentCard'
+import { DecisionSummary } from '../components/DecisionCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
 import { WakingNotice } from '../components/WakingNotice'
 import { integrationsCopy } from '../copy/integrations'
@@ -9,6 +10,7 @@ import { runStatusLabel, variantLabel } from '../copy/labels'
 import { failureReason, ruleLine, runCopy } from '../copy/run'
 import { useAuditEntries, useClaim, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
+import { deriveDecision, type HumanDecision } from './claimDerivation'
 import {
   AGENTS,
   type AbortInfo,
@@ -52,8 +54,7 @@ export function RunDetailPage() {
         correlationId={correlationId}
         claimId={claimId}
         variant={variant}
-        status={deriveStatus(rows, events, run.data)}
-        rules={deriveFiredRules(rows, run.data)}
+        {...headerFacts(rows, events, run.data)}
       />
       <RunNotices
         runError={runError}
@@ -73,6 +74,16 @@ export function RunDetailPage() {
       )}
     </div>
   )
+}
+
+// The header's three facts from the record: the outcome, the rules that sent
+// the claim to a person, and what the person then decided.
+function headerFacts(rows: AuditEntry[], events: PipelineEvent[], run?: PipelineResult) {
+  return {
+    status: deriveStatus(rows, events, run),
+    rules: deriveFiredRules(rows, run),
+    decision: deriveDecision(rows),
+  }
 }
 
 // Subscribe to the run-scoped error the ClaimsPage trigger writes on a POST
@@ -153,22 +164,27 @@ interface RunHeaderProps {
   variant: string
   status?: string
   rules: FiredRule[]
+  decision: HumanDecision | null
 }
 
 // Whose claim this is, the outcome badge in plain words, the variant as a
 // sentence (the stored name is in the audit trail, not here), the copyable id
-// with its links, and the fired escalation rules when the run went to a person.
-function RunHeader({ correlationId, claimId, variant, status, rules }: RunHeaderProps) {
+// with its links, the fired escalation rules when the run went to a person,
+// and what the person then decided. A run's recorded status stays
+// awaiting_human after a decision, so the human row under the run is the only
+// place the decision shows: it names the badge and adds the line (Prompt 30).
+function RunHeader({ correlationId, claimId, variant, status, rules, decision }: RunHeaderProps) {
+  const badge = decision?.decision ?? status
   return (
     <Card title="Pipeline run">
       <div className="space-y-2 text-sm text-slate-500">
         <ClaimLine claimId={claimId} />
         <p>
           <span data-testid="run-variant">{variantLabel(variant)}</span>
-          {status && (
+          {badge && (
             <>
               {' · '}
-              <StatusBadge status={status} label={runStatusLabel(status)} />
+              <StatusBadge status={badge} label={runStatusLabel(badge)} />
             </>
           )}
         </p>
@@ -181,6 +197,11 @@ function RunHeader({ correlationId, claimId, variant, status, rules }: RunHeader
                 <li key={rule.name}>{ruleLine(rule)}</li>
               ))}
             </ul>
+          </div>
+        )}
+        {decision && (
+          <div className="space-y-1 text-slate-700" data-testid="run-decision">
+            <DecisionSummary decision={decision} />
           </div>
         )}
       </div>
