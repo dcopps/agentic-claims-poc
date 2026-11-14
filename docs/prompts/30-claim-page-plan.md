@@ -1,6 +1,6 @@
 # Prompt 30 — Plan: the claim page and the human review panel
 
-**Prompt:** `30-claim-page.md`. **Scope:** the claim page (Parts 1 and 2), the human review panel (Part 3) and the Guide's sentences about them. Presentation only. **Written:** 13 November 2026. **Status:** awaiting approval.
+**Prompt:** `30-claim-page.md`. **Scope:** the claim page (Parts 1 and 2), the human review panel (Part 3) and the Guide's sentences about them. Presentation only. **Written:** 13 November 2026. **Status:** approved 14 November 2026 (see *Approval*).
 
 ## 0. What the survey found
 
@@ -174,4 +174,4 @@ Above the card: *← Claims list* (`claimCopy.backToClaims`, a `Link` to `/`).
 
 ## Approval
 
-Awaiting Dermot's confirmation before any code is written.
+**Approved by Dermot, 14 November 2026.** D1, D2, D3, D5 and D6 as recommended. **D7: correct to the recorded date, 11 November**, in the Prompt 29 report, the build log and `CLAUDE.md`. **D4 changed:** a claim's stored status `aborted` only ever comes from a person's rejection, so it is labelled **Rejected** wherever a *claim's* status is shown (the Claims list and the claim page), while a *run's* status `aborted` keeps **Aborted**; `statusLabel` served both today, so it is split into a claim-status label and a run-status label; the sentence under the button reads "Reject marks the claim Rejected; no settlement is made." O1 as recommended (one line in the walkthrough).
