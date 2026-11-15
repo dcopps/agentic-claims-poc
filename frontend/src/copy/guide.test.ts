@@ -79,10 +79,7 @@ describe('guide copy', () => {
     expect(sentenceLabels(guideCopy.trySteps[1])).toEqual(['Submit Claim'])
     expect(sentenceLabels(guideCopy.trySteps[2])).toEqual(['Process'])
     expect(sentenceLabels(guideCopy.trySteps[3])).toEqual([])
-    expect(sentenceLabels(guideCopy.trySteps[4])).toEqual([
-      'View audit log',
-      'Verify chain (whole ledger)',
-    ])
+    expect(sentenceLabels(guideCopy.trySteps[4])).toEqual(['View audit log', 'Verify chain'])
     expect(sentenceLabels(guideCopy.tryMore[0])).toEqual(['Approve', 'Reject'])
     expect(sentenceLabels(guideCopy.tryMore[1])).toEqual(['Strict re-run', 'Compare selected'])
   })
@@ -107,6 +104,19 @@ describe('guide copy', () => {
       expect(guideCopy.runPage).toContain(runStatusLabel(status))
     }
     expect(guideCopy.runPage).not.toContain('awaiting human,')
+  })
+
+  // Prompt 32: the Audit page reads in sentences, and the Guide says what a record is (O1).
+  it('describes the audit log as records in sentences, verified over the whole ledger', () => {
+    expect(guideCopy.runPage).toContain(
+      '“View audit log” opens every recorded step of the run as a sentence, with its place in ' +
+        'the ledger; a step opens as the full record.',
+    )
+    expect(guideCopy.auditHeading).toBe('Reading the audit log')
+    expect(guideCopy.auditPage).toContain('one record: when it was written, who wrote it')
+    expect(guideCopy.auditPage).toContain('the instructions it was sent')
+    expect(guideCopy.auditPage).toContain('every hash in the whole ledger, not only this run’s')
+    expect(guideCopy.auditPage).not.toContain('correlation')
   })
 
   // Prompt 30: the Guide describes the claim page as it now reads.

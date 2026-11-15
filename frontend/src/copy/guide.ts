@@ -157,7 +157,7 @@ export const guideCopy = {
       'Press ',
       { label: 'View audit log' },
       ', then ',
-      { label: 'Verify chain (whole ledger)' },
+      { label: 'Verify chain' },
       ', to check every recorded step against its hash.',
     ],
   ],
@@ -213,11 +213,22 @@ export const guideCopy = {
     'recorded request and response. The status badge is the run’s outcome: Settled, Awaiting ' +
     'human review, or Aborted; when the claim went to a person, the rules that sent it there ' +
     'are listed under the header. ' +
-    '“View audit log” opens every recorded step of the run with its hash. The Guardrail card ' +
+    '“View audit log” opens every recorded step of the run as a sentence, with its place in ' +
+    'the ledger; a step opens as the full record. The Guardrail card ' +
     'lists any refused objections: things the model said were policy citations that the code ' +
     'could not find in the Adjuster’s text, each with the reason it did not count. ' +
     'The claimant’s name under the header opens the claim page, which lists every run of the ' +
     'claim by the time it started, with its outcome.',
+
+  // Prompt 32 (O1): what a record is, and that the chain check covers the whole ledger.
+  auditHeading: 'Reading the audit log',
+  auditPage:
+    'Each row of the audit log is one record: when it was written, who wrote it (an agent, ' +
+    'the orchestrator or a person), what happened in a sentence, and its number in the ledger ' +
+    'with the start of its hash. A record opens in full: the stored record as a tree, and, ' +
+    'where a model was called, the instructions it was sent. Verify chain recomputes every ' +
+    'hash in the whole ledger, not only this run’s, and names the first record that does not ' +
+    'match.',
 
   linksHeading: 'Links',
   // An in-app link, rendered with <Link> like the Integrations line (Prompt 27).

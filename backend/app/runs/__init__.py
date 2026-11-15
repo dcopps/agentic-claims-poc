@@ -4,13 +4,20 @@ Runs domain — reconstruct past pipeline runs from the audit_log.
 Public surface:
 
   - `RunsRepository` — pure-read reconstruction: `get_run`, `list_runs_for_claim`,
-    `count_runs_by_claim`, `is_run_active`, `compare`.
-  - `RunSummary` / `RunComparison` / `DiffSummary` — the typed run views.
+    `list_recent_runs`, `count_runs_by_claim`, `is_run_active`, `compare`.
+  - `RunSummary` / `RunListItem` / `RunComparison` / `DiffSummary` — the typed
+    run views.
   - `RunNotFoundError` / `RunClaimMismatchError` — comparison guards the API maps
     to 404 / 400.
 """
 
-from backend.app.runs.models import DiffSummary, RunComparison, RunStatus, RunSummary
+from backend.app.runs.models import (
+    DiffSummary,
+    RunComparison,
+    RunListItem,
+    RunStatus,
+    RunSummary,
+)
 from backend.app.runs.repository import (
     RunClaimMismatchError,
     RunNotFoundError,
@@ -22,6 +29,7 @@ __all__ = [
     "DiffSummary",
     "RunClaimMismatchError",
     "RunComparison",
+    "RunListItem",
     "RunNotFoundError",
     "RunStatus",
     "RunSummary",

@@ -70,6 +70,10 @@ export function GuidePage() {
         <p className="text-sm text-slate-700">{guideCopy.runPage}</p>
       </Card>
 
+      <Card title={guideCopy.auditHeading}>
+        <p className="text-sm text-slate-700">{guideCopy.auditPage}</p>
+      </Card>
+
       <Card title={guideCopy.linksHeading}>
         <ul className="space-y-1 text-sm" aria-label="Guide links">
           {guideLinks.map((link) => (

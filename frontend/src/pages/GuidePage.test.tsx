@@ -5,7 +5,7 @@ import { guideCopy, guideLinks } from '../copy/guide'
 import { renderWithProviders } from '../test/utils'
 
 describe('GuidePage', () => {
-  it('renders the six sections, the five steps and the public links with their exact URLs', () => {
+  it('renders the seven sections, the five steps and the public links with their exact URLs', () => {
     renderWithProviders(<App />, { route: '/guide' })
     expect(screen.getByRole('heading', { name: 'Guide' })).toBeInTheDocument()
     for (const heading of [
@@ -14,6 +14,7 @@ describe('GuidePage', () => {
       guideCopy.tryHeading,
       guideCopy.scenariosHeading,
       guideCopy.runPageHeading,
+      guideCopy.auditHeading,
       guideCopy.linksHeading,
     ]) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()

@@ -7,6 +7,7 @@ import { refusalReason } from '../copy/labels'
 import { runCopy } from '../copy/run'
 import { tooltips } from '../copy/tooltips'
 import { useAgentPrompt } from '../hooks/queries'
+import { extractPrompt } from '../pages/auditDerivation'
 import { Tooltip } from './Tooltip'
 import { Badge, JsonBlock, Spinner } from './ui'
 
@@ -274,20 +275,6 @@ function PromptText({ title, body }: { title: string; body: string }) {
       </pre>
     </div>
   )
-}
-
-// Read the literal prompt (Phase 8.3) from an audit entry's `llm_call.prompt`.
-// Returns null when the entry is absent, the call made no prompt (e.g. the
-// Adjuster demo fixture), or the run pre-dates the capture — the caller then
-// falls back to the raw template.
-function extractPrompt(entry?: AuditEntry): { system: string; user: string } | null {
-  const llmCall = entry?.payload.llm_call
-  if (typeof llmCall !== 'object' || llmCall === null) return null
-  const prompt = (llmCall as Record<string, unknown>).prompt
-  if (typeof prompt !== 'object' || prompt === null) return null
-  const { system, user } = prompt as Record<string, unknown>
-  if (typeof system === 'string' && typeof user === 'string') return { system, user }
-  return null
 }
 
 // The response block to display for an agent: its output (or the validator's

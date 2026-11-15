@@ -31,6 +31,13 @@ export const tooltips = {
   verifyChain:
     'In production, the audit ledger is SQL Server with Ledger Tables; chain ' +
     'verification is a single `sys.sp_verify_database_ledger` call.',
+  // On the Audit page's Record column heading (Prompt 32), in the words the
+  // Guide's How it works uses for the hash, so the two agree.
+  chainHash:
+    'Each record is numbered in the order it was written. The code is the start of its ' +
+    'SHA-256 hash, calculated from the record’s contents and the hash of the record before ' +
+    'it. Changing or removing any record breaks every hash after it; Verify chain checks the ' +
+    'whole trail.',
   // Beside "Refused objections" on the Guardrail card (Dermot's wording, 12
   // November 2026): what the line is and why the objections did not count.
   refusedObjections:

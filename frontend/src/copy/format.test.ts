@@ -32,6 +32,14 @@ describe('formatDateTime', () => {
   it('returns the raw string when it does not parse', () => {
     expect(formatDateTime('not a date', fixed)).toBe('not a date')
   })
+
+  // Prompt 32: the audit log's rows are seconds apart.
+  it('adds seconds only when asked', () => {
+    expect(formatDateTime('2026-11-15T15:09:08Z', { ...fixed, seconds: true })).toContain(
+      '15:09:08',
+    )
+    expect(formatDateTime('2026-11-15T15:09:08Z', fixed)).not.toContain(':08')
+  })
 })
 
 // Prompt 30: the loss and reported dates are calendar dates.

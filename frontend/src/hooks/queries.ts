@@ -8,6 +8,7 @@ import {
   listAuditEntries,
   listClaimRuns,
   listClaims,
+  listRuns,
 } from '../api/client'
 import type {
   AgentPrompt,
@@ -16,6 +17,7 @@ import type {
   McpCatalogue,
   PipelineResult,
   PolicyIndex,
+  RunListItem,
   RunSummary,
 } from '../api/types'
 
@@ -46,6 +48,17 @@ export function useClaimRuns(claimId: string): UseQueryResult<RunSummary[]> {
     queryKey: ['claim', claimId, 'runs'],
     queryFn: () => listClaimRuns(claimId),
     staleTime: 0, // a run in flight changes this
+  })
+}
+
+// How many runs the Audit page's Recent runs list shows (Prompt 32).
+export const RECENT_RUNS_LIMIT = 20
+
+export function useRecentRuns(): UseQueryResult<RunListItem[]> {
+  return useQuery({
+    queryKey: ['runs', 'recent', RECENT_RUNS_LIMIT],
+    queryFn: () => listRuns({ limit: RECENT_RUNS_LIMIT }),
+    staleTime: 0, // a run just started belongs at the top
   })
 }
 

@@ -214,7 +214,8 @@ function durationBetweenRows(rows: AuditEntry[], rowIndex: number): Partial<Card
 
 // The sentence for a finished agent, from the fields its audit row carries. A row
 // of an unexpected shape still reads as finished rather than breaking the page.
-function describeRow(
+// Exported for the Audit page's rows (Prompt 32), which read the same sentence.
+export function describeRow(
   key: string,
   payload: Payload,
 ): Pick<CardState, 'status' | 'summary' | 'detail'> {

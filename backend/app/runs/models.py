@@ -8,6 +8,8 @@ comparison APIs return:
   - `RunStatus` — a run's lifecycle outcome. `running` covers a run with a
     `pipeline_started` entry but no terminal entry yet.
   - `RunSummary` — the one-line view of a run, for the per-claim runs list.
+  - `RunListItem` — a `RunSummary` that also names its claim and says whether a
+    person has decided it, for the cross-claim listing (Prompt 32).
   - `DiffSummary` — the fields where two runs differ (settlement, escalation,
     fired rules, guardrail) — the comparison's headline.
   - `RunComparison` — two reconstructed `PipelineResult`s plus their diff.
@@ -23,6 +25,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from backend.app.claims.models import HumanDecisionKind
 from backend.app.orchestrator.models import PipelineResult
 
 RunStatus = Literal["running", "settled", "awaiting_human", "aborted"]
@@ -41,6 +44,22 @@ class RunSummary(BaseModel):
     completed_at: datetime | None
     # None when escalation was never decided (aborted, or still running).
     escalate: bool | None
+
+
+class RunListItem(RunSummary):
+    """
+    One run in the cross-claim listing (`GET /api/runs`, Prompt 32).
+
+    The summary plus what a visitor needs to pick a run without opening it: the
+    claim it belongs to, named as every page names a claim, and whether a
+    person has since decided that claim (read from the audit trail, as the
+    claim responses read it; never stored).
+    """
+
+    claim_id: UUID
+    claim_number: str
+    claimant_name: str
+    human_decision: HumanDecisionKind | None
 
 
 class DiffSummary(BaseModel):

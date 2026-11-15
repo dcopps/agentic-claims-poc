@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import type { AuditEntry, FiredRule, PipelineEvent, PipelineResult } from '../api/types'
 import { AgentCard, type CardState } from '../components/AgentCard'
+import { ClaimLine } from '../components/ClaimLine'
 import { DecisionSummary } from '../components/DecisionCard'
 import { Card, CopyButton, ErrorBanner, StatusBadge } from '../components/ui'
 import { WakingNotice } from '../components/WakingNotice'
 import { integrationsCopy } from '../copy/integrations'
 import { runStatusLabel, variantLabel } from '../copy/labels'
 import { failureReason, ruleLine, runCopy } from '../copy/run'
-import { useAuditEntries, useClaim, useRun } from '../hooks/queries'
+import { useAuditEntries, useRun } from '../hooks/queries'
 import { useRunStream } from '../hooks/useRunStream'
 import { deriveDecision, type HumanDecision } from './claimDerivation'
 import {
@@ -206,31 +207,6 @@ function RunHeader({ correlationId, claimId, variant, status, rules, decision }:
         )}
       </div>
     </Card>
-  )
-}
-
-// The claimant's name as the way back to the claim page, then the type, amount
-// and claim number in plain words. Nothing is fetched until the page knows
-// which claim the run recorded (`claimId` is empty until then).
-function ClaimLine({ claimId }: { claimId: string }) {
-  const claim = useClaim(claimId, claimId !== '')
-  if (claim.isError) {
-    return (
-      <p className="text-slate-500" data-testid="run-claim">
-        {runCopy.claimUnavailable}
-      </p>
-    )
-  }
-  if (!claim.data) return null
-  const { claim_id, claimant_name, claim_type, reported_amount, claim_number } = claim.data
-  return (
-    <p className="text-slate-700" data-testid="run-claim">
-      <Link to={`/claims/${claim_id}`} className="font-medium text-blue-700 hover:underline">
-        {claimant_name}
-      </Link>
-      {' · '}
-      {runCopy.claimDetails(claim_type, reported_amount, claim_number)}
-    </p>
   )
 }
 

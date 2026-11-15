@@ -16,6 +16,7 @@ runs (status `running`, `completed_at=None`).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
@@ -28,9 +29,16 @@ from backend.app.agents.adjuster_models import AdjusterOutput
 from backend.app.agents.doc_parser_models import DocParserOutput
 from backend.app.agents.guardrail_models import GuardrailFlag, GuardrailOutput
 from backend.app.agents.validator_models import ValidatorVerdict
+from backend.app.audit.repository import AuditRepository
 from backend.app.escalation.models import EscalationDecision, FiredRule
 from backend.app.orchestrator.models import PipelineResult, PipelineStatus
-from backend.app.runs.models import DiffSummary, RunComparison, RunStatus, RunSummary
+from backend.app.runs.models import (
+    DiffSummary,
+    RunComparison,
+    RunListItem,
+    RunStatus,
+    RunSummary,
+)
 
 # Terminal audit step -> the run status it implies. The three are mutually
 # exclusive; exactly one appears in a completed run's chain.
@@ -39,6 +47,18 @@ _TERMINAL_STEPS: dict[str, PipelineStatus] = {
     "pipeline_awaiting_human": "awaiting_human",
     "pipeline_aborted": "aborted",
 }
+
+
+# Bounds on the cross-claim listing (Prompt 32): the Audit page asks for twenty;
+# a hundred is more than any page shows.
+_MIN_RUNS_LIMIT = 1
+_MAX_RUNS_LIMIT = 100
+
+# A run-id prefix as the Audit page accepts it: the first eight or more
+# characters of a lower-case UUID. Re-checked here, not only at the API, because
+# the value becomes a LIKE pattern and is safe only while it can hold no
+# metacharacter (`%`, `_`, `\\`).
+_RUN_PREFIX = re.compile(r"^[0-9a-f-]{8,36}$")
 
 
 class RunNotFoundError(ValueError):
@@ -102,6 +122,47 @@ class RunsRepository:
         return summaries
 
     @staticmethod
+    def list_recent_runs(
+        conn: psycopg.Connection, limit: int, prefix: str | None = None
+    ) -> list[RunListItem]:
+        """
+        The latest runs across every claim, newest first (Prompt 32).
+
+        Ordered by the `pipeline_started` row's position in the ledger, which is
+        the order the runs began. With `prefix`, only runs whose id starts with
+        it: how the Audit page turns a short id into a run (0, 1 or many).
+        Three reads — the starts joined to their claims, the runs' rows for the
+        summaries, the claims' human decisions — and no write.
+        """
+        if not _MIN_RUNS_LIMIT <= limit <= _MAX_RUNS_LIMIT:
+            raise ValueError(
+                f"RunsRepository.list_recent_runs: limit must be in "
+                f"[{_MIN_RUNS_LIMIT}, {_MAX_RUNS_LIMIT}]; got {limit}"
+            )
+        if prefix is not None and not _RUN_PREFIX.fullmatch(prefix):
+            raise ValueError(
+                "RunsRepository.list_recent_runs: prefix must be 8 to 36 lower-case hex "
+                f"characters or hyphens; got {prefix[:40]!r}"
+            )
+        starts = _fetch_recent_starts(conn, limit, prefix)
+        if not starts:
+            return []
+        steps = _fetch_steps_by_run(conn, [cid for cid, _claim, _number, _name in starts])
+        decided = AuditRepository.human_decisions(
+            conn, [claim_id for _cid, claim_id, _number, _name in starts]
+        )
+        return [
+            RunListItem(
+                **_summarise(cid, *steps[cid]).model_dump(),
+                claim_id=claim_id,
+                claim_number=number,
+                claimant_name=name,
+                human_decision=decided.get(claim_id),
+            )
+            for cid, claim_id, number, name in starts
+        ]
+
+    @staticmethod
     def count_runs_by_claim(
         conn: psycopg.Connection, claim_ids: Sequence[UUID]
     ) -> dict[UUID, int]:
@@ -162,6 +223,46 @@ class RunsRepository:
 # --------------------------------------------------------------------------- #
 # Fetch + reconstruction helpers
 # --------------------------------------------------------------------------- #
+
+
+def _fetch_recent_starts(
+    conn: psycopg.Connection, limit: int, prefix: str | None
+) -> list[tuple[UUID, UUID, str, str]]:
+    """The latest `pipeline_started` rows with their claim's number and claimant."""
+    # The id is a UUID column; the prefix match is on its text, which cannot use
+    # the index. One row per run makes the scan small at this system's scale.
+    where = "a.step = 'pipeline_started'"
+    params: list[Any] = []
+    if prefix is not None:
+        where += " AND a.correlation_id::text LIKE %s"
+        params.append(f"{prefix}%")
+    params.append(limit)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT a.correlation_id, a.claim_id, c.claim_number, c.claimant_name "
+            "FROM audit_log a JOIN claims c ON c.claim_id = a.claim_id "
+            f"WHERE {where} ORDER BY a.audit_id DESC LIMIT %s",
+            params,
+        )
+        return [(row[0], row[1], row[2], row[3]) for row in cur.fetchall()]
+
+
+def _fetch_steps_by_run(
+    conn: psycopg.Connection, correlation_ids: Sequence[UUID]
+) -> dict[UUID, tuple[dict[str, Any], datetime]]:
+    """Each run's payloads by step and the time of its first row, for `_summarise`."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT correlation_id, step, payload, created_at FROM audit_log "
+            "WHERE correlation_id = ANY(%s) ORDER BY audit_id",
+            (list(correlation_ids),),
+        )
+        rows = cur.fetchall()
+    steps: dict[UUID, tuple[dict[str, Any], datetime]] = {}
+    for cid, step, payload, created in rows:
+        by_step, _first_seen = steps.setdefault(cid, ({}, created))
+        by_step[step] = payload
+    return steps
 
 
 def _fetch_run_rows(

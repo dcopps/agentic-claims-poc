@@ -75,15 +75,18 @@ Auto-approve ($85k water damage)"**, then **Submit Claim**. On the list, click
 
 ## Audit viewer + chain verification (1:45–2:05)
 
-**Action:** open the **Audit** nav link, paste/select the run's correlation_id,
-click **"Verify chain (whole ledger)"**.
+**Action:** open the **Audit** nav link, choose the run from **Recent runs** (or
+paste its id, or the first eight characters of it), click **Verify chain**.
 
 > "Every step is a row in a SHA-256 hash chain. One click verifies the *entire*
 > ledger — not just this run — and locates the first break if anything were
 > tampered. In production this is SQL Server Ledger Tables; here it's hand-rolled
 > and does the same job."
 
-**Screen:** green "Chain verified" badge.
+**Screen:** the run named by its claim; one sentence per record ("Covered (92%
+confident)", "Settled at $78,000"); the green sentence "Checked all N records in
+the ledger, this run's included: every hash matches." A record opens in the
+viewer as a tree, with the instructions the model was sent on a second tab.
 
 ---
 

@@ -3,14 +3,16 @@ Runs API — read access to reconstructed past runs and their comparison.
 
 Every run is reconstructed purely from the audit_log, so these endpoints write
 nothing. `compare` exists for the side-by-side variant view: it reconstructs two
-runs and diffs them, guarding that both target the same claim.
+runs and diffs them, guarding that both target the same claim. `GET /api/runs`
+(Prompt 32) lists the latest runs across every claim, each named by its claim,
+and with `prefix` resolves the short run id the pages show to the full one.
 """
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.pipeline import get_settings
@@ -18,6 +20,7 @@ from backend.app.orchestrator import PipelineResult
 from backend.app.runs import (
     RunClaimMismatchError,
     RunComparison,
+    RunListItem,
     RunNotFoundError,
     RunsRepository,
 )
@@ -25,6 +28,25 @@ from backend.db.connection import open_connection
 from backend.settings import Settings
 
 runs_router = APIRouter(prefix="/runs", tags=["runs"])
+
+# The Audit page's Recent runs list asks for this many.
+DEFAULT_RUNS_LIMIT = 20
+# The short id the pages show is the first eight characters; a whole UUID is 36.
+# Upper case is accepted and lowered, because a copied id may carry it.
+RUN_PREFIX_PATTERN = r"^[0-9a-fA-F-]+$"
+
+
+@runs_router.get("", response_model=list[RunListItem])
+async def list_runs(
+    limit: int = Query(default=DEFAULT_RUNS_LIMIT, ge=1, le=100),
+    prefix: str | None = Query(
+        default=None, min_length=8, max_length=36, pattern=RUN_PREFIX_PATTERN
+    ),
+    settings: Settings = Depends(get_settings),
+) -> list[RunListItem]:
+    """The latest runs across every claim, newest first; with `prefix`, those it starts."""
+    lowered = prefix.lower() if prefix is not None else None
+    return await run_in_threadpool(_list_recent, settings, limit, lowered)
 
 
 # `/compare/...` is declared before `/{correlation_id}` so the literal segment is
@@ -57,6 +79,11 @@ async def get_run(
             status_code=404, detail=f"run not found: {correlation_id}"
         )
     return result
+
+
+def _list_recent(settings: Settings, limit: int, prefix: str | None) -> list[RunListItem]:
+    with open_connection(settings) as conn:
+        return RunsRepository.list_recent_runs(conn, limit, prefix)
 
 
 def _get_run(settings: Settings, correlation_id: UUID) -> PipelineResult | None:

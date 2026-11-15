@@ -13,10 +13,24 @@ import type {
   PipelineResult,
   PolicyIndex,
   RunComparison,
+  RunListItem,
   RunSummary,
 } from './types'
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+
+// A failed request, with the status kept so a page can tell "not found" from
+// every other failure without parsing the message (Prompt 32). Callers that
+// only read `.message` are unchanged: it is still the backend's detail.
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, detail: string) {
+    super(detail)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -33,7 +47,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // non-JSON error body — keep the status line
     }
-    throw new Error(detail)
+    throw new ApiError(res.status, detail)
   }
   return (await res.json()) as T
 }
@@ -82,6 +96,18 @@ export function compareRuns(a: string, b: string): Promise<RunComparison> {
 
 export function getClaim(claimId: string): Promise<ClaimRecord> {
   return request<ClaimRecord>(`/api/claims/${claimId}`)
+}
+
+// The latest runs across every claim (Prompt 32), or with `prefix` the runs
+// whose id starts with it — how the Audit page resolves a short id.
+export function listRuns(
+  options: { limit?: number; prefix?: string } = {},
+): Promise<RunListItem[]> {
+  const params = new URLSearchParams()
+  if (options.prefix !== undefined) params.set('prefix', options.prefix)
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return request<RunListItem[]>(`/api/runs${query ? `?${query}` : ''}`)
 }
 
 export function getRun(correlationId: string): Promise<PipelineResult> {

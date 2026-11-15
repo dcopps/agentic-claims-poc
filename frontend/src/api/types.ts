@@ -66,6 +66,15 @@ export interface RunSummary {
   escalate: boolean | null
 }
 
+// One run in the cross-claim listing GET /api/runs returns (Prompt 32): the
+// summary plus the claim it belongs to and whether a person has decided it.
+export interface RunListItem extends RunSummary {
+  claim_id: string
+  claim_number: string
+  claimant_name: string
+  human_decision: HumanDecisionKind | null
+}
+
 export interface FiredRule {
   name: string
   rule_type: string

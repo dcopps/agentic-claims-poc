@@ -33,7 +33,7 @@ describe('App routing', () => {
 
   it('deep-links to the audit viewer', () => {
     renderWithProviders(<App />, { route: '/audit' })
-    expect(screen.getByLabelText('Correlation id')).toBeInTheDocument()
+    expect(screen.getByLabelText('Run id')).toBeInTheDocument()
   })
 
   it('deep-links to the agent test bench', () => {

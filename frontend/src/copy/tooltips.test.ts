@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { guideCopy } from './guide'
 import { disabledClosed, tooltips } from './tooltips'
 
 describe('tooltips', () => {
@@ -50,5 +51,22 @@ describe('tooltips', () => {
     )
     expect(disabledClosed('approved')).toBe(tooltips.disabledClosedApproved)
     expect(disabledClosed('rejected')).toBe(tooltips.disabledClosedRejected)
+  })
+
+  // Prompt 32: the Record column's ⓘ, in the Guide's own words for the hash
+  // (Dermot, at the gate: no "fingerprint").
+  it('explain the record number and hash in the words the Guide uses', () => {
+    expect(tooltips.chainHash).toBe(
+      'Each record is numbered in the order it was written. The code is the start of its ' +
+        'SHA-256 hash, calculated from the record’s contents and the hash of the record before ' +
+        'it. Changing or removing any record breaks every hash after it; Verify chain checks the ' +
+        'whole trail.',
+    )
+    expect(tooltips.chainHash).not.toContain('fingerprint')
+    const recording = guideCopy.how.find((part) => part.lead === 'Recording.')!.body.join('')
+    for (const phrase of ['SHA-256 hash', 'breaks every hash after it', 'checks the whole trail']) {
+      expect(recording).toContain(phrase)
+      expect(tooltips.chainHash).toContain(phrase)
+    }
   })
 })

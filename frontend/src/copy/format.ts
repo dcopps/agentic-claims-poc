@@ -29,6 +29,8 @@ export function formatUsd(value: string | number): string {
 export interface DateTimeOptions {
   locale?: string
   timeZone?: string
+  // With seconds, for the audit log's rows, whose steps are seconds apart (Prompt 32).
+  seconds?: boolean
 }
 
 // A short date and time in the reader's locale: "4 Nov 2026, 11:08" in en-GB,
@@ -43,6 +45,7 @@ export function formatDateTime(iso: string, options: DateTimeOptions = {}): stri
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    second: options.seconds ? '2-digit' : undefined,
     timeZone: options.timeZone,
   }).format(date)
 }
