@@ -18,18 +18,17 @@ export const auditCopy = {
   severalStartWith: (count: number, prefix: string) =>
     `${count} runs start with ${prefix}; give more of the id.`,
 
-  recentHeading: 'Recent runs',
+  // The table of recent runs, in the Claims list's style (Dermot, 15 November);
+  // below the records when a run is loaded, so a visitor sees their run first.
+  recentHeading: (count: number) => `The ${count} most recent runs`,
+  recentColumns: {
+    claimant: 'Claimant',
+    kind: 'Kind of run',
+    started: 'Started',
+    outcome: 'Outcome',
+  },
   noRuns: 'No runs recorded yet.',
   recentLoadFailed: 'Recent runs could not be loaded.',
-  // One recent run, the whole line a link: who, which claim, what kind of run,
-  // when it started, how it came out.
-  recentLine: (
-    claimant: string,
-    claimNumber: string,
-    kind: string,
-    started: string,
-    outcome: string,
-  ) => `${claimant} · ${claimNumber} · ${kind} · ${started} · ${outcome}`,
 
   chooseRun: 'Enter a run id, or choose a run above, to see its records.',
   unknownId: 'No run has this id.',

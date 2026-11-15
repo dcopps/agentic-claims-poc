@@ -5,14 +5,14 @@ import type { AuditEntry, ChainVerification, RunListItem, RunStatus } from '../a
 import { ClaimLine } from '../components/ClaimLine'
 import { RecordDialog } from '../components/RecordDialog'
 import { Tooltip } from '../components/Tooltip'
-import { Button, Card, Spinner } from '../components/ui'
+import { Button, Card, Spinner, StatusBadge } from '../components/ui'
 import { WakingNotice } from '../components/WakingNotice'
 import { auditCopy } from '../copy/audit'
 import { claimCopy, decisionWord } from '../copy/claim'
 import { formatDateTime } from '../copy/format'
 import { runStatusLabel, variantLabel } from '../copy/labels'
 import { tooltips } from '../copy/tooltips'
-import { useAuditEntries, useRecentRuns } from '../hooks/queries'
+import { RECENT_RUNS_LIMIT, useAuditEntries, useRecentRuns } from '../hooks/queries'
 import {
   classifyRunId,
   deriveStartedAt,
@@ -30,7 +30,9 @@ const WITH_SECONDS = { seconds: true }
 // The audit log in words (Prompt 32): a run named by its claim, one sentence
 // per record, the chain check in sentences, and each record openable in the
 // viewer. The run comes from the address (?correlation_id=), so every link in
-// still lands; the finder below writes the same parameter.
+// still lands; the finder below writes the same parameter. The recent runs sit
+// below the records, so a visitor arriving from View audit log sees their run
+// first; with no run loaded they follow the box (Dermot, 15 November).
 export function AuditPage() {
   const [params, setParams] = useSearchParams()
   const cid = params.get('correlation_id') ?? ''
@@ -48,6 +50,7 @@ export function AuditPage() {
           {auditCopy.chooseRun}
         </p>
       )}
+      <RecentRuns />
     </div>
   )
 }
@@ -105,7 +108,6 @@ function RunFinder({ current, onLoad }: RunFinderProps) {
           {message}
         </p>
       )}
-      <RecentRuns />
     </div>
   )
 }
@@ -123,41 +125,67 @@ async function resolveShortId(prefix: string): Promise<{ load?: string; message?
   }
 }
 
-// The twenty latest runs across every claim, each line a link to its audit log.
+// The latest runs across every claim, in the Claims list's style: the claimant
+// (the link that loads the run) with the claim number beneath, the kind of run,
+// when it started, and the outcome as a badge in the run page's colours and
+// words — Approved or Rejected once a person has decided.
 function RecentRuns() {
   const runs = useRecentRuns()
+  const heading = auditCopy.recentHeading(RECENT_RUNS_LIMIT)
   return (
-    <div>
-      <h3 className="text-slate-500">{auditCopy.recentHeading}</h3>
+    <Card title={heading}>
       {runs.isLoading && <Spinner />}
-      {runs.isError && <p className="text-red-600">{auditCopy.recentLoadFailed}</p>}
-      {runs.data && runs.data.length === 0 && <p className="text-slate-500">{auditCopy.noRuns}</p>}
-      {runs.data && runs.data.length > 0 && (
-        <ul className="space-y-0.5" aria-label={auditCopy.recentHeading}>
-          {runs.data.map((run) => (
-            <li key={run.correlation_id}>
-              <Link
-                to={`/audit?correlation_id=${run.correlation_id}`}
-                className="text-blue-700 hover:underline"
-              >
-                {recentLine(run)}
-              </Link>
-            </li>
-          ))}
-        </ul>
+      {runs.isError && <p className="text-sm text-red-600">{auditCopy.recentLoadFailed}</p>}
+      {runs.data && runs.data.length === 0 && (
+        <p className="text-sm text-slate-500">{auditCopy.noRuns}</p>
       )}
-    </div>
+      {runs.data && runs.data.length > 0 && (
+        <table className="w-full text-left text-sm" aria-label={heading}>
+          <thead className="text-slate-500">
+            <tr>
+              <th className="py-1.5 pr-2">{auditCopy.recentColumns.claimant}</th>
+              <th className="px-2 py-1.5">{auditCopy.recentColumns.kind}</th>
+              <th className="px-2 py-1.5">{auditCopy.recentColumns.started}</th>
+              <th className="py-1.5 pl-2">{auditCopy.recentColumns.outcome}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.data.map((run) => (
+              <RecentRunRow key={run.correlation_id} run={run} />
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   )
 }
 
-function recentLine(run: RunListItem): string {
-  const outcome = run.human_decision ? decisionWord(run.human_decision) : runStatusLabel(run.status)
-  return auditCopy.recentLine(
-    run.claimant_name,
-    run.claim_number,
-    variantLabel(run.variant),
-    formatDateTime(run.started_at),
-    outcome,
+function RecentRunRow({ run }: { run: RunListItem }) {
+  const outcome = run.human_decision ?? run.status
+  return (
+    <tr className="border-t border-slate-200">
+      <td className="whitespace-nowrap py-1.5 pr-2">
+        <Link
+          to={`/audit?correlation_id=${run.correlation_id}`}
+          className="text-blue-700 hover:underline"
+        >
+          {run.claimant_name}
+        </Link>
+        <span className="block font-mono text-xs text-slate-500" data-testid="claim-number">
+          {run.claim_number}
+        </span>
+      </td>
+      <td className="whitespace-nowrap px-2 py-1.5">{variantLabel(run.variant)}</td>
+      <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">
+        {formatDateTime(run.started_at)}
+      </td>
+      <td className="py-1.5 pl-2">
+        <StatusBadge
+          status={outcome}
+          label={run.human_decision ? decisionWord(run.human_decision) : runStatusLabel(run.status)}
+        />
+      </td>
+    </tr>
   )
 }
 

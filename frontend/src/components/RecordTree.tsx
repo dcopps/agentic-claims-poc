@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { auditCopy } from '../copy/audit'
 
 // The record's own keys and the level beneath them start open; deeper levels
@@ -41,7 +42,7 @@ function Node({ name, value, depth }: NodeProps) {
   return (
     <div className="flex flex-wrap gap-x-1 pl-3">
       {name !== undefined && <Key name={name} />}
-      <Leaf value={value} />
+      <Leaf name={name} value={value} />
     </div>
   )
 }
@@ -90,9 +91,23 @@ function Key({ name }: { name: string }) {
   return <span className="font-medium text-slate-700">{name}:</span>
 }
 
-function Leaf({ value }: { value: unknown }) {
+// The key a passage's id is stored under in the Validator's and Guardrail's
+// records; its value opens that passage on the Policy page (Dermot, 15 November).
+const CHUNK_ID_KEY = 'chunk_id'
+
+function Leaf({ name, value }: { name?: string; value: unknown }) {
   if (value === null || value === undefined) {
     return <span className={VALUE_CLASS.null}>null</span>
+  }
+  if (name === CHUNK_ID_KEY && typeof value === 'string') {
+    return (
+      <Link
+        to={{ pathname: '/policy', hash: value }}
+        className="break-all text-blue-700 hover:underline"
+      >
+        {value}
+      </Link>
+    )
   }
   if (typeof value === 'string') return <Text text={value} />
   if (typeof value === 'number') return <span className={VALUE_CLASS.number}>{value}</span>

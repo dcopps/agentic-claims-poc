@@ -1,22 +1,15 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuditEntry } from '../api/types'
 import { tooltips } from '../copy/tooltips'
+import { guardrailFailureRows } from '../test/runFixtures'
 import { renderWithProviders, stubFetch } from '../test/utils'
 import { AgentCard, type CardState } from './AgentCard'
 
 // The states the run page derives (Prompt 29); the card renders what it is given.
 const DONE: CardState = { status: 'done', summary: 'Done' }
 const RUNNING: CardState = { status: 'running', summary: 'Running' }
-
-// The raw template the fallback endpoint serves — placeholders intact.
-const TEMPLATE = {
-  agent: 'validator',
-  variant: 'default',
-  system: 'TEMPLATE-SYSTEM',
-  user: 'TEMPLATE-USER {claim_narrative}',
-}
 
 // An audit entry whose llm_call carries the *filled* prompt (Phase 8.3) plus a
 // verdict block — the normal post-capture shape.
@@ -37,7 +30,7 @@ function entryWithPrompt(): AuditEntry {
   }
 }
 
-// A historical entry: no llm_call.prompt (pre-dates the capture). Output present.
+// A historical entry: no llm_call.prompt (pre-dates the capture). Verdict present.
 function entryWithoutPrompt(): AuditEntry {
   return {
     audit_id: 2,
@@ -50,7 +43,7 @@ function entryWithoutPrompt(): AuditEntry {
 }
 
 describe('AgentCard', () => {
-  beforeEach(() => stubFetch([['/api/agents/validator/prompt', TEMPLATE]]))
+  beforeEach(() => stubFetch([]))
   afterEach(() => vi.unstubAllGlobals())
 
   it('renders collapsed with the label and status', () => {
@@ -61,9 +54,11 @@ describe('AgentCard', () => {
     expect(screen.queryByText('FILLED-SYSTEM')).not.toBeInTheDocument()
   })
 
-  it('renders the filled prompt from the audit entry without fetching the template', async () => {
+  // Prompt 32 (Dermot, 15 November): an opened card shows the agent's record
+  // through the record viewer's parts, as the Audit page's dialog does.
+  it('opens the record through the viewer: the tree, the instructions on their tab, Copy record', async () => {
     const user = userEvent.setup()
-    const fetchMock = stubFetch([['/api/agents/validator/prompt', TEMPLATE]])
+    const fetchMock = stubFetch([])
     renderWithProviders(
       <AgentCard
         agent="validator"
@@ -73,16 +68,30 @@ describe('AgentCard', () => {
         auditEntry={entryWithPrompt()}
       />,
     )
-    await user.click(screen.getByRole('button'))
-    expect(screen.getByText('FILLED-SYSTEM')).toBeInTheDocument()
-    expect(screen.getByText(/FILLED-USER mentions water damage/)).toBeInTheDocument()
-    // No placeholder leaks, and the template endpoint was never hit.
-    expect(screen.queryByText(/\{claim_narrative\}/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Validator/ }))
+    const view = screen.getByTestId('record-view')
+    expect(within(view).getByTestId('record-tree')).toBeInTheDocument()
+    expect(within(view).getByText('covered:')).toBeInTheDocument()
+    expect(within(view).getByRole('button', { name: 'Copy record' })).toBeInTheDocument()
+    expect(
+      within(view)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Record', 'Instructions sent'])
+    await user.click(within(view).getByRole('tab', { name: 'Instructions sent' }))
+    expect(within(view).getByRole('heading', { name: 'System instructions' })).toBeInTheDocument()
+    expect(within(view).getByRole('heading', { name: 'Message to the model' })).toBeInTheDocument()
+    expect(within(view).getByText('FILLED-SYSTEM')).toBeInTheDocument()
+    expect(within(view).getByText(/FILLED-USER mentions water damage/)).toBeInTheDocument()
+    // Nothing of the old panel, and no request for the prompt template.
+    expect(screen.queryByText('prompt')).not.toBeInTheDocument()
+    expect(screen.queryByText('response')).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('falls back to the template with a caveat when the entry has no captured prompt', async () => {
+  it('shows one tab and no template when the record has no captured instructions', async () => {
     const user = userEvent.setup()
+    const fetchMock = stubFetch([])
     renderWithProviders(
       <AgentCard
         agent="validator"
@@ -92,25 +101,28 @@ describe('AgentCard', () => {
         auditEntry={entryWithoutPrompt()}
       />,
     )
-    await user.click(screen.getByRole('button'))
-    await waitFor(() => expect(screen.getByText('TEMPLATE-SYSTEM')).toBeInTheDocument())
-    expect(screen.getByText(/pre-dates the audit-prompt-capture/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Validator/ }))
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Record'])
+    expect(screen.getByText('covered:')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('renders the response from the audit entry output when present', async () => {
+  it('says no model was called for the fixture Adjuster’s record', async () => {
     const user = userEvent.setup()
     renderWithProviders(
       <AgentCard
-        agent="validator"
-        label="Validator"
+        agent="adjuster"
+        label="Adjuster"
         state={DONE}
         variant="default"
-        auditEntry={entryWithPrompt()}
+        auditEntry={guardrailFailureRows()[3]}
       />,
     )
-    await user.click(screen.getByRole('button'))
-    expect(screen.getByText(/covered/)).toBeInTheDocument()
-    expect(screen.queryByText(/waiting for this agent/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Adjuster/ }))
+    expect(screen.getByTestId('no-model-call')).toHaveTextContent(
+      'No model was called for this record',
+    )
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
   })
 
   it('shows the waiting state when no entry exists and the agent is not done', async () => {

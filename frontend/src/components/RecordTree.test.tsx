@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import { renderWithProviders as render } from '../test/utils'
 import { RecordTree } from './RecordTree'
 
 const LONG = 'The loss involves a single ruptured supply line. '.repeat(8).trim() // > 240 chars
@@ -36,6 +37,18 @@ describe('RecordTree', () => {
     expect(screen.getByRole('button', { name: /flags:/ })).toHaveTextContent('[empty]')
     expect(screen.getByText('false')).toHaveClass('text-purple-700')
     expect(screen.getByText('null')).toHaveClass('italic')
+  })
+
+  // Dermot, 15 November: a passage's id opens that passage on the Policy page.
+  it('links a chunk_id to its passage on the Policy page and leaves other ids as text', () => {
+    const ID = '0cd714d2-5f6f-462c-b668-bde76d082f6f'
+    // At a depth that starts open; deeper ids are the same link once their node is opened.
+    render(
+      <RecordTree value={{ cited: { chunk_id: ID, section: 'Exclusions' }, claim_id: 'c1' }} />,
+    )
+    expect(screen.getByRole('link', { name: ID })).toHaveAttribute('href', `/policy#${ID}`)
+    expect(screen.queryByRole('link', { name: 'c1' })).not.toBeInTheDocument()
+    expect(screen.getByText('“c1”')).toBeInTheDocument()
   })
 
   it('folds a long text behind Show all and wraps it', async () => {

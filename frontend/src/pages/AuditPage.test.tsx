@@ -72,24 +72,48 @@ describe('AuditPage: finding a run', () => {
       'Enter a run id, or choose a run above, to see its records.',
     )
     expect(screen.queryByText('Correlation id')).not.toBeInTheDocument()
-    const list = await screen.findByRole('list', { name: 'Recent runs' })
-    const links = within(list).getAllByRole('link')
-    expect(links[0]).toHaveTextContent(
-      /^Harborline Logistics Ltd · CLM-2026-9BB57A86 · Standard run · .+ · Settled$/,
+    // The recent runs as a table in the Claims list's style (Dermot, 15 November).
+    const table = await screen.findByRole('table', { name: 'The 20 most recent runs' })
+    expect(screen.getByRole('heading', { name: 'The 20 most recent runs' })).toBeInTheDocument()
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((th) => th.textContent),
+    ).toEqual(['Claimant', 'Kind of run', 'Started', 'Outcome'])
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(2)
+    const first = within(rows[0])
+    expect(first.getByRole('link', { name: 'Harborline Logistics Ltd' })).toHaveAttribute(
+      'href',
+      ROUTE,
     )
-    expect(links[0]).toHaveAttribute('href', ROUTE)
-    expect(links[1]).toHaveTextContent(
-      /Northwood Manufacturing Inc · CLM-2026-5855FB8E · Strict Validator run · .+ · Rejected$/,
-    )
+    expect(first.getByTestId('claim-number')).toHaveTextContent('CLM-2026-9BB57A86')
+    expect(first.getByTestId('claim-number')).toHaveClass('font-mono', 'text-xs', 'text-slate-500')
+    expect(first.getAllByRole('cell')[1]).toHaveTextContent('Standard run')
+    expect(first.getAllByRole('cell')[3]).toHaveTextContent('Settled')
+    expect(first.getByText('Settled')).toHaveClass('bg-green-100')
+    const second = within(rows[1])
+    expect(second.getAllByRole('cell')[1]).toHaveTextContent('Strict Validator run')
+    // A person's decision is the outcome, in the run page's colour and word.
+    expect(second.getByText('Rejected')).toHaveClass('bg-red-100')
+    expect(screen.queryByText('Awaiting human review')).not.toBeInTheDocument()
+    // With no run loaded, the recent runs follow the Run id box.
+    expect(
+      screen.getByLabelText('Run id').compareDocumentPosition(table) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('loads a run chosen from the recent list', async () => {
     const user = userEvent.setup()
     stubAudit()
     renderWithProviders(<AuditPage />, { route: '/audit' })
-    await user.click((await screen.findAllByRole('link', { name: /Harborline/ }))[0])
-    expect(await screen.findByRole('table', { name: 'Records' })).toBeInTheDocument()
+    await user.click((await screen.findAllByRole('link', { name: 'Harborline Logistics Ltd' }))[0])
+    const records = await screen.findByRole('table', { name: 'Records' })
     expect(screen.getByLabelText('Run id')).toHaveValue(CID)
+    // With a run loaded, its records come before the recent runs.
+    const recent = screen.getByRole('table', { name: 'The 20 most recent runs' })
+    expect(records.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('refuses fewer than eight characters on the page, with no request', async () => {
@@ -156,10 +180,11 @@ describe('AuditPage: a run’s records', () => {
     expect(await screen.findByTestId('run-claim')).toHaveTextContent(
       'Harborline Logistics Ltd · Water damage · $85,000 · claim CLM-2026-9BB57A86',
     )
-    expect(screen.getByRole('link', { name: 'Harborline Logistics Ltd' })).toHaveAttribute(
-      'href',
-      '/claims/c1',
-    )
+    expect(
+      within(screen.getByTestId('run-claim')).getByRole('link', {
+        name: 'Harborline Logistics Ltd',
+      }),
+    ).toHaveAttribute('href', '/claims/c1')
     const runLine = screen.getByTestId('audit-run-line')
     expect(runLine).toHaveTextContent(
       /^Standard run · started .+ · Settled at \$82,500 · Open the run page$/,

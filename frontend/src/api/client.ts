@@ -2,7 +2,6 @@
 // shares the same base URL and error handling. No state library — plain fetch.
 
 import type {
-  AgentPrompt,
   AuditEntry,
   ChainVerification,
   ClaimRecord,
@@ -130,10 +129,6 @@ export function submitHumanDecision(
     method: 'POST',
     body: JSON.stringify(body),
   })
-}
-
-export function getAgentPrompt(agent: string, variant = 'default'): Promise<AgentPrompt> {
-  return request<AgentPrompt>(`/api/agents/${agent}/prompt?variant=${variant}`)
 }
 
 export function testAgent<T>(agent: string, body: unknown, variant = 'default'): Promise<T> {

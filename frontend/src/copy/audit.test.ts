@@ -16,6 +16,16 @@ describe('auditCopy', () => {
     expect(auditCopy.loadFailed).toBe('The records could not be loaded.')
   })
 
+  it('heads the recent runs as a table in the Claims list’s style', () => {
+    expect(auditCopy.recentHeading(20)).toBe('The 20 most recent runs')
+    expect(Object.values(auditCopy.recentColumns)).toEqual([
+      'Claimant',
+      'Kind of run',
+      'Started',
+      'Outcome',
+    ])
+  })
+
   it('names the run and its records', () => {
     expect(auditCopy.runLine('Standard run', '15 Nov 2026, 15:09:03', 'Settled at $78,000')).toBe(
       'Standard run · started 15 Nov 2026, 15:09:03 · Settled at $78,000',

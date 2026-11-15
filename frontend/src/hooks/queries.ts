@@ -1,6 +1,5 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import {
-  getAgentPrompt,
   getClaim,
   getMcpCatalogue,
   getPolicy,
@@ -11,7 +10,6 @@ import {
   listRuns,
 } from '../api/client'
 import type {
-  AgentPrompt,
   AuditEntry,
   ClaimRecord,
   McpCatalogue,
@@ -83,19 +81,6 @@ export function useAuditEntries(
     staleTime: 0,
     retry: false,
     enabled,
-  })
-}
-
-export function useAgentPrompt(
-  agent: string,
-  variant: string,
-  enabled: boolean,
-): UseQueryResult<AgentPrompt> {
-  return useQuery({
-    queryKey: ['agentPrompt', agent, variant],
-    queryFn: () => getAgentPrompt(agent, variant),
-    staleTime: FRESH,
-    enabled, // lazy — only fetched when the agent card is expanded
   })
 }
 

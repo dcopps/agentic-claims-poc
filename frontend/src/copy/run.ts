@@ -48,6 +48,11 @@ export const runCopy = {
   // row and the row before it (plan D2); shown as the duration's title.
   durationFromAudit: 'from the audit trail',
   aborted: (reason: string) => `Run aborted: ${reason}`,
+  // An opened card before its record exists (Prompt 32): a completed agent
+  // must have written one, so its absence is an audit-integrity fault.
+  recordPending: 'Waiting for this agent to complete…',
+  recordMissing:
+    'Audit entry not found for this completed agent — this may indicate a write failure.',
 
   docParser: (claimType: string) => `Summarised the claim (${claimTypeLabel(claimType)})`,
   // The confidence is optional because a live `agent_completed` event carries

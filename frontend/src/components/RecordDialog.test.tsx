@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuditEntry } from '../api/types'
 import { recordHeader } from '../pages/auditDerivation'
 import { decisionRows, guardrailFailureRows, settledRows } from '../test/runFixtures'
+import { renderWithProviders as render } from '../test/utils'
 import { RecordDialog } from './RecordDialog'
 
 // The Validator's row with the instructions it was sent (Phase 8.3's capture).

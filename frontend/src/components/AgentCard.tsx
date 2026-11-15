@@ -6,10 +6,8 @@ import { formatSeconds } from '../copy/format'
 import { refusalReason } from '../copy/labels'
 import { runCopy } from '../copy/run'
 import { tooltips } from '../copy/tooltips'
-import { useAgentPrompt } from '../hooks/queries'
-import { extractPrompt } from '../pages/auditDerivation'
+import { RecordView } from './RecordView'
 import { Tooltip } from './Tooltip'
-import { Badge, JsonBlock, Spinner } from './ui'
 
 // `escalated` is the Guardrail's own failed verdict (the run went to a person);
 // `failed` is an agent that broke; `not_run` is an agent after the one that
@@ -72,17 +70,14 @@ interface AgentCardProps {
 
 // One agent in the pipeline visualisation. Collapsed: the state's icon, the
 // sentence and the duration, with the Validator's passages and the Guardrail's
-// refused objections beneath. Expanded (lazy): the prompt the LLM actually
-// received and the agent's response, both read from the audit entry (the single
-// source of truth). The prompt is the *filled* text captured in
-// `llm_call.prompt` (Phase 8.3); for historical runs that pre-date the capture,
-// it falls back to the raw template endpoint with a caveat.
-export function AgentCard({ agent, label, state, variant, auditEntry }: AgentCardProps) {
+// refused objections beneath. Expanded: the agent's audit record through the
+// record viewer's own parts (Prompt 32) — the instructions the model received
+// (`llm_call.prompt`, Phase 8.3) on their tab, the stored record as a tree,
+// Copy record — so a record reads the same here and on the Audit page. The
+// row is the single source of truth; live, it arrives on the stream's refetch
+// moments after the card turns done.
+export function AgentCard({ agent, label, state, auditEntry }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const filledPrompt = extractPrompt(auditEntry)
-  // Only fetch the raw template when the filled prompt isn't available — i.e. a
-  // historical entry, or an entry not yet written. Lazy on expand as before.
-  const prompt = useAgentPrompt(agent, variant, expanded && filledPrompt === null)
   const expectedMs = AGENT_EXPECTED_MS[agent] ?? 6000
   const progress = useProgress(state.status === 'running', expectedMs)
 
@@ -105,22 +100,8 @@ export function AgentCard({ agent, label, state, variant, auditEntry }: AgentCar
         <RunningBar agent={agent} label={label} expectedMs={expectedMs} progress={progress} />
       )}
       {expanded && (
-        <div className="space-y-3 border-t border-slate-200 px-3 py-3">
-          <div>
-            <Badge>prompt</Badge>
-            {filledPrompt ? (
-              <div className="mt-1 space-y-2">
-                <PromptText title="System" body={filledPrompt.system} />
-                <PromptText title="User" body={filledPrompt.user} />
-              </div>
-            ) : (
-              <TemplateFallback prompt={prompt} />
-            )}
-          </div>
-          <div>
-            <Badge>response</Badge>
-            <ResponsePanel auditEntry={auditEntry} status={state.status} />
-          </div>
+        <div className="border-t border-slate-200 px-3 py-3">
+          <ExpandedRecord auditEntry={auditEntry} status={state.status} />
         </div>
       )}
     </div>
@@ -232,56 +213,14 @@ function RunningBar({ agent, label, expectedMs, progress }: RunningBarProps) {
   )
 }
 
-// The prompt panel's fallback for runs with no captured prompt: the raw template
-// (placeholders intact) plus a caveat so the viewer knows they are not seeing the
-// substituted text. Used for historical runs that pre-date the audit-prompt
-// capture, and transiently for an entry not yet written mid-run.
-function TemplateFallback({ prompt }: { prompt: ReturnType<typeof useAgentPrompt> }) {
-  if (prompt.isLoading) return <Spinner label="Loading prompt…" />
-  if (!prompt.data) return null
-  return (
-    <div className="mt-1 space-y-2">
-      <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
-        Showing the prompt template — this run pre-dates the audit-prompt-capture change.
-      </p>
-      <PromptText title="System" body={prompt.data.system} />
-      <PromptText title="User" body={prompt.data.user} />
-    </div>
-  )
-}
-
-// The response panel reads the audit entry, not the SSE event. Three explicit
-// states: entry present → render its response block; entry absent but the agent
-// reports done → an audit-integrity error (a completed agent must have written an
-// entry); otherwise → still in flight.
-function ResponsePanel({ auditEntry, status }: { auditEntry?: AuditEntry; status: AgentStatus }) {
-  if (auditEntry) return <JsonBlock value={extractResponseBlock(auditEntry)} />
-  if (status === 'done') {
-    return (
-      <p className="text-sm text-red-600">
-        Audit entry not found for this completed agent — this may indicate a write failure.
-      </p>
-    )
-  }
-  return <p className="text-sm text-slate-500">Waiting for this agent to complete…</p>
-}
-
-function PromptText({ title, body }: { title: string; body: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-slate-500">{title}</p>
-      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-700">
-        {body}
-      </pre>
-    </div>
-  )
-}
-
-// The response block to display for an agent: its output (or the validator's
-// verdict) where present, else the whole payload. Mirrors the audit-step shapes.
-function extractResponseBlock(entry: AuditEntry): unknown {
-  const payload = entry.payload
-  return payload.output ?? payload.verdict ?? payload
+// The expanded card reads the audit entry, not the SSE event. Three explicit
+// states: entry present → the record through the viewer; entry absent but the
+// agent reports done → an audit-integrity error (a completed agent must have
+// written an entry); otherwise → still in flight.
+function ExpandedRecord({ auditEntry, status }: { auditEntry?: AuditEntry; status: AgentStatus }) {
+  if (auditEntry) return <RecordView entry={auditEntry} />
+  if (status === 'done') return <p className="text-sm text-red-600">{runCopy.recordMissing}</p>
+  return <p className="text-sm text-slate-500">{runCopy.recordPending}</p>
 }
 
 interface RefusedClaim {
