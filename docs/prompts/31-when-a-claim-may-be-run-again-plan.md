@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-31), entry 31.*
+
 # Prompt 31 — Plan: when a claim may be run again
 
 **Prompt:** `31-when-a-claim-may-be-run-again.md`. **Scope:** the rules for running a claim again — the backend refuses a decided claim on every route, the Claims page says *Process* or *Run again* and asks once before re-running a settled claim, the other pages say when a claim is closed. One backend change, the first since Prompt 27. **Written:** 14 November 2026. **Status:** approved 14 November 2026 (see *Approval*).

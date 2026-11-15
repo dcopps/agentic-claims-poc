@@ -625,3 +625,25 @@ The register begins with Phase 8.4 in June 2026, the first phase in the build th
 **Status.** Resolved; the record is annotated. The plan's step as written (a fresh claim approved) was not performed and is not outstanding: the Decision card's appearance without a reload is covered by a test, and the approval made exercised the same path.
 
 *Technical detail:* plan `30-claim-page-plan.md` §6 step 4 and the prompt's *Constraints*; report `30-claim-page-report.md` (*Deployed verification* and *Findings*); Azure claim `2ffb0434-bf3f-4019-ab76-69c0d289270a`, run `67bdf225-0ca4-4669-b6d0-c8f7f42ea619`, audit rows 99–105 and 185; `CLAUDE.md` *Current Status* (Prompt 29 §7 steps 1 and 2; the Phase 10 connector verification).
+
+### R-26 — Prompt 31's decisions at the gate: one question open at a time, and a refusal that names the claim as a person reads it
+
+**TL;DR:** The plan for closing a decided claim to further runs was approved as recommended, with two changes from Dermot. First, when the Claims page asks "Run it again?" before re-running a settled claim, only one such question may be open at a time and a click anywhere else closes it, so the page can never show two questions or leave one hanging. Second, the sentence the system gives when it refuses a closed claim names the claim by the number a person reads on the page, not by the long internal identifier. Both were built as asked and verified on Azure the next day. Saturday 14 November 2026.
+
+**Technologies:** the Claims page (React); the pipeline endpoints (FastAPI) and the MCP server, which give the refusal.
+
+**Date and phase.** 14 November 2026, Prompt 31, the approval gate; built the same day and verified 15 November.
+
+**What happened.** The plan asked six decisions (D1 to D6) and offered one optional sentence (O1). Dermot approved all as recommended and O1, and added two changes. (1) The plan's confirmation panel closed on its two buttons and on the Escape key; Dermot asked that opening one row's question close any other, and that a click outside the panel close it too, with a test for both. (2) The plan's refusal read "claim 2ffb0434-… was approved by a person and is closed to further runs", naming the claim by its identifier; Dermot asked for the claim number — "claim CLM-2026-2FFB0434 was approved by a person and is closed to further runs" — in the web refusal and in the refusal Claude receives alike, and for the plan's sections to be updated to match before building.
+
+**Why it mattered.** The first change is about a page that cannot mislead: with two settled claims a visitor could otherwise open a question on each and answer the wrong one. The second is about who the sentence is for. The identifier is for machines; the claim number is what the Claims list, the claim page and the run page show a person, so a refusal that names it can be matched to a row at a glance. It also tied the two refusals together: the web endpoint and Claude's tool now share one function for the sentence, so they cannot drift apart.
+
+**What was decided, and by whom.** Dermot, on 14 November, in writing: "Plan 31 approved: D1–D6 as recommended, O1 yes, with two changes. (1) Only one confirmation panel can be open at a time: opening one closes any other, and a click outside closes it, as well as Cancel, Run again and Escape; add a test. (2) The refusal sentence names the claim by its claim number, not its id … in the 409 detail and the claim_closed tool error alike; update the plan's §3, §4 and §7 to match. Go ahead and build."
+
+**What was done.** The plan's §3, §4 and §7 were updated and the approval recorded in its footer before any code was written. The open question became state of the table rather than of the row, so one row opening its question closes another's; the panel listens for a click outside and for Escape. The pipeline endpoints, which already had to load the claim to answer "not found", now keep the record and pass it to one function that writes the sentence with the claim number; Claude's tool calls the same function. A test covers each change.
+
+**How it was proven.** Tests: the Claims page's question closes on Escape, on a click outside, and when another row opens its own, with exactly one panel ever present; the refusal sentence is asserted word for word in the endpoint tests and the tool test with the claim number "API-TEST-0001". On Azure on 14 November a direct request on the approved Northwood claim was refused with the sentence naming `CLM-2026-2FFB0434`; on 15 November Dermot saw the same sentence returned to Claude through the connector and shown on the Integrations feed.
+
+**Status.** Resolved; built as decided and verified.
+
+*Technical detail:* plan `31-when-a-claim-may-be-run-again-plan.md` §3, §4, §7, §10 and *Approval*; report `31-when-a-claim-may-be-run-again-report.md`; `backend/app/api/pipeline.py` (`closed_claim_detail`), `backend/app/mcp/tools.py`; `frontend/src/pages/ClaimsPage.tsx` (`ClaimsTable`, `ConfirmRerun`); tests `test_api_pipeline.py`, `test_mcp_tools.py`, `ClaimsPage.test.tsx`.

@@ -1,3 +1,5 @@
+> *Plain-language summary of this phase: see [the build story](README.md#entry-31), entry 31.*
+
 # Prompt 31 — When a claim may be run again
 
 ## Why this prompt exists
