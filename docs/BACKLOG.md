@@ -52,7 +52,7 @@ Both Background Claimant 03 runs retrieved *Exclusions*, *Business Interruption*
 
 Both seen by Dermot on the Azure frontend while verifying Prompt 31; recorded here at his request, not built.
 
-- **The Adjuster can recommend more than the claimant asked for.** On run `2bd08a61` (the fresh Northwood claim `CLM-2026-5855FB8E`, reported amount $850,000) the Adjuster recommended $950,000, and nothing in the pipeline or the escalation policy stops a recommendation above the reported amount: the ceiling rule fires on the absolute figure only, and the Guardrail judges citations, PII and bias, not the amount. Options: a threshold rule `settlement_over_reported_amount` in `backend/app/escalation/policy.yaml` (one more fired-rule name in `escalation_decision` — an interface-stability event to acknowledge in its plan, and a rule the Guide's *How it works* would then list); a cap in the Adjuster's prompt; or both, with the rule as the floor. The audit row records the recommendation as made, so the case is already inspectable.
+- **The Adjuster can recommend more than the claimant asked for.** On run `2bd08a61` (the fresh Northwood claim `CLM-2026-5855FB8E`, reported amount $850,000) the Adjuster recommended $950,000; run `f97e236e` (`CLM-2026-79151390`, Prompt 32's verification the same day) did it again, $920,000 on $850,000. Nothing in the pipeline or the escalation policy stops a recommendation above the reported amount: the ceiling rule fires on the absolute figure only, and the Guardrail judges citations, PII and bias, not the amount. Options: a threshold rule `settlement_over_reported_amount` in `backend/app/escalation/policy.yaml` (one more fired-rule name in `escalation_decision` — an interface-stability event to acknowledge in its plan, and a rule the Guide's *How it works* would then list); a cap in the Adjuster's prompt; or both, with the rule as the floor. The audit row records the recommendation as made, so the case is already inspectable.
 - **The Integrations activity feed shows times without dates.** Each call is shown with its time of day only, so calls from different days read as one day's list. Show the date where it changes (a date line between days, or the short date before the time as the Claims list shows *Submitted*), using `formatDateTime` from `copy/format.ts`.
 
 ## Findings from the 26 October 2026 verification — closed by Phase 9.2.2 (30 October 2026)
@@ -78,7 +78,7 @@ The `CLAUDE.md` condition for *considering* retirement is two full passes of the
 - **Frontend deploys on every green CI run.** `deploy-frontend.yml` has no path filter (decided 26 October 2026): `workflow_run` ignores `paths:`, and a Static Web App exposes no deployed commit to diff against. Each run is about ninety seconds and free. If that ever matters, the alternatives are `push` + `paths:` gated by a check-runs poll (costs `checks: read`) or stamping the build with its commit and comparing against the live site.
 - **Cold start with telemetry — measured 28 October 2026: 34.2 s** from zero replicas to the first `/health` on the `2b662da` image (telemetry on), against the 9.1 baseline of 28.0 s. The 6 s difference is not material for a parked demo; the control measurement with `APPLICATIONINSIGHTS_CONNECTION_STRING` cleared was not taken. Closed unless the start-up time becomes a demo problem.
 
-## Next UI phase — Phase 8.7: Demo UI polish (in progress since Prompt 28, 10 November 2026; the Claims page, the run page, the claim page and the re-run rules done; the Audit page next)
+## Next UI phase — Phase 8.7: Demo UI polish (in progress since Prompt 28, 10 November 2026; the Claims page, the run page, the claim page, the re-run rules and the Audit page done; the Agents page next as Prompt 33, then the Integrations page)
 
 The three scripted scenarios are showable again: the Phase 8.6 deployed verification passed on the `0.8.6.1` build (21 September 2026). Two findings from that run are demo-visible and sit naturally in this phase — see *Findings from the 21 September 2026 verification*. Phase 8.7 exists to lift the demo from *showable* to *portfolio-quality* — the interviewer-visible surface should not leak internal enum values, raw decimals, or unlabelled inputs, and must survive a page refresh.
 
@@ -99,7 +99,9 @@ The three scripted scenarios are showable again: the Phase 8.6 deployed verifica
 - **No timestamp column.** Claims list shows no submitted-at or loss-date. For an interviewer asking "when did this happen?", the answer requires clicking through. Add a *Submitted* or *Loss date* column.
 - **(i) info-icon tooltips.** Icons appear next to *Submit Claim*, *Process*, and *Re-process with v2*. Verify tooltips are actually wired to a hover handler, and that the copy is useful (not just "click to submit"). If unwired or unhelpful, fix or remove.
 
-### Audit page
+### Audit page — done by Prompt 32 (15 November 2026, `0.10.3`)
+
+**Done.** The page reads in words (*Run id*, the run named by its claim, one sentence per record, the chain check in a sentence), lists the twenty most recent runs to choose from, accepts the eight-character id, and opens a record in the record viewer — a dialog with the stored record as a wrapped tree and the instructions on a second tab — in place of the dark block below; the run page's cards took up the same viewer. Evidence: [`prompts/32-audit-page-report.md`](prompts/32-audit-page-report.md); the *Prompt 32* entry of [`build-log.md`](build-log.md); register R-27. The record of what was found:
 
 - **JSON viewer overflows page width.** Expanding an audit-log entry shows the payload in a dark code block. Long string values — filled prompts, narrative text, multi-line user prompts — do not wrap; they extend horizontally past the right edge of the viewport, breaking the page layout and forcing horizontal scroll. Fix in the JSON viewer component: constrain container `max-width: 100%` with `overflow-x: auto` for internal scroll, or use `white-space: pre-wrap` / `word-break: break-word` for wrapping. Wrapping is more readable for prose-heavy fields like prompts and narratives.
 
@@ -122,11 +124,11 @@ The three scripted scenarios are showable again: the Phase 8.6 deployed verifica
 
 ### Routes still un-surveyed
 
-The Phase 6 SPA has six routes. Only *Claims* has been swept, and *Run Detail* only on its abort path. Five remain:
+The Phase 6 SPA has six routes. *Claims* was swept by Prompt 28, *Run Detail* by Prompt 29, the claim page and *Human Review* by Prompt 30, *Audit* by Prompt 32; the *Agents* page (Prompt 33) and the *Integrations* page remain. The list as it stood:
 
-- **Run Detail** (`/claims/:id/runs/:correlationId`) — the four-agent live pipeline visualisation
-- **Audit** (`/audit`) — the audit-log browser (has the known JSON-overflow item above; may have others)
-- **Agents** (`/agents`) — the agent test bench
+- **Run Detail** (`/claims/:id/runs/:correlationId`) — the four-agent live pipeline visualisation; done by Prompt 29 (and its cards show a record through the viewer since Prompt 32)
+- **Audit** (`/audit`) — the audit-log browser; done by Prompt 32 (the JSON-overflow item above closed with it)
+- **Agents** (`/agents`) — the agent test bench — **next, as Prompt 33**; its result panel is the frontend's last `JsonBlock`
 - **Human Review** — the escalation approval/reject panel; critical for the demo's headline story. It lives on the claim page (there is no separate route) and was surveyed and reworked by Prompt 30 (14 November 2026).
 - Sixth route (need to confirm from Phase 6 report)
 
