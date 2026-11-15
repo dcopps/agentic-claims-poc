@@ -7,6 +7,7 @@ import { formatDateTime } from '../copy/format'
 import {
   ABORT_MESSAGE,
   abortedRows,
+  CEILING_RULE,
   CLAIM,
   DECIDED_AT,
   decisionRows,
@@ -398,5 +399,38 @@ describe('RunDetailPage watching a live abort', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Run aborted')
     expect(screen.getByText('Aborted')).toBeInTheDocument()
     expect(screen.queryByTestId('awaiting-hint')).not.toBeInTheDocument()
+  })
+})
+
+// Prompt 31 fix (Dermot, 15 November): a run watched live to "Awaiting human
+// review" showed no "Why it went to a person" until a reload. The rules are in
+// the live escalation event before any row or record carries them.
+describe('RunDetailPage watching a live run go to a person', () => {
+  beforeEach(() => stubFetch([])) // the run record and the rows are not yet re-read
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows why it went to a person the moment the live run finishes', () => {
+    const base = { correlation_id: 'cid-1', timestamp: 't' }
+    streamState.events = [
+      { ...base, event_type: 'pipeline_started', variant: 'default' },
+      ...['doc_parser', 'validator', 'adjuster', 'guardrail'].map((agent) => ({
+        ...base,
+        event_type: 'agent_completed',
+        agent,
+        duration_ms: 1000,
+        summary: {},
+      })),
+      { ...base, event_type: 'escalation_decision', escalate: true, fired_rules: [CEILING_RULE] },
+      { ...base, event_type: 'pipeline_completed', status: 'awaiting_human' },
+    ]
+    renderWithProviders(<App />, { route: STARTED_HERE })
+    expect(screen.getByText('Awaiting human review')).toBeInTheDocument()
+    const rules = screen.getByTestId('fired-rules')
+    expect(rules).toHaveTextContent('Why it went to a person')
+    expect(
+      within(rules)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Settlement over the $250,000 ceiling: $820,000'])
   })
 })

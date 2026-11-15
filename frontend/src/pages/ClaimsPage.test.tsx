@@ -231,7 +231,7 @@ describe('ClaimsPage: when a claim may be run again', () => {
     expect(screen.getAllByRole('button', { name: 'Process' })).toHaveLength(1)
   })
 
-  it('asks once before a settled claim is run again, and Cancel runs nothing', async () => {
+  it('asks once before a settled claim is run again, over that row’s own actions, and Cancel runs nothing', async () => {
     const user = userEvent.setup()
     const fetchMock = stubClaims([SETTLED])
     renderWithProviders(<ClaimsPage />)
@@ -239,7 +239,11 @@ describe('ClaimsPage: when a claim may be run again', () => {
     await user.click(screen.getByRole('button', { name: 'Run again' }))
     const panel = screen.getByTestId('confirm-rerun')
     expect(panel).toHaveTextContent(claimsCopy.confirmRerun)
-    expect(panel).toHaveClass('absolute')
+    // Laid over the pressed row's actions cell, not below it (where it read as a
+    // question about the next row — Dermot, 15 November): it spans the cell's own
+    // height, anchored right, so the row and the table keep their size.
+    expect(panel).toHaveClass('absolute', 'inset-y-0', 'right-0')
+    expect(panel).not.toHaveClass('top-full')
     expect(screen.getByTestId('claim-actions')).toContainElement(panel)
     expect(screen.getAllByRole('columnheader')).toHaveLength(6)
     await user.click(within(panel).getByRole('button', { name: 'Cancel' }))

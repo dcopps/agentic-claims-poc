@@ -196,9 +196,11 @@ function RowActions({ claim, confirming, onConfirming, onTrigger }: RowProps) {
   )
 }
 
-// The question before a settled claim is run again, anchored below the actions
-// so the row keeps its height and the table its width (plan D2). It closes on
-// either button, on Escape, and on a click anywhere outside it.
+// The question before a settled claim is run again, laid over the pressed row's
+// own actions cell — covering its two buttons, so it reads as a question about
+// that claim and not the one below (Dermot, 15 November) — with no change to
+// the row's height or the table's width (plan D2). It closes on either button,
+// on Escape, and on a click anywhere outside it.
 function ConfirmRerun({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   const panel = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -221,7 +223,7 @@ function ConfirmRerun({ onConfirm, onCancel }: { onConfirm: () => void; onCancel
       role="group"
       aria-label={claimsCopy.confirmRerun}
       data-testid="confirm-rerun"
-      className="absolute right-0 top-full z-20 mt-1 flex items-center gap-2 whitespace-nowrap rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 shadow"
+      className="absolute inset-y-0 right-0 z-20 flex items-center gap-2 whitespace-nowrap rounded border border-slate-300 bg-white px-3 text-xs text-slate-700 shadow"
     >
       <span>{claimsCopy.confirmRerun}</span>
       <Button size="sm" onClick={onConfirm}>

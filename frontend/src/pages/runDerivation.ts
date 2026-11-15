@@ -114,12 +114,20 @@ export function deriveStatus(
   return rows.length > 0 || events.length > 0 ? 'running' : undefined
 }
 
-// The fired escalation rules: from the decision's own row first (present while
-// the run is still live), else from the reconstructed run, which also carries
-// the synthetic fail-closed rule when the Guardrail threw.
-export function deriveFiredRules(rows: AuditEntry[], run?: PipelineResult): FiredRule[] {
+// The fired escalation rules: from the decision's own row first, else from the
+// live escalation_decision event (the backend emits it before it writes the
+// row, so for a run watched live the event is the first word and the row
+// arrives with the next refetch), else from the reconstructed run, which also
+// carries the synthetic fail-closed rule when the Guardrail threw.
+export function deriveFiredRules(
+  rows: AuditEntry[],
+  events: PipelineEvent[],
+  run?: PipelineResult,
+): FiredRule[] {
   const fromRow = rows.find((r) => r.step === 'escalation_decision')?.payload.fired_rules
   if (Array.isArray(fromRow)) return fromRow.flatMap(asFiredRule)
+  const fromEvent = events.find((e) => e.event_type === 'escalation_decision')?.fired_rules
+  if (Array.isArray(fromEvent)) return fromEvent.flatMap(asFiredRule)
   return run?.escalation_decision?.fired_rules ?? []
 }
 

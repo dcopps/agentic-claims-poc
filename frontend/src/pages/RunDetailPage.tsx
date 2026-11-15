@@ -81,7 +81,7 @@ export function RunDetailPage() {
 function headerFacts(rows: AuditEntry[], events: PipelineEvent[], run?: PipelineResult) {
   return {
     status: deriveStatus(rows, events, run),
-    rules: deriveFiredRules(rows, run),
+    rules: deriveFiredRules(rows, events, run),
     decision: deriveDecision(rows),
   }
 }

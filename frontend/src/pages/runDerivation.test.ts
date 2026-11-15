@@ -3,7 +3,9 @@ import type { PipelineEvent } from '../api/types'
 import {
   ABORT_MESSAGE,
   abortedRows,
+  CEILING_RULE,
   ceilingRows,
+  GUARDRAIL_RULE,
   guardrailFailureRows,
   guardrailThrewRows,
   settledRows,
@@ -42,7 +44,7 @@ describe('deriveCards from audit rows alone', () => {
     const rows = ceilingRows()
     expect(deriveCards(rows, []).adjuster.summary).toBe('Recommends $820,000 (85% confident)')
     expect(deriveStatus(rows, [])).toBe('awaiting_human')
-    expect(deriveFiredRules(rows).map((r) => r.name)).toEqual(['settlement_over_ceiling'])
+    expect(deriveFiredRules(rows, []).map((r) => r.name)).toEqual(['settlement_over_ceiling'])
   })
 
   it('reads the Guardrail failure as the outcome it is: the fixture named, ⚠ not ✗, the finding beneath', () => {
@@ -55,7 +57,7 @@ describe('deriveCards from audit rows alone', () => {
       summary: 'Failed: cited policy wording the policy does not contain',
       detail: "endorsement 'Coastal Surge Rider' not in retrieved chunks",
     })
-    expect(deriveFiredRules(guardrailFailureRows()).map((r) => r.name)).toEqual([
+    expect(deriveFiredRules(guardrailFailureRows(), []).map((r) => r.name)).toEqual([
       'guardrail_failed',
       'settlement_over_ceiling',
     ])
@@ -300,10 +302,35 @@ describe('the header', () => {
         reasoning: '',
       },
     } as never
-    expect(deriveFiredRules(guardrailThrewRows(), run).map((r) => r.name)).toEqual([
+    expect(deriveFiredRules(guardrailThrewRows(), [], run).map((r) => r.name)).toEqual([
       'guardrail_failed',
     ])
-    expect(deriveFiredRules(settledRows(), run)).toEqual([])
+    expect(deriveFiredRules(settledRows(), [], run)).toEqual([])
+  })
+
+  // Prompt 31 fix: the backend emits the escalation event before it writes the
+  // row, so a run watched live has the rules in the event first.
+  it('reads the fired rules from the live escalation event while the rows are silent', () => {
+    const live = event({
+      event_type: 'escalation_decision',
+      escalate: true,
+      fired_rules: [CEILING_RULE],
+    })
+    expect(deriveFiredRules([], [live]).map((r) => r.name)).toEqual(['settlement_over_ceiling'])
+    expect(
+      deriveFiredRules([], [event({ event_type: 'escalation_decision', escalate: false })]),
+    ).toEqual([])
+  })
+
+  it('prefers the decision row to the live event once the row has been read', () => {
+    const live = event({
+      event_type: 'escalation_decision',
+      escalate: true,
+      fired_rules: [GUARDRAIL_RULE],
+    })
+    expect(deriveFiredRules(ceilingRows(), [live]).map((r) => r.name)).toEqual([
+      'settlement_over_ceiling',
+    ])
   })
 })
 

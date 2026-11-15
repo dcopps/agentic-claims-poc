@@ -196,6 +196,8 @@ export interface PipelineEvent {
   duration_ms?: number
   summary?: Record<string, unknown>
   escalate?: boolean
+  // The escalation_decision event: the rules that fired, as the row records them.
+  fired_rules?: FiredRule[]
   status?: string
   failing_agent?: string
   error_type?: string

@@ -92,7 +92,7 @@ export function deriveDecision(rows: AuditEntry[]): HumanDecision | null {
 // reason stands in as the one synthetic rule the backend's reconstructed run
 // also carries; ruleLine then gives it the fail-closed sentence.
 export function deriveWhyHere(rows: AuditEntry[]): FiredRule[] {
-  const fired = deriveFiredRules(rows)
+  const fired = deriveFiredRules(rows, [])
   if (fired.length > 0) return fired
   const threw = rows.some(
     (r) => r.step === 'pipeline_awaiting_human' && r.payload.reason === 'guardrail_threw',

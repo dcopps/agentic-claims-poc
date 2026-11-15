@@ -21,13 +21,13 @@ interface StreamState {
 // Open an EventSource for `correlationId`, accumulate its events, AND feed the
 // TanStack Query cache: each agent completion invalidates the run + audit queries
 // so a lazily-expanded agent card sees its payload as soon as it is written; the
-// terminal event invalidates the claim and its runs list. State is keyed by the
-// correlation id so a new run replaces the previous run's events without a
-// synchronous reset in the effect body.
-export function useRunStream(
-  correlationId: string | null,
-  claimId?: string,
-): PipelineEvent[] {
+// terminal event invalidates them again — the escalation and terminal rows are
+// written after the Guardrail's completion, and the run record exists only now,
+// so without this re-read a run watched live showed no fired rules until a
+// reload (Prompt 31) — and invalidates the claim and its runs list. State is
+// keyed by the correlation id so a new run replaces the previous run's events
+// without a synchronous reset in the effect body.
+export function useRunStream(correlationId: string | null, claimId?: string): PipelineEvent[] {
   const [state, setState] = useState<StreamState>({ cid: null, events: [] })
   const queryClient = useQueryClient()
 
@@ -47,6 +47,8 @@ export function useRunStream(
         }
         if (TERMINAL.has(parsed.event_type)) {
           source.close()
+          void queryClient.invalidateQueries({ queryKey: ['run', correlationId] })
+          void queryClient.invalidateQueries({ queryKey: ['audit', correlationId] })
           void queryClient.invalidateQueries({ queryKey: ['claims'] })
           if (claimId) void queryClient.invalidateQueries({ queryKey: ['claim', claimId] })
         }
